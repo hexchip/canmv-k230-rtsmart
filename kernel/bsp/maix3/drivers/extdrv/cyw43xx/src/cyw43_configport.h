@@ -13,7 +13,10 @@
 #define CYW43_NETUTILS                      (0)
 #define CYW43_USE_OTP_MAC                   (1)
 
-// #define CYW43_PIN_WL_REG_ON                 (1)
+#ifndef CYW43_PIN_WL_REG_ON
+    #define CYW43_PIN_WL_REG_ON                 (1)
+#endif
+
 #define CYW43_PIN_WL_SDIO_1                 (1)
 #define NDEBUG
 
