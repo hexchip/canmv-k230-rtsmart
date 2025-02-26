@@ -71,6 +71,10 @@ int regulator_dummpy_init(void) {
   int ret;
 
   for (int i = 0; i < ARRAY_SIZE(dev); i++) {
+    if(RT_NULL != rt_device_find(dev[i].dev_name)) {
+      continue;
+    }
+
     ret = regulator_dev_register(&dev[i].dev, &dummy_ops, dev[i].dev_name);
     if (ret) {
       rt_kprintf("dummpy %d register fial: %d\n", i, ret);
@@ -80,4 +84,4 @@ int regulator_dummpy_init(void) {
 
   return ret;
 }
-INIT_DEVICE_EXPORT(regulator_dummpy_init);
+INIT_ENV_EXPORT(regulator_dummpy_init);

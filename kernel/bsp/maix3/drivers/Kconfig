@@ -311,6 +311,22 @@ menu "Drivers Configuration"
                 config RT_USING_REGULATOR_TPS6286X
                     bool "Use TPS6286X"
                     default n
+
+                menuconfig RT_USING_REGULATOR_CPU
+                    bool "Enable regulator for CPU"
+
+                    if RT_USING_REGULATOR_CPU
+                        config RT_REGULATOR_CPU_I2C_DEV
+                            string "Regulator for CPU I2C Device name"
+                    endif
+
+                menuconfig RT_USING_REGULATOR_KPU
+                    bool "Enable regulator for KPU"
+
+                    if RT_USING_REGULATOR_KPU
+                        config RT_REGULATOR_KPU_I2C_DEV
+                            string "Regulator for KPU I2C Device name"
+                    endif
             endif
 
         menuconfig RT_USING_TOUCH

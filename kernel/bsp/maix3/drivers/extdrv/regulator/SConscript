@@ -3,13 +3,11 @@
 from building import *
 
 cwd     = GetCurrentDir()
-src     = Glob('regulator.c')
+src     = Glob('regulator.c', 'dummy.c')
 CPPPATH = [cwd]
 
 if GetDepend(['RT_USING_REGULATOR_TPS6286X']):
     src += Glob('tps6286x.c')
-else:
-    src += Glob('dummy.c')
 
 group = DefineGroup('REGULATOR', src, depend = ['RT_USING_PM', 'RT_USING_REGULATOR'], CPPPATH = CPPPATH)
 
