@@ -15,7 +15,7 @@
 #include "riscv_io.h"
 #include "board.h"
 
-#define UART_DEFAULT_BAUDRATE 2000000
+#define UART_DEFAULT_BAUDRATE 115200
 #define UART_CLK                    50000000
 #define UART_ADDR 0x91400000UL
 #define UART_IRQ 0x10
