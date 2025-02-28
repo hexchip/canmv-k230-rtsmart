@@ -133,7 +133,7 @@ __exit_wakeup:
 
     rt_wqueue_remove(&__wait);
 
-    return 0;
+    return tid->error > 0 ? -tid->error : tid->error;
 }
 
 int rt_wqueue_wait(rt_wqueue_t *queue, int condition, int msec)

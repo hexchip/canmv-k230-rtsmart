@@ -440,6 +440,19 @@ int usbh_enumerate(struct usbh_hubport *hport)
                 dev_desc->bDeviceProtocol, ep_mps);
 
     /* Reconfigure EP0 with the correct maximum packet size */
+#ifdef CHERRY_USB_HC_DRV_DWC2
+    if (ep_mps != usbh_get_default_mps(hport->speed)) {
+        if ((hport->speed == USB_SPEED_LOW) ||
+            !(ep_mps == 8 || ep_mps == 16 || ep_mps == 32 || ep_mps == 64)) {
+            USB_LOG_ERR("Invalid ep0 maxpacket: %d\n", ep_mps);
+            goto errout;
+        }
+
+        USB_LOG_INFO("Using ep0 maxpacket = %d\n", ep_mps);
+        /* kill urb to trigger disable ep0 then host driver can use new ep_mps */
+        usbh_kill_urb(&hport->ep0_urb);
+    }
+#endif
     ep->wMaxPacketSize = ep_mps;
 
 #ifdef CONFIG_USBHOST_XHCI
@@ -493,10 +506,11 @@ int usbh_enumerate(struct usbh_hubport *hport)
     }
 
     parse_device_descriptor(hport, (struct usb_device_descriptor *)ep0_request_buffer[hport->bus->busid], USB_SIZEOF_DEVICE_DESC);
-    USB_LOG_INFO("New device found,idVendor:%04x,idProduct:%04x,bcdDevice:%04x\r\n",
+    USB_LOG_INFO("New device found,idVendor:%04x,idProduct:%04x,bcdDevice:%04x, dev_addr = %d\r\n",
                  ((struct usb_device_descriptor *)ep0_request_buffer[hport->bus->busid])->idVendor,
                  ((struct usb_device_descriptor *)ep0_request_buffer[hport->bus->busid])->idProduct,
-                 ((struct usb_device_descriptor *)ep0_request_buffer[hport->bus->busid])->bcdDevice);
+                 ((struct usb_device_descriptor *)ep0_request_buffer[hport->bus->busid])->bcdDevice,
+                 dev_addr);
 
     USB_LOG_INFO("The device has %d bNumConfigurations\r\n", ((struct usb_device_descriptor *)ep0_request_buffer[hport->bus->busid])->bNumConfigurations);
 
@@ -671,6 +685,11 @@ static void usbh_bus_init(struct usbh_bus *bus, uint8_t busid, uint32_t reg_base
     hub->hub_desc.bNbrPorts = CONFIG_USBHOST_MAX_RHPORTS;
     hub->int_buffer = bus->hcd.roothub_intbuf;
     hub->bus = bus;
+#ifdef CHERRY_USB_HC_DRV_DWC2
+    hub->tt.think_time = 666;
+    bus->hcd.root_hub.dev_addr = 1;
+    hub->tt.hub = &bus->hcd.root_hub;
+#endif
 
     usb_slist_init(&bus->hub_list);
     usb_slist_add_tail(&bus->hub_list, &hub->list);

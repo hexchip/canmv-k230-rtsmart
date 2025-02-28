@@ -126,6 +126,32 @@ int sal_init(void)
 }
 INIT_COMPONENT_EXPORT(sal_init);
 
+#ifdef RT_USING_SAL
+#include "ipc/waitqueue.h"
+
+void update_work_count(struct netdev *netdev, int val)
+{
+    rt_base_t level;
+
+    level = rt_hw_interrupt_disable();
+    netdev->work_count += val;
+    rt_hw_interrupt_enable(level);
+}
+
+
+rt_bool_t get_work_count(struct netdev *netdev)
+{
+    int cnt;
+    rt_base_t level;
+
+    level = rt_hw_interrupt_disable();
+    cnt = netdev->work_count;
+    rt_hw_interrupt_enable(level);
+
+    return cnt;
+}
+#endif
+
 /* check SAL network interface device internet status */
 static void check_netdev_internet_up_work(struct rt_work *work, void *work_data)
 {
@@ -166,6 +192,13 @@ static void check_netdev_internet_up_work(struct rt_work *work, void *work_data)
         result = -RT_ERROR;
         goto __exit;
     }
+
+#ifdef RT_USING_SAL
+    update_work_count(netdev, -1);
+    if (get_work_count(netdev) == 0) {
+        rt_wqueue_wakeup(&netdev->wait_work, 0);
+    }
+#endif
 
     host = (struct hostent *) pf->netdb_ops->gethostbyname(SAL_INTERNET_HOST);
     if (host == RT_NULL)
@@ -276,7 +309,15 @@ int sal_check_netdev_internet_up(struct netdev *netdev)
     }
 
     rt_delayed_work_init(net_work, check_netdev_internet_up_work, (void *)netdev);
+#ifndef RT_USING_SAL
     rt_work_submit(&(net_work->work), RT_TICK_PER_SECOND);
+#else
+    int ret;
+    ret = rt_work_submit(&(net_work->work), RT_TICK_PER_SECOND);
+    if (ret == RT_EOK) {
+        update_work_count(netdev, 1);
+    }
+#endif
 
     return 0;
 }

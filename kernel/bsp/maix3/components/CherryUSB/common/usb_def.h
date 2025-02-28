@@ -397,6 +397,10 @@ struct usb_endpoint_descriptor {
     uint8_t bmAttributes;     /* Transfer type */
     uint16_t wMaxPacketSize;  /* Bits 10:0 = max. packet size */
     uint8_t bInterval;        /* Polling interval in (micro) frames */
+#ifdef CHERRY_USB_HC_DRV_DWC2
+    uint8_t bRefresh;
+    uint8_t bSynchAddress;
+#endif
 } __PACKED;
 
 #define USB_SIZEOF_ENDPOINT_DESC 7

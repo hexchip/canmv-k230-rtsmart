@@ -97,12 +97,6 @@ static rt_err_t _workqueue_submit_work(struct rt_workqueue *queue, struct rt_wor
         return -RT_EBUSY;
     }
 
-    if (queue->work_current == work)
-    {
-        rt_hw_interrupt_enable(level);
-        return -RT_EBUSY;
-    }
-
     /* NOTE: the work MUST be initialized firstly */
     rt_list_remove(&(work->list));
 

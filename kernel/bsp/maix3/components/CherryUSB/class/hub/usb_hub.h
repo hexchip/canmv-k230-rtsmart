@@ -92,6 +92,19 @@
 #define HUB_CHAR_TTTT_32_BITS    (3 << HUB_CHAR_TTTT_SHIFT)
 #define HUB_CHAR_PORTIND         (1 << 7) /* Bit 7: Port Indicators Supported */
 
+#ifdef CHERRY_USB_HC_DRV_DWC2
+/*
+ * Hub Device descriptor
+ * USB Hub class device protocols
+ */
+
+#define USB_HUB_PR_FS		0 /* Full speed hub */
+#define USB_HUB_PR_HS_NO_TT	0 /* Hi-speed hub without TT */
+#define USB_HUB_PR_HS_SINGLE_TT	1 /* Hi-speed hub with single TT */
+#define USB_HUB_PR_HS_MULTI_TT	2 /* Hi-speed hub with multiple TT */
+#define USB_HUB_PR_SS		3 /* Super speed hub */
+#endif
+
 /* Hub descriptor */
 struct usb_hub_descriptor {
     uint8_t bLength;

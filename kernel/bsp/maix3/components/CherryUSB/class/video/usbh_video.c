@@ -10,7 +10,7 @@
 #define USB_DBG_TAG "usbh_video"
 #include "usb_log.h"
 
-#define DEV_FORMAT "/dev/video%d"
+#define DEV_FORMAT "video%d"
 
 /* general descriptor field offsets */
 #define DESC_bLength              0 /** Length offset */
@@ -126,7 +126,11 @@ int usbh_videostreaming_set_cur_commit(struct usbh_video *video_class, uint8_t f
     usb_memcpy(&video_class->commit, &video_class->probe, sizeof(struct video_probe_and_commit_controls));
     video_class->commit.bFormatIndex = formatindex;
     video_class->commit.bFrameIndex = frameindex;
+#if 0
     video_class->commit.dwFrameInterval = 333333;
+#else
+    video_class->commit.dwFrameInterval = video_class->format[formatindex - 1].frame[frameindex - 1].dwDefaultFrameInterval;
+#endif
     return usbh_video_set(video_class, VIDEO_REQUEST_SET_CUR, video_class->data_intf, 0x00, VIDEO_VS_COMMIT_CONTROL, (uint8_t *)&video_class->commit, 26);
 }
 
@@ -158,17 +162,18 @@ int usbh_video_open(struct usbh_video *video_class,
                     (wHeight == video_class->format[i].frame[j].wHeight)) {
                     frameidx = j + 1;
                     found = true;
-                    break;
+                    goto found;
                 }
             }
         }
     }
 
+found:
     if (found == false) {
         return -USB_ERR_NODEV;
     }
 
-    if (altsetting > (video_class->num_of_intf_altsettings - 1)) {
+    if (altsetting != 0xFF && altsetting > (video_class->num_of_intf_altsettings - 1)) {
         return -USB_ERR_INVAL;
     }
 
@@ -230,6 +235,50 @@ int usbh_video_open(struct usbh_video *video_class,
         goto errout;
     }
 
+    if (altsetting == 0xFF)
+    {
+        unsigned int bandwidth, psize, i;
+
+        if (video_class->num_of_intf_altsettings > 1) {
+            /* Isochronous endpoint, select the alternate setting. */
+            bandwidth = video_class->commit.dwMaxPayloadTransferSize;
+
+            if (bandwidth == 0) {
+                USB_LOG_RAW("requested null bandwidth, defaulting to lowest.\n");
+                bandwidth = 1;
+            }
+
+            for (i = 0; i < video_class->num_of_intf_altsettings; ++i) {
+                ep_desc = &video_class->hport->config.intf[video_class->data_intf].altsetting[i].ep[0].ep_desc;
+
+                /* Check if the bandwidth is high enough. */
+                psize = ep_desc->wMaxPacketSize;
+                psize = (psize & 0x07ff) * (1 + ((psize >> 11) & 3));
+                if (psize >= bandwidth)
+                    break;
+            }
+
+            if (i >= video_class->num_of_intf_altsettings) {
+                USB_LOG_RAW("Can't find suitable altsetting\n");
+                return -USB_ERR_RANGE;
+            }
+
+            altsetting = i;
+        } else {
+            altsetting = 0;
+            ep_desc = &video_class->hport->config.intf[video_class->data_intf].altsetting[altsetting].ep[0].ep_desc;
+            USB_LOG_RAW("uvc which use bulk ep\n");
+
+            if (ep_desc->bEndpointAddress & 0x80) {
+                USBH_EP_INIT(video_class->bulkin, ep_desc);
+            } else {
+                USBH_EP_INIT(video_class->bulkout, ep_desc);
+            }
+
+            goto out;
+        }
+    }
+
     step = 8;
     setup->bmRequestType = USB_REQUEST_DIR_OUT | USB_REQUEST_STANDARD | USB_REQUEST_RECIPIENT_INTERFACE;
     setup->bRequest = USB_REQUEST_SET_INTERFACE;
@@ -254,6 +303,9 @@ int usbh_video_open(struct usbh_video *video_class,
     }
 
     USB_LOG_INFO("Open video and select formatidx:%u, frameidx:%u, altsetting:%u\r\n", formatidx, frameidx, altsetting);
+    USB_LOG_INFO("mps = %d, mult = %d, video_class->isoin_mps = %d, video_class->isoout_mps = %d\r\n",
+                 mps, mult, video_class->isoin_mps, video_class->isoout_mps);
+out:
     video_class->is_opened = true;
     video_class->current_format = format_type;
     return ret;
@@ -280,7 +332,8 @@ int usbh_video_close(struct usbh_video *video_class)
         video_class->isoout = NULL;
     }
 
-    setup->bmRequestType = USB_REQUEST_DIR_OUT | USB_REQUEST_STANDARD | USB_REQUEST_RECIPIENT_INTERFACE;
+    setup->bmRequestType = USB_REQUEST_DIR_OUT |
+        USB_REQUEST_STANDARD | USB_REQUEST_RECIPIENT_INTERFACE;
     setup->bRequest = USB_REQUEST_SET_INTERFACE;
     setup->wValue = 0;
     setup->wIndex = video_class->data_intf;
@@ -330,9 +383,10 @@ void usbh_video_list_info(struct usbh_video *video_class)
         USB_LOG_RAW("  Resolution:\r\n");
         for (uint8_t j = 0; j < video_class->format[i].num_of_frames; j++) {
             USB_LOG_RAW("      FrameIndex:%u\r\n", j + 1);
-            USB_LOG_RAW("      wWidth: %d, wHeight: %d\r\n",
+            USB_LOG_RAW("      wWidth: %d, wHeight: %d, dwDefaultFrameInterval: %d\r\n",
                          video_class->format[i].frame[j].wWidth,
-                         video_class->format[i].frame[j].wHeight);
+                         video_class->format[i].frame[j].wHeight,
+                         video_class->format[i].frame[j].dwDefaultFrameInterval);
         }
     }
 
@@ -405,6 +459,7 @@ static int usbh_video_ctrl_connect(struct usbh_hubport *hport, uint8_t intf)
 
                             video_class->format[format_index - 1].num_of_frames = num_of_frames;
                             video_class->format[format_index - 1].format_type = USBH_VIDEO_FORMAT_UNCOMPRESSED;
+                            memcpy(video_class->format[format_index - 1].guidFormat, ((struct video_cs_if_vs_format_uncompressed_descriptor *)p)->guidFormat, 16);
                             break;
                         case VIDEO_VS_FORMAT_MJPEG_DESCRIPTOR_SUBTYPE:
                             format_index = p[DESC_bFormatIndex];
@@ -418,12 +473,16 @@ static int usbh_video_ctrl_connect(struct usbh_hubport *hport, uint8_t intf)
 
                             video_class->format[format_index - 1].frame[frame_index - 1].wWidth = ((struct video_cs_if_vs_frame_uncompressed_descriptor *)p)->wWidth;
                             video_class->format[format_index - 1].frame[frame_index - 1].wHeight = ((struct video_cs_if_vs_frame_uncompressed_descriptor *)p)->wHeight;
+                            video_class->format[format_index - 1].frame[frame_index - 1].dwDefaultFrameInterval = ((struct video_cs_if_vs_frame_uncompressed_descriptor *)p)->dwDefaultFrameInterval;
+                            video_class->format[format_index - 1].frame[frame_index - 1].dwMaxVideoFrameBufferSize = ((struct video_cs_if_vs_frame_uncompressed_descriptor *)p)->dwMaxVideoFrameBufferSize;
                             break;
                         case VIDEO_VS_FRAME_MJPEG_DESCRIPTOR_SUBTYPE:
                             frame_index = p[DESC_bFrameIndex];
 
                             video_class->format[format_index - 1].frame[frame_index - 1].wWidth = ((struct video_cs_if_vs_frame_mjpeg_descriptor *)p)->wWidth;
                             video_class->format[format_index - 1].frame[frame_index - 1].wHeight = ((struct video_cs_if_vs_frame_mjpeg_descriptor *)p)->wHeight;
+                            video_class->format[format_index - 1].frame[frame_index - 1].dwDefaultFrameInterval = ((struct video_cs_if_vs_frame_mjpeg_descriptor *)p)->dwDefaultFrameInterval;
+                            video_class->format[format_index - 1].frame[frame_index - 1].dwMaxVideoFrameBufferSize = ((struct video_cs_if_vs_frame_mjpeg_descriptor *)p)->dwMaxVideoFrameBufferSize;
                             break;
                         default:
                             break;
@@ -475,11 +534,15 @@ static int usbh_video_ctrl_disconnect(struct usbh_hubport *hport, uint8_t intf)
 
 static int usbh_video_streaming_connect(struct usbh_hubport *hport, uint8_t intf)
 {
+    USB_LOG_INFO("%s %d intf = %d\n", __func__, __LINE__, intf);
+
     return 0;
 }
 
 static int usbh_video_streaming_disconnect(struct usbh_hubport *hport, uint8_t intf)
 {
+    USB_LOG_RAW("%s %d\n", __func__, __LINE__);
+
     return 0;
 }
 

@@ -55,7 +55,17 @@ if GetDepend(['ENABLE_CHERRY_USB_HOST']):
     src += Glob('class/hub/usbh_hub.c')
 
     if GetDepend(['CHERRYUSB_HOST_DWC2_K230']):
-        src += Glob('port/dwc2/usb_hc_dwc2.c')
+        if GetDepend(['CHERRY_USB_HC_DRV_ORG']):
+            src += Glob('port/dwc2/usb_hc_dwc2.c')
+        if GetDepend(['CHERRY_USB_HC_DRV_DWC2']):
+            src += Glob('port/dwc2_linux/hcd.c')
+            src += Glob('port/dwc2_linux/core.c')
+            src += Glob('port/dwc2_linux/core_intr.c')
+            src += Glob('port/dwc2_linux/hcd_ddma.c')
+            src += Glob('port/dwc2_linux/hcd_intr.c')
+            src += Glob('port/dwc2_linux/hcd_queue.c')
+            src += Glob('port/dwc2_linux/params.c')
+            src += Glob('port/dwc2_linux/dwc2_dep.c')
 
     if GetDepend(['CHERRY_USB_HOST_ENABLE_CLASS_HID']):
         path += [cwd + '/class/hid/']
@@ -64,6 +74,10 @@ if GetDepend(['ENABLE_CHERRY_USB_HOST']):
     if GetDepend(['CHERRY_USB_HOST_ENABLE_CLASS_MSC']):
         path += [cwd + '/class/msc/']
         src += Glob('class/msc/usbh_msc.c')
+
+    if GetDepend(['CHERRY_USB_HOST_ENABLE_CLASS_UVC']):
+        path += [cwd + '/class/video/']
+        src += Glob('class/video/usbh_video.c')
 
     if GetDepend(['CHERRY_USB_HOST_ENABLE_CLASS_NET_RTL8152']):
         src += Glob('class/vendor/net/usbh_rtl8152.c')

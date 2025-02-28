@@ -62,6 +62,10 @@
 #include "lwip/ethip6.h"
 #endif /* LWIP_IPV6 */
 
+#ifdef RT_USING_SAL
+#include "ipc/waitqueue.h"
+#endif
+
 #define netifapi_netif_set_link_up(n)      netifapi_netif_common(n, netif_set_link_up, NULL)
 #define netifapi_netif_set_link_down(n)    netifapi_netif_common(n, netif_set_link_down, NULL)
 
@@ -340,6 +344,9 @@ static int netdev_add(struct netif *lwip_netif)
     netdev->ip_addr = lwip_netif->ip_addr;
     netdev->gw = lwip_netif->gw;
     netdev->netmask = lwip_netif->netmask;
+#ifdef RT_USING_SAL
+    rt_wqueue_init(&netdev->wait_work);
+#endif
 
 #ifdef RT_LWIP_DHCP
     netdev_low_level_set_dhcp_status(netdev, RT_TRUE);
@@ -347,6 +354,10 @@ static int netdev_add(struct netif *lwip_netif)
 
     return result;
 }
+
+#ifdef RT_USING_SAL
+rt_bool_t get_work_count(struct netdev *netdev);
+#endif
 
 static void netdev_del(struct netif *lwip_netif)
 {
@@ -357,6 +368,20 @@ static void netdev_del(struct netif *lwip_netif)
 
     rt_strncpy(name, lwip_netif->name, LWIP_NETIF_NAME_LEN);
     netdev = netdev_get_by_name(name);
+#ifdef RT_USING_SAL
+    if (netdev != RT_NULL) {
+        if (get_work_count(netdev)) {
+            do {
+                int ret;
+                ret = rt_wqueue_wait(&netdev->wait_work, get_work_count(netdev) == 0, 5000);
+                if (ret == -RT_ETIMEOUT) {
+                    rt_kprintf("wait worker timeout, work cnt = %d\n", get_work_count(netdev));
+                    break;
+                }
+            } while (get_work_count(netdev));
+        }
+    }
+#endif
     netdev_unregister(netdev);
     rt_free(netdev);
 }

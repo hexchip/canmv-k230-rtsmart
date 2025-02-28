@@ -101,6 +101,8 @@ struct netdev
 
 #ifdef RT_USING_SAL
     void *sal_user_data;                               /* user-specific data for SAL */
+    rt_wqueue_t wait_work;
+    int work_count;
 #endif /* RT_USING_SAL */
     void *user_data;                                   /* user-specific data */
 };

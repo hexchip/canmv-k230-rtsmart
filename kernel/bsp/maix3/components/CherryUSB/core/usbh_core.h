@@ -21,6 +21,12 @@
 #include "usb_osal.h"
 #include "usbh_hub.h"
 
+#ifdef CHERRY_USB_HC_DRV_DWC2
+#include <ipc/workqueue.h>
+#include <rtthread.h>
+#include <rthw.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -95,6 +101,31 @@ struct usbh_configuration {
     struct usbh_interface intf[CONFIG_USBHOST_MAX_INTERFACES];
 };
 
+#ifdef CHERRY_USB_HC_DRV_DWC2
+struct usb_tt_clear {
+    struct usb_dlist_node clear_list;
+    unsigned tt;
+    uint16_t devinfo;
+    struct usbh_hcd *hcd;
+    struct usb_host_endpoint *ep;
+};
+
+struct usb_tt {
+    struct usbh_hubport *hub;
+    int multi;  /* true means one TT per port */
+    unsigned think_time;    /* think time in ns */
+
+#ifdef RT_USING_SMP
+    struct rt_spinlock lock;
+#else
+    rt_spinlock_t lock;
+#endif
+    struct usb_dlist_node clear_list;    /* of usb_tt_clear */
+    struct rt_work clear_work;
+    void *hcpriv;   /* HCD private data */
+};
+#endif
+
 struct usbh_hubport {
     bool connected;   /* True: device connected; false: disconnected */
     uint8_t port;     /* Hub port index */
@@ -109,6 +140,13 @@ struct usbh_hubport {
     struct usb_setup_packet *setup;
     struct usbh_hub *parent;
     struct usbh_bus *bus;
+#ifdef CHERRY_USB_HC_DRV_DWC2
+    struct usb_tt *tt;
+    int maxchild;
+    int ttport;
+    struct usb_host_endpoint hep_in[16];
+    struct usb_host_endpoint hep_out[16];
+#endif
 #ifdef CONFIG_USBHOST_XHCI
     uint32_t protocol; /* port protocol, for xhci, some ports are USB2.0, others are USB3.0 */
 #endif
@@ -123,6 +161,9 @@ struct usbh_hub {
     bool is_roothub;
     uint8_t index;
     uint8_t hub_addr;
+#ifdef CHERRY_USB_HC_DRV_DWC2
+    struct usb_tt tt;
+#endif
     struct usb_hub_descriptor hub_desc;
     struct usbh_hubport child[CONFIG_USBHOST_MAX_EHPORTS];
     struct usbh_hubport *parent;
@@ -150,6 +191,10 @@ struct usbh_hcd {
     uint8_t hcd_id;
     uint8_t roothub_intbuf[1];
     struct usbh_hub roothub;
+#ifdef CHERRY_USB_HC_DRV_DWC2
+    struct usbh_hubport root_hub;
+    void *hcd_priv;
+#endif
 };
 
 struct usbh_bus {
@@ -160,6 +205,17 @@ struct usbh_bus {
     usb_osal_thread_t hub_thread;
     usb_osal_mq_t hub_mq;
     usb_slist_t hub_list;
+#ifdef CHERRY_USB_HC_DRV_DWC2
+    int bandwidth_allocated;	/* on this bus: how much of the time
+                                 * reserved for periodic (intr/iso)
+                                 * requests is used, on average?
+                                 * Units: microseconds/frame.
+                                 * Limits: Full/low speed reserve 90%,
+                                 * while high speed reserves 80%.
+                                 */
+    int bandwidth_int_reqs;		/* number of Interrupt requests */
+    int bandwidth_isoc_reqs;	/* number of Isoc. requests */
+#endif
 };
 
 static inline void usbh_control_urb_fill(struct usbh_urb *urb,

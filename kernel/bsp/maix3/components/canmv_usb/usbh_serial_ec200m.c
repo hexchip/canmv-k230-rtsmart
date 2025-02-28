@@ -45,7 +45,7 @@ void rd(char *dev_path)
     file_name = rt_malloc(strlen(dev_path) + 1);
     strcpy(file_name, dev_path);
 
-    thread = usb_osal_thread_create("rd", 2048, 15, rd_thread, file_name);
+    thread = usb_osal_thread_create("rd", 4096, 15, rd_thread, file_name);
     if (thread == NULL) {
         rt_free(file_name);
         rt_kprintf("%s fail to create thread\n", __func__);
