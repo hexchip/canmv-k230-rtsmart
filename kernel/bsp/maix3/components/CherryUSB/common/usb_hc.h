@@ -26,19 +26,41 @@ struct usbh_iso_frame_packet {
     uint32_t transfer_buffer_length;
     uint32_t actual_length;
     int errorcode;
+    uint32_t offset;
+    uint32_t length;
 };
+
+#ifdef CHERRY_USB_HC_DRV_DWC2
+struct usb_host_endpoint {
+    void *hcpriv;
+};
+#endif
 
 /**
  * @brief USB Urb Configuration.
  *
  * Structure containing the USB Urb configuration.
  */
+
 struct usbh_urb {
     void *hcpriv;
     struct usbh_hubport *hport;
     struct usb_endpoint_descriptor *ep;
+#ifdef CHERRY_USB_HC_DRV_DWC2
+    struct usb_host_endpoint *hep;
+    struct usb_dlist_node urb_list;
+    uint32_t pipe;
+    int error_count;
+    volatile int use_count;
+    volatile int reject;
+    void *context;
+#endif
     uint8_t data_toggle;
+#ifdef CHERRY_USB_HC_DRV_DWC2
+    uint16_t interval;
+#else
     uint8_t interval;
+#endif
     struct usb_setup_packet *setup;
     uint8_t *transfer_buffer;
     uint32_t transfer_buffer_length;

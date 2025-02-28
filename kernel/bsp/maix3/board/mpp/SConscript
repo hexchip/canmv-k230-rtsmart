@@ -5,7 +5,7 @@ import os
 cwd     = GetCurrentDir()
 libdir  = os.getenv('MPP_SRC_DIR')
 src     = Glob('*.c')
-CPPPATH = ['include']
+CPPPATH = ['include', libdir + '/include']
 if os.path.exists(str(libdir) + '/kernel/lib'):
     libdir = libdir + '/kernel/lib'
 else:

@@ -62,6 +62,18 @@ menu "Components Configuration"
 
                 if ENABLE_CHERRY_USB_HOST
 
+                    choice CHERRY_USB_HOST_CONTROLLER_DRV
+                        bool "CherryUSB Host Controller Driver"
+                        default CHERRY_USB_HC_DRV_DWC2
+
+                        config CHERRY_USB_HC_DRV_DWC2
+                            bool "Using DesignWare Driver"
+
+                        config CHERRY_USB_HC_DRV_ORG
+                            bool "Using CherryUSB Driver"
+
+                    endchoice
+
                     choice CHERRY_USB_HOST_USING_DEV
                         bool "CherryUSB Host Use Device"
                         default CHERRY_USB_HOST_USING_DEV0
@@ -85,6 +97,12 @@ menu "Components Configuration"
                     config CHERRY_USB_HOST_ENABLE_CLASS_MSC
                         bool "Enable MSC"
                         default n
+
+                        if CHERRY_USB_HC_DRV_DWC2
+                            config CHERRY_USB_HOST_ENABLE_CLASS_UVC
+                                bool "Enable UVC"
+                                default n
+                        endif
 
                     config CHERRY_USB_HOST_ENABLE_CLASS_NET_RTL8152
                         bool "Enable net RTL8152"

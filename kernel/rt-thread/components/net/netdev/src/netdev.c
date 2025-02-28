@@ -1114,6 +1114,13 @@ int netdev_cmd_ping(char* target_name, rt_uint32_t times, rt_size_t size)
 
         rt_memset(&ping_resp, 0x00, sizeof(struct netdev_ping_resp));
         start_tick = rt_tick_get();
+        netdev = netdev_get_first_by_flags(NETDEV_FLAG_LINK_UP);
+        if (netdev == RT_NULL || !netdev_is_up(netdev) || !netdev_is_link_up(netdev))
+        {
+            rt_kprintf("ping: not found available network interface device.\n");
+            break;
+        }
+
         ret = netdev->ops->ping(netdev, (const char *)target_name, size, NETDEV_PING_RECV_TIMEO, &ping_resp);
         if (ret == -RT_ETIMEOUT)
         {
@@ -1150,13 +1157,13 @@ int netdev_cmd_ping(char* target_name, rt_uint32_t times, rt_size_t size)
 
 int netdev_ping(int argc, char **argv)
 {
-    if (argc == 1)
+    if (argc != 3)
     {
-        rt_kprintf("Please input: ping <host address>\n");
+        rt_kprintf("Please input: ping <host address> <count>\n");
     }
     else
     {
-        netdev_cmd_ping(argv[1], 4, 0);
+        netdev_cmd_ping(argv[1], atoi(argv[2]), 0);
     }
 
     return 0;

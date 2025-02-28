@@ -302,6 +302,7 @@ static void hub_int_complete_callback(void *arg, int nbytes)
     struct usbh_hub *hub = (struct usbh_hub *)arg;
 
     if (nbytes > 0) {
+        USB_LOG_DBG("wake hub\n");
         usbh_hub_thread_wakeup(hub);
     } else if (nbytes == -USB_ERR_NAK) {
         /* Restart timer to submit urb again */
@@ -320,6 +321,10 @@ static void hub_int_timeout(void *arg)
     usbh_submit_urb(&hub->intin_urb);
 }
 
+#ifdef CHERRY_USB_HC_DRV_DWC2
+extern void hub_tt_work(struct rt_work* work, void* work_data);
+#endif
+
 static int usbh_hub_connect(struct usbh_hubport *hport, uint8_t intf)
 {
     struct usb_endpoint_descriptor *ep_desc;
@@ -335,6 +340,73 @@ static int usbh_hub_connect(struct usbh_hubport *hport, uint8_t intf)
     hub->hub_addr = hport->dev_addr;
     hub->parent = hport;
     hub->bus = hport->bus;
+
+#ifdef CHERRY_USB_HC_DRV_DWC2
+    uint16_t wHubCharacteristics;
+
+    rt_spin_lock_init(&hub->tt.lock);
+    usb_dlist_init(&hub->tt.clear_list);
+    rt_work_init(&hub->tt.clear_work, hub_tt_work, hub);
+
+    switch (hport->device_desc.bDeviceProtocol) {
+    case USB_HUB_PR_FS:
+        USB_LOG_ERR("Currently Don't Support Full Speed Hubs\n");
+        return -1;
+        break;
+    case USB_HUB_PR_HS_SINGLE_TT:
+        USB_LOG_INFO("Single TT\n");
+        hub->tt.hub = hport;
+        break;
+    case USB_HUB_PR_HS_MULTI_TT:
+        ret = usbh_set_interface(hport, 0, 1);
+        if (ret == 0) {
+            USB_LOG_INFO("TT per port\n");
+            hub->tt.multi = 1;
+        } else
+            USB_LOG_ERR("Using single TT (err %d)\n", ret);
+        hub->tt.hub = hport;
+        break;
+    case USB_HUB_PR_SS:
+        /* USB 3.0 hubs don't have a TT */
+        break;
+    default:
+        USB_LOG_INFO("Unrecognized hub protocol %d\n",
+                     hport->device_desc.bDeviceProtocol);
+        break;
+    }
+
+    wHubCharacteristics = hub->hub_desc.wHubCharacteristics;
+
+    /* Note 8 FS bit times == (8 bits / 12000000 bps) ~= 666ns */
+    switch (wHubCharacteristics & HUB_CHAR_TTTT_MASK) {
+    case HUB_CHAR_TTTT_8_BITS:
+        if (hport->device_desc.bDeviceProtocol != 0) {
+            hub->tt.think_time = 666;
+            USB_LOG_DBG("TT requires at most %d "
+                        "FS bit times (%d ns)\n",
+                        8, hub->tt.think_time);
+        }
+        break;
+    case HUB_CHAR_TTTT_16_BITS:
+        hub->tt.think_time = 666 * 2;
+        USB_LOG_DBG("TT requires at most %d "
+                    "FS bit times (%d ns)\n",
+                    16, hub->tt.think_time);
+        break;
+    case HUB_CHAR_TTTT_24_BITS:
+        hub->tt.think_time = 666 * 3;
+        USB_LOG_DBG("TT requires at most %d "
+                    "FS bit times (%d ns)\n",
+                    24, hub->tt.think_time);
+        break;
+    case HUB_CHAR_TTTT_32_BITS:
+        hub->tt.think_time = 666 * 4;
+        USB_LOG_DBG("TT requires at most %d "
+                    "FS bit times (%d ns)\n",
+                    32, hub->tt.think_time);
+        break;
+    }
+#endif
 
     hport->config.intf[intf].priv = hub;
 
@@ -604,11 +676,34 @@ static void usbh_hub_events(struct usbh_hub *hub)
                     child->speed = speed;
                     child->bus = hub->bus;
                     child->mutex = usb_osal_mutex_create();
-
+#ifdef CHERRY_USB_HC_DRV_DWC2
+                    if (hub->parent) {
+                        if (speed != USB_SPEED_HIGH &&
+                            hub->parent->speed == USB_SPEED_HIGH) {
+                            if (!hub->tt.hub) {
+                                USB_LOG_ERR("parent hub has no TT\n");
+                                continue;
+                            }
+                            child->tt = &hub->tt;
+                            child->ttport = port + 1;
+                        }
+                    } else {
+                        child->tt = &hub->tt;
+                        child->ttport = 1;
+                    }
+#endif
                     USB_LOG_INFO("New %s device on Bus %u, Hub %u, Port %u connected\r\n", speed_table[speed], hub->bus->busid, hub->index, port + 1);
 
                     /* create disposable thread to enumerate device on current hport, do not block hub thread */
+#if 0
                     usb_osal_thread_create("usbh_enum", CONFIG_USBHOST_PSC_STACKSIZE, CONFIG_USBHOST_PSC_PRIO + 1, usbh_hubport_enumerate_thread, (void *)child);
+#else
+                    if (usbh_enumerate(child) < 0) {
+                        /** release child sources */
+                        usbh_hubport_release(child);
+                        USB_LOG_ERR("Port %u enumerate fail\r\n", child->port);
+                    }
+#endif
                 } else {
                     child = &hub->child[port];
                     /** release child sources */

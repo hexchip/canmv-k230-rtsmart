@@ -30,6 +30,7 @@ static struct usbh_ec200m *get_usbh_ec200m(void)
     }
 
     if (devno >= EC200M_MAX_TTY_INTF) {
+        USB_LOG_ERR("too much interface = 0x%x\n", g_dev_inuse);
         return NULL;
     } else {
         return g_ec200m[devno];
@@ -223,7 +224,7 @@ static rt_err_t ec200m_init(struct rt_device *dev)
     return RT_EOK;
 }
 
-void usbh_ec200m_indat_callback(void *arg, int nbytes)
+static void usbh_ec200m_indat_callback(void *arg, int nbytes)
 {
     struct usbh_ec200m *serial = (struct usbh_ec200m *)arg;
     struct serial_rx_fifo *rx_fifo = serial->rx_fifo;
