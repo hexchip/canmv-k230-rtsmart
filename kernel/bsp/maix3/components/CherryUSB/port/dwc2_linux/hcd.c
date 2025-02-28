@@ -3405,6 +3405,7 @@ int usbh_submit_urb(struct usbh_urb *urb)
 #endif
         if (ret < 0) {
             USB_LOG_ERR("urb timeout = %d\n", timeout);
+            atomic_dec(&urb->use_count);
             usbh_kill_urb(urb);
             goto out_1;
         }
