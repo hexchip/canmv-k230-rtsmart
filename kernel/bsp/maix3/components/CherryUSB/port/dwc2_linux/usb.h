@@ -4,21 +4,6 @@
 #include "usbh_core.h"
 #include "adapter.h"
 
-/*
- * urb->transfer_flags:
- *
- * Note: URB_DIR_IN/OUT is automatically set in usb_submit_urb().
- */
-#define URB_SHORT_NOT_OK	0x0001	/* report short reads as errors */
-#define URB_ISO_ASAP		0x0002	/* iso-only; use the first unexpired
-                                     * slot in the schedule */
-#define URB_NO_TRANSFER_DMA_MAP	0x0004	/* urb->transfer_dma valid on submit */
-#define URB_ZERO_PACKET		0x0040	/* Finish bulk OUT with short packet */
-#define URB_NO_INTERRUPT	0x0080	/* HINT: no non-error interrupt
-                                     * needed */
-#define URB_FREE_BUFFER		0x0100	/* Free transfer buffer with the URB */
-
-
 #define USB_DIR_OUT         0       /* to device */
 #define USB_DIR_IN          0x80        /* to host */
 /*

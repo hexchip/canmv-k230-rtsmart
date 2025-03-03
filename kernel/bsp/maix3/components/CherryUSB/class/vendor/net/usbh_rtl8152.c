@@ -18,7 +18,7 @@
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_rtl8152_rx_buffer[CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SEGSZE];
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_rtl8152_tx_buffer[CONFIG_USBHOST_RTL8152_ETH_MAX_SEGSZE];
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_rtl8152_inttx_buffer[USB_ALIGN_UP(2, CONFIG_USB_ALIGN_SIZE)];
-USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_rtl8152_buf[32];
+USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_rtl8152_buf[USB_ALIGN_UP(32, CONFIG_USB_ALIGN_SIZE)];
 
 static struct usbh_rtl8152 g_rtl8152_class;
 
@@ -2255,6 +2255,11 @@ err_t usbh_rtl8152_linkoutput(struct netif *netif, struct pbuf *p)
     USB_LOG_DBG("txlen:%d\r\n", p->tot_len + sizeof(struct tx_desc));
 
     usbh_bulk_urb_fill(&g_rtl8152_class.bulkout_urb, g_rtl8152_class.hport, g_rtl8152_class.bulkout, g_rtl8152_tx_buffer, p->tot_len + sizeof(struct tx_desc), USB_OSAL_WAITING_FOREVER, NULL, NULL);
+    if (((p->tot_len + sizeof(struct tx_desc)) % USB_GET_MAXPACKETSIZE(g_rtl8152_class.bulkout->wMaxPacketSize)) == 0) {
+        g_rtl8152_class.bulkout_urb.transfer_flags = 0x0;
+        g_rtl8152_class.bulkout_urb.transfer_flags |= URB_ZERO_PACKET;
+    }
+
     ret = usbh_submit_urb(&g_rtl8152_class.bulkout_urb);
     if (ret < 0) {
         return ERR_BUF;
