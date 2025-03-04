@@ -493,6 +493,10 @@ static void rt_hw_uart_isr(int irq, void *param)
             rt_wqueue_wakeup(&(uart->wait_queue), (void *)POLLIN);
         }
         rt_hw_interrupt_enable(level);
+        /* indicate to upper layer application */
+        if (uart->rx_indicate != RT_NULL)
+            uart->rx_indicate(uart, 1);
+
     }
 }
 
@@ -504,6 +508,7 @@ int kd_hw_uart_init(void)
 
 #ifdef RT_USING_UART_CANAAN_1
     kd_uart_device = rt_malloc(sizeof(struct kd_uart_device));
+    memset(kd_uart_device, 0, sizeof(struct kd_uart_device));
     kd_uart_device->base = rt_ioremap((void *)UART1_BASE_ADDR, UART1_IO_SIZE);
     kd_uart_device->kd_uart.ops = &uart_ops;
     kd_uart_device->kd_uart.user_data = (void *)kd_uart_device;
@@ -534,6 +539,7 @@ int kd_hw_uart_init(void)
 
 #ifdef RT_USING_UART_CANAAN_2
     kd_uart_device = rt_malloc(sizeof(struct kd_uart_device));
+    memset(kd_uart_device, 0, sizeof(struct kd_uart_device));
     kd_uart_device->base = rt_ioremap((void *)UART2_BASE_ADDR, UART2_IO_SIZE);
     kd_uart_device->kd_uart.ops = &uart_ops;
     kd_uart_device->kd_uart.user_data = (void *)kd_uart_device;
@@ -564,6 +570,7 @@ int kd_hw_uart_init(void)
 
 #ifdef RT_USING_UART_CANAAN_3
     kd_uart_device = rt_malloc(sizeof(struct kd_uart_device));
+    memset(kd_uart_device, 0, sizeof(struct kd_uart_device));
     kd_uart_device->base = rt_ioremap((void *)UART3_BASE_ADDR, UART3_IO_SIZE);
     kd_uart_device->kd_uart.ops = &uart_ops;
     kd_uart_device->kd_uart.user_data = (void *)kd_uart_device;
@@ -594,6 +601,7 @@ int kd_hw_uart_init(void)
 
 #ifdef RT_USING_UART_CANAAN_4
     kd_uart_device = rt_malloc(sizeof(struct kd_uart_device));
+    memset(kd_uart_device, 0, sizeof(struct kd_uart_device));
     kd_uart_device->base = rt_ioremap((void *)UART4_BASE_ADDR, UART4_IO_SIZE);
     kd_uart_device->kd_uart.ops = &uart_ops;
     kd_uart_device->kd_uart.user_data = (void *)kd_uart_device;

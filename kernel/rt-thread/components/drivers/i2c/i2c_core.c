@@ -117,8 +117,7 @@ rt_size_t rt_i2c_master_send(struct rt_i2c_bus_device *bus,
     msg.buf   = (rt_uint8_t *)buf;
 
     ret = rt_i2c_transfer(bus, &msg, 1);
-
-    return (ret > 0) ? count : ret;
+    return (ret == 1 ) ? count : ret;
 }
 
 rt_size_t rt_i2c_master_recv(struct rt_i2c_bus_device *bus,
@@ -137,8 +136,7 @@ rt_size_t rt_i2c_master_recv(struct rt_i2c_bus_device *bus,
     msg.buf    = buf;
 
     ret = rt_i2c_transfer(bus, &msg, 1);
-
-    return (ret > 0) ? count : ret;
+    return (ret == 1) ? count : ret;
 }
 
 int rt_i2c_core_init(void)
