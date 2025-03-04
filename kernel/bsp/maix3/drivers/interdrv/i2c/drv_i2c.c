@@ -137,23 +137,24 @@ static void dw_i2c_enable(struct i2c_regs *i2c_base, rt_bool_t enable)
 
 #ifdef RT_USING_I2C_SLAVE_EEPROM
 
-static int eeprom_open(struct dfs_fd *file) 
+static int eeprom_open(struct dfs_fd *file)
 {
     struct i2c_slave_eeprom *eeprom = file->fnode->data;
     file->fnode->size = eeprom->buffer_size;
+
     return 0;
 }
 
-static int eeprom_close(struct dfs_fd *file) 
+static int eeprom_close(struct dfs_fd *file)
 {
     struct i2c_slave_eeprom *eeprom = file->fnode->data;
 
-    if (eeprom->buffer)
-    {
-        rt_free(eeprom->buffer);
-        eeprom->buffer = NULL;
-        eeprom->buffer_size = 0;
-    }
+    // if (eeprom->buffer)
+    // {
+    //     rt_free(eeprom->buffer);
+    //     eeprom->buffer = NULL;
+    //     eeprom->buffer_size = 0;
+    // }
     return 0;
 }
 
@@ -191,7 +192,7 @@ static int eeprom_write(struct dfs_fd *file, const void *buffer, size_t size) {
     return size;
 }
 
-static int eeprom_lseek(struct dfs_fd *file, off_t offset) 
+static int eeprom_lseek(struct dfs_fd *file, off_t offset)
 {
     struct i2c_slave_eeprom *eeprom = file->fnode->data;
     file->fnode->size = eeprom->buffer_size;
@@ -232,7 +233,7 @@ static int eeprom_ioctl(struct dfs_fd *file, int cmd, void *args)
             rt_free(eeprom->buffer);
             eeprom->buffer_size = 0;
             eeprom->buffer = NULL;
-        }  
+        }
         if (size > 0)
         {
             eeprom->buffer = rt_malloc(size);
@@ -268,7 +269,7 @@ static const struct dfs_file_ops eeprom_fops = {
     .ioctl = eeprom_ioctl,
 };
 
-int i2c_slave_eeprom_register(struct i2c_slave_eeprom *dev,const char *name) 
+int i2c_slave_eeprom_register(struct i2c_slave_eeprom *dev,const char *name)
 {
     int ret = 0;
     // or you can use rt_malloc to allocate
@@ -280,6 +281,11 @@ int i2c_slave_eeprom_register(struct i2c_slave_eeprom *dev,const char *name)
     rt_wqueue_init(&dev->device.wait_queue);
     dev->device.fops = &eeprom_fops;
     dev->device.user_data = dev;
+    if (dev->buffer == NULL){
+        dev->buffer_size = 8;
+        dev->buffer = rt_malloc(dev->buffer_size);
+        memset(dev->buffer, 0xa5, dev->buffer_size);
+    }
     return 0;
 }
 
@@ -288,17 +294,17 @@ static void i2c_slave_eeprom_callback(void* ctx, enum i2c_slave_event event, rt_
 
     switch (event) {
 	case I2C_SLAVE_WRITE_RECEIVED:
-        if (eeprom->flag_recv_ptr) 
+        if (eeprom->flag_recv_ptr)
         {
             // write data
-            if (eeprom->buffer != NULL) 
+            if (eeprom->buffer != NULL)
             {
                 eeprom->buffer[eeprom->ptr] = *val;
                 eeprom->ptr = (eeprom->ptr+1) > eeprom->buffer_size ? 0 : eeprom->ptr+1;
                 eeprom->poll_event |= POLLIN;
                 rt_wqueue_wakeup(&eeprom->device.wait_queue, (void*)POLLIN);
             }
-            
+
         } else {
             // recv addr byte
             eeprom->flag_recv_ptr = RT_TRUE;
@@ -830,13 +836,13 @@ static rt_size_t chip_i2c_mst_xfer(struct rt_i2c_bus_device *bus,
     return designware_i2c_xfer((struct chip_i2c_bus *)bus, msgs, num);
 }
 
-static int dw_i2c_control(struct chip_i2c_bus *bus,                        
+static int dw_i2c_control(struct chip_i2c_bus *bus,
                         rt_uint32_t               cmd,
                         rt_uint32_t               arg)
 {
     rt_uint32_t bus_clock;
     rt_err_t ret;
-    
+
     RT_ASSERT(bus != RT_NULL);
 
     switch (cmd)
@@ -860,7 +866,7 @@ static int dw_i2c_control(struct chip_i2c_bus *bus,
     }
 
     return RT_EOK;
-}                               
+}
 
 static rt_err_t chip_i2c_control(struct rt_i2c_bus_device *bus,
                         rt_uint32_t               cmd,
@@ -922,6 +928,7 @@ void xxd(int argc, char* argv[]) {
     }
     char buffer[16];
     int size = 0;
+    lseek(fd, 0, SEEK_SET);
     do {
         size = read(fd, buffer, sizeof(buffer));
         for (unsigned i = 0; i < size; i++) {
