@@ -24,9 +24,9 @@
 #define CONFIG_USBHOST_CDC_ECM_PKT_FILTER     0x000C
 #define CONFIG_USBHOST_CDC_ECM_ETH_MAX_SEGSZE 1544U
 
-static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_cdc_ecm_rx_buffer[CONFIG_USBHOST_CDC_ECM_ETH_MAX_SEGSZE];
-static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_cdc_ecm_tx_buffer[CONFIG_USBHOST_CDC_ECM_ETH_MAX_SEGSZE];
-static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_cdc_ecm_inttx_buffer[16];
+static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_cdc_ecm_rx_buffer[USB_ALIGN_UP(CONFIG_USBHOST_CDC_ECM_ETH_MAX_SEGSZE, CONFIG_USB_ALIGN_SIZE)];
+static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_cdc_ecm_tx_buffer[USB_ALIGN_UP(CONFIG_USBHOST_CDC_ECM_ETH_MAX_SEGSZE, CONFIG_USB_ALIGN_SIZE)];
+static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_cdc_ecm_inttx_buffer[USB_ALIGN_UP(16, CONFIG_USB_ALIGN_SIZE)];
 
 static struct usbh_cdc_ecm g_cdc_ecm_class;
 
@@ -306,6 +306,11 @@ err_t usbh_cdc_ecm_linkoutput(struct netif *netif, struct pbuf *p)
     USB_LOG_DBG("txlen:%d\r\n", p->tot_len);
 
     usbh_bulk_urb_fill(&g_cdc_ecm_class.bulkout_urb, g_cdc_ecm_class.hport, g_cdc_ecm_class.bulkout, g_cdc_ecm_tx_buffer, p->tot_len, USB_OSAL_WAITING_FOREVER, NULL, NULL);
+    if (((p->tot_len) % USB_GET_MAXPACKETSIZE(g_cdc_ecm_class.bulkout->wMaxPacketSize)) == 0) {
+        g_cdc_ecm_class.bulkout_urb.transfer_flags = 0x0;
+        g_cdc_ecm_class.bulkout_urb.transfer_flags |= URB_ZERO_PACKET;
+    }
+
     ret = usbh_submit_urb(&g_cdc_ecm_class.bulkout_urb);
     if (ret < 0) {
         return ERR_BUF;

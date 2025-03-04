@@ -105,6 +105,7 @@ static void usbd_cdc_acm_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
 }
 
 static struct usbd_interface usbd_cdc_intf;
+static struct usbd_interface usbd_cdc_data_unuse;
 
 static struct usbd_endpoint cdc_out_ep = {
     .ep_addr = CDC_OUT_EP,
@@ -126,6 +127,7 @@ void canmv_usb_device_cdc_init(void)
 {
     usbd_cdc_acm_init_intf(USB_DEVICE_BUS_ID, &usbd_cdc_intf);
     usbd_add_interface(USB_DEVICE_BUS_ID, &usbd_cdc_intf);
+    usbd_add_interface(USB_DEVICE_BUS_ID, &usbd_cdc_data_unuse);
     usbd_add_endpoint(USB_DEVICE_BUS_ID, &cdc_out_ep);
     usbd_add_endpoint(USB_DEVICE_BUS_ID, &cdc_in_ep);
 

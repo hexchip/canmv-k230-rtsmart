@@ -3368,7 +3368,11 @@ int usbh_submit_urb(struct usbh_urb *urb)
     }
 
     /* Currently CherryUSB don't use urb->transfer_flags,so follow in */
-    urb->transfer_flags = 0;
+    if (urb->transfer_flags & URB_ZERO_PACKET) {
+        ;
+    } else {
+        urb->transfer_flags = 0;
+    }
 
     if (urb->timeout > 0) {
         timeout = urb->timeout;
@@ -3405,7 +3409,6 @@ int usbh_submit_urb(struct usbh_urb *urb)
 #endif
         if (ret < 0) {
             USB_LOG_ERR("urb timeout = %d\n", timeout);
-            atomic_dec(&urb->use_count);
             usbh_kill_urb(urb);
             goto out_1;
         }
@@ -3627,10 +3630,9 @@ int usbh_enqueue_urb(struct usbh_urb *urb)
 
         if (!(urb->transfer_flags & URB_NO_INTERRUPT))
             tflags |= URB_GIVEBACK_ASAP;
-#if 0
+
         if (urb->transfer_flags & URB_ZERO_PACKET)
             tflags |= URB_SEND_ZERO_PACKET;
-#endif
 
         dwc2_urb->priv = urb;
         dwc2_urb->buf = urb->transfer_buffer;
@@ -3973,7 +3975,8 @@ disable_ep:
         int ret;
         ret = rt_wqueue_wait(&kill_urb_queue, (atomic_read(&urb->use_count) == 0), 10000);
         if (ret == -RT_ETIMEOUT) {
-            dev_err(hsotg->dev, "kill urb timeout,urb_cnt = %d\n", atomic_read(&urb->use_count));
+            dev_err(hsotg->dev, "kill urb %p timeout,urb_cnt = %d\n",
+                    urb, atomic_read(&urb->use_count));
         }
     } while (atomic_read(&urb->use_count));
 

@@ -541,7 +541,7 @@ static int usbh_video_streaming_connect(struct usbh_hubport *hport, uint8_t intf
 
 static int usbh_video_streaming_disconnect(struct usbh_hubport *hport, uint8_t intf)
 {
-    USB_LOG_RAW("%s %d\n", __func__, __LINE__);
+    USB_LOG_INFO("%s %d\n", __func__, __LINE__);
 
     return 0;
 }
