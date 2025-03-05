@@ -18,4 +18,4 @@ rt_int32_t sdk_kernel_init(void)
     return RT_EOK;
 }
 
-INIT_COMPONENT_EXPORT(sdk_kernel_init);
+INIT_APP_EXPORT(sdk_kernel_init);

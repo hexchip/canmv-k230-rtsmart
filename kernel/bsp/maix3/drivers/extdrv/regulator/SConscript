@@ -3,8 +3,11 @@
 from building import *
 
 cwd     = GetCurrentDir()
-src     = Glob('regulator.c', 'dummy.c')
+src     = []
 CPPPATH = [cwd]
+
+src += Glob('regulator.c')
+src += Glob('dummy.c')
 
 if GetDepend(['RT_USING_REGULATOR_TPS6286X']):
     src += Glob('tps6286x.c')
