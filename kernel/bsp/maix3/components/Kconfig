@@ -106,7 +106,7 @@ menu "Components Configuration"
 
                     config CHERRY_USB_HOST_ENABLE_CLASS_NET_RTL8152
                         bool "Enable net RTL8152"
-                        default y
+                        default n
 
                     menuconfig CHERRY_USB_HOST_ENABLE_CLASS_SERIAL
                         bool "Enable SERIAL"
@@ -165,7 +165,7 @@ menu "Components Configuration"
 
     config ENABLE_CANMV_MISC_DEV
         bool "Enable misc Device for CanMV"
-        default y
+        default n
 
     source "components/netutils/Kconfig"
 

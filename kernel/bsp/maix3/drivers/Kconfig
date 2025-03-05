@@ -201,7 +201,7 @@ menu "Drivers Configuration"
 
                     config DRV_TS_USE_RT_DEVICE
                         bool "Tsensor driver use RT Device framework"
-                        default y
+                        default n
 
                 endif
             
@@ -305,7 +305,7 @@ menu "Drivers Configuration"
         menuconfig RT_USING_REGULATOR
             bool "Enable regulator Driver"
             depends on RT_USING_PM
-            default y
+            default n
 
             if RT_USING_REGULATOR
                 config RT_USING_REGULATOR_TPS6286X
@@ -394,7 +394,7 @@ menu "Drivers Configuration"
                 
                 menuconfig TOUCH_DEV_I2C_SET_SPEED
                     bool "Touch Device Change I2C Speed"
-                    default y
+                    default n
 
                     if TOUCH_DEV_I2C_SET_SPEED
                         config TOUCH_DEV_I2C_BUS_SPEED
