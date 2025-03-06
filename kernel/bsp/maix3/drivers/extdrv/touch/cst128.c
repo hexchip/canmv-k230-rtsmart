@@ -132,25 +132,15 @@ int drv_touch_probe_cst128(struct drv_touch_dev *dev) {
     uint8_t chip_id;
     struct touch_register reg_data;
 
-#if defined CONFIG_BOARD_K230_CANMV_LCKFB
-    rt_thread_mdelay(50);
-#endif
-
     dev->i2c.addr = 0x38;
+
+    rt_thread_mdelay(50); // wait touch startup.
 
     if(0x00 != touch_dev_read_reg(dev, 0xA3, &chip_id, 1)) {
         LOG_E("%s->%d\n", __func__, __LINE__);
         return -2;
     }
-
-#if defined CONFIG_BOARD_K230_CANMV_01STUDIO
-    if(0x64 != chip_id) {
-#elif defined CONFIG_BOARD_K230_CANMV_LCKFB
-    if(0x54 != chip_id) {
-#endif
-        LOG_E("cst128 id error, %02X", chip_id);
-        return -3;
-    }
+    rt_kprintf("cst128 id: 0x%02X\n", chip_id);
 
     rt_strncpy(dev->dev.drv_name, "cst128", sizeof(dev->dev.drv_name));
 
