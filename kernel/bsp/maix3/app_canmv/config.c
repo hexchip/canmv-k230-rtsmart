@@ -64,6 +64,31 @@ _failed:
   return -1;
 }
 
+uint32_t gpt_crc32_next(const void *data, size_t len, uint32_t last_crc)
+{
+    uint32_t crc = ~last_crc;
+    const unsigned char *p = (const unsigned char *)data;
+
+    for (size_t i = 0; i < len; ++i) {
+        crc ^= (uint32_t)p[i]; // XOR the byte with the CRC
+
+        for (int j = 0; j < 8; ++j) { // Process each bit
+            if (crc & 1) {
+                crc = (crc >> 1) ^ 0xEDB88320; // Polynomial for CRC-32
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+
+    return ~crc; // Final CRC value
+}
+
+uint32_t gpt_crc32(const void *data, size_t len)
+{
+	return gpt_crc32_next(data, len, 0);
+}
+
 #if defined(CONFIG_RT_AUTO_RESIZE_PARTITION) && defined(RT_USING_SDIO)
 // @see src/rtsmart/rtsmart/kernel/rt-thread/components/drivers/sdio/block_dev.c
 struct mmcsd_blk_device {
@@ -170,31 +195,6 @@ _exit:
 
 // GPT ////////////////////////////////////////////////////////////////////////
 # define ENABLE_GPT_PART_RESIZE   0
-
-uint32_t gpt_crc32_next(const void *data, size_t len, uint32_t last_crc)
-{
-    uint32_t crc = ~last_crc;
-    const unsigned char *p = (const unsigned char *)data;
-
-    for (size_t i = 0; i < len; ++i) {
-        crc ^= (uint32_t)p[i]; // XOR the byte with the CRC
-
-        for (int j = 0; j < 8; ++j) { // Process each bit
-            if (crc & 1) {
-                crc = (crc >> 1) ^ 0xEDB88320; // Polynomial for CRC-32
-            } else {
-                crc >>= 1;
-            }
-        }
-    }
-
-    return ~crc; // Final CRC value
-}
-
-uint32_t gpt_crc32(const void *data, size_t len)
-{
-	return gpt_crc32_next(data, len, 0);
-}
 
 #if defined (ENABLE_GPT_PART_RESIZE) && ENABLE_GPT_PART_RESIZE
 
