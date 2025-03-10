@@ -32,6 +32,8 @@
 #include <cache.h>
 #include "riscv_io.h"
 #include "board.h"
+#include "rtdef.h"
+#include "rtthread.h"
 #include "sysctl_clk.h"
 #ifdef RT_USING_POSIX
 #include <dfs_posix.h>
@@ -118,6 +120,7 @@
 
 
 #define	IOC_SET_BAUDRATE            _IOW('U', 0x40, int)
+#define	IOC_GET_BUFFER_SIZE         _IOW('U', 0x41, int)
 
 #define DEFAULT_BAUDRATE      (115200)
 #define UART0_IRQ              0x10
@@ -128,10 +131,13 @@
 
 struct kd_uart_device {
     struct rt_device kd_uart;
+
     volatile void *base;
     struct rt_serial_rx_fifo *kd_rx_fifo;
-    volatile uint8_t t_flag;
+
+    uint64_t dev_open_ref_cnt;
     int id;
+    volatile uint8_t t_flag;
 };
 
 #define write32(addr, val) writel(val, (void*)(addr))
@@ -279,11 +285,45 @@ static void kd_uart_init(volatile void *uart_base, int index)
 
 static rt_err_t uart_open(rt_device_t dev, rt_uint16_t oflag)
 {
+    rt_base_t level;
+
+    struct kd_uart_device *kd_uart_device = (struct kd_uart_device *)dev->user_data;
+    struct rt_serial_rx_fifo *kd_rx_fifo = kd_uart_device->kd_rx_fifo;
+
+    if(0x00 == kd_uart_device->dev_open_ref_cnt) {
+        level = rt_hw_interrupt_disable();
+
+        kd_rx_fifo->get_index = 0;
+        kd_rx_fifo->put_index = 0;
+        kd_rx_fifo->is_full = RT_FALSE;
+
+        rt_hw_interrupt_enable(level);
+    }
+
+    kd_uart_device->dev_open_ref_cnt ++;
+
     return RT_EOK;
 }
 
 rt_err_t uart_close(rt_device_t dev)
 {
+    rt_base_t level;
+
+    struct kd_uart_device *kd_uart_device = (struct kd_uart_device *)dev->user_data;
+    struct rt_serial_rx_fifo *kd_rx_fifo = kd_uart_device->kd_rx_fifo;
+
+    kd_uart_device->dev_open_ref_cnt --;
+
+    if(0x00 == kd_uart_device->dev_open_ref_cnt) {
+        level = rt_hw_interrupt_disable();
+
+        kd_rx_fifo->get_index = 0;
+        kd_rx_fifo->put_index = 0;
+        kd_rx_fifo->is_full = RT_FALSE;
+
+        rt_hw_interrupt_enable(level);
+    }
+
     return RT_EOK;
 }
 
@@ -363,7 +403,7 @@ static rt_size_t uart_write(rt_device_t dev, rt_off_t pos, const void *buffer, r
     return size;
 }
 
-static rt_err_t uart_control(rt_device_t dev, int cmd, void *args)
+static rt_err_t uart_control_set_baud(rt_device_t dev, void *args)
 {
     struct kd_uart_device *kd_uart_device = (struct kd_uart_device *)dev->user_data;
     volatile void *uart_base = kd_uart_device->base;
@@ -376,10 +416,9 @@ static rt_err_t uart_control(rt_device_t dev, int cmd, void *args)
     uint32_t value;
     struct uart_configure *config = (struct uart_configure*)args;
 
-    if (cmd != IOC_SET_BAUDRATE)
+    if (config == RT_NULL || uart_base == RT_NULL) {
         return -RT_EINVAL;
-    if (config == RT_NULL || uart_base == RT_NULL)
-        return -RT_EINVAL;
+    }
 
     uart_clock = sysctl_clk_get_leaf_freq(SYSCTL_CLK_UART_0_CLK + id);
 
@@ -422,6 +461,51 @@ static rt_err_t uart_control(rt_device_t dev, int cmd, void *args)
     write32(uart_base + UART_IER, 0x81);
 
     return RT_EOK;
+}
+
+static rt_size_t _serial_fifo_calc_recved_len(struct rt_serial_rx_fifo *rx_fifo)
+{
+    if (rx_fifo->put_index == rx_fifo->get_index) {
+        return (rx_fifo->is_full == RT_FALSE ? 0 : CANAAN_UART_BUFFER_SIZE);
+    } else {
+        if (rx_fifo->put_index > rx_fifo->get_index) {
+            return rx_fifo->put_index - rx_fifo->get_index;
+        } else {
+            return CANAAN_UART_BUFFER_SIZE - (rx_fifo->get_index - rx_fifo->put_index);
+        }
+    }
+}
+
+static rt_err_t uart_control_get_buffer_size(rt_device_t dev, void *args)
+{
+    rt_base_t level;
+    rt_size_t buffer_size;
+
+    struct kd_uart_device *kd_uart_device = (struct kd_uart_device *)dev->user_data;
+    struct rt_serial_rx_fifo *kd_rx_fifo = kd_uart_device->kd_rx_fifo;
+
+    level = rt_hw_interrupt_disable();
+
+    buffer_size = _serial_fifo_calc_recved_len(kd_rx_fifo);
+
+    rt_hw_interrupt_enable(level);
+
+    *(size_t *)args = (size_t)buffer_size;
+
+    return RT_EOK;
+}
+
+static rt_err_t uart_control(rt_device_t dev, int cmd, void *args)
+{
+    if(IOC_SET_BAUDRATE == cmd) {
+        return uart_control_set_baud(dev, args);
+    } else if(IOC_GET_BUFFER_SIZE == cmd) {
+        return uart_control_get_buffer_size(dev, args);
+    } else {
+        rt_kprintf("unsupport cmd 0x%08x\n", cmd);
+    }
+
+    return RT_EINVAL;
 }
 
 const static struct rt_device_ops uart_ops = {
