@@ -8,7 +8,6 @@
 
 #define UVC_URBS (5)
 #define UVC_MAX_PACKETS (32)
-#define USB_ALIGN_SIZE (64)
 #define MAX_UVC_BUFFER (32)
 
 #if VB_VERSION
@@ -351,7 +350,7 @@ static int uvc_init_urbs(struct usbh_video *video_class)
 #if 0
         uvc_queue.urb_buffer[i] = dma_alloc_coherent(size, size, &uvc_queue.urb_dma[i], size);
 #else
-        uvc_queue.urb_buffer[i] = rt_malloc_align(size, USB_ALIGN_SIZE);
+        uvc_queue.urb_buffer[i] = rt_malloc_align(USB_ALIGN_UP(size, CONFIG_USB_ALIGN_SIZE), CONFIG_USB_ALIGN_SIZE);
 #endif
 
         uvc_queue.urb[i] =
