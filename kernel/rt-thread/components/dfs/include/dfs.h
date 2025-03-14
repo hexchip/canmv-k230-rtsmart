@@ -79,6 +79,9 @@ struct dirent
     uint8_t d_type;           /* The type of the file */
     uint8_t d_namlen;         /* The length of the not including the terminating null file name */
     uint16_t d_reclen;        /* length of this record */
+#ifndef MTP_USE_FILE_STAT_OPERATION
+    uint32_t fsize;           /* file size */
+#endif
     char d_name[DFS_PATH_MAX];   /* The null-terminated file name */
 };
 

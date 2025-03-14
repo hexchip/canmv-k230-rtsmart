@@ -43,9 +43,16 @@ menu "Components Configuration"
                     config CHERRY_USB_DEVICE_ENABLE_CLASS_MSC
                         bool "Enable MSC"
 
-                    config CHERRY_USB_DEVICE_ENABLE_CLASS_MTP
+                    menuconfig CHERRY_USB_DEVICE_ENABLE_CLASS_MTP
                         bool "Enable MTP"
                         select CHERRY_USB_DEVICE_ENABLE_CLASS_MSC
+
+                        if CHERRY_USB_DEVICE_ENABLE_CLASS_MTP
+                            config MTP_USE_FILE_STAT_OPERATION
+                            bool "Use file stat in uMTP-Responder"
+                            default n
+                        endif
+
                 endif
 
             config ENABLE_CANMV_USB_DEV
@@ -116,7 +123,7 @@ menu "Components Configuration"
 
                             config CHERRY_USB_HOST_ENABLE_CLASS_SERIAL_EC200M
                             bool "Enable serial EC200M"
-                            default n
+                            default y
 
                         endif
 
