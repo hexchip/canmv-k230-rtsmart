@@ -75,6 +75,11 @@ menu "Components Configuration"
 
                         config CHERRY_USB_HC_DRV_DWC2
                             bool "Using DesignWare Driver"
+                            if CHERRY_USB_HC_DRV_DWC2
+                                config DWC2_DRV_DMA_DESC_ENABLE
+                                    bool "Enable descriptor DMA mode"
+                                    default n
+                            endif
 
                         config CHERRY_USB_HC_DRV_ORG
                             bool "Using CherryUSB Driver"
