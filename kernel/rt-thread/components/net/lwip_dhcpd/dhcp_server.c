@@ -538,7 +538,7 @@ void dhcpd_start(const char *netif_name)
 
         dhcp_stop(netif);
 
-        set_if(netif_name, DHCPD_SERVER_IP, "0.0.0.0", "255.255.255.0");
+        set_if(netif_name, DHCPD_SERVER_IP, DHCPD_SERVER_IP, "255.255.255.0");
 
         netif_set_up(netif);
     }
