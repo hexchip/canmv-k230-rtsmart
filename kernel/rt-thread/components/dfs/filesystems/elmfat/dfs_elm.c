@@ -708,6 +708,9 @@ int dfs_elm_getdents(struct dfs_fd *file, struct dirent *dirp, uint32_t count)
             d->d_type = DT_REG;
         }
 
+#ifndef MTP_USE_FILE_STAT_OPERATION
+        d->fsize = fno.fsize;
+#endif
         d->d_namlen = (rt_uint8_t)rt_strlen(fn);
         d->d_reclen = (rt_uint16_t)sizeof(struct dirent);
         rt_strncpy(d->d_name, fn, rt_strlen(fn) + 1);

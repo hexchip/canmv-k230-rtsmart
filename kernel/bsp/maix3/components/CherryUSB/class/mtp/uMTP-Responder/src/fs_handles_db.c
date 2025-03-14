@@ -152,6 +152,23 @@ DIR * fs_find_first_file(char *folder, filefoundinfo* fileinfo)
 		d = readdir (dir);
 		if( d )
 		{
+#ifndef MTP_USE_FILE_STAT_OPERATION
+			int len;
+
+			fileinfo->isdirectory = (d->d_type == DT_DIR) ? 1 : 0;
+			fileinfo->size = d->fsize;
+
+			len = strlen(d->d_name);
+			if (len >= FS_HANDLE_MAX_FILENAME_SIZE)
+			{
+				len = FS_HANDLE_MAX_FILENAME_SIZE;
+			}
+
+			strncpy(fileinfo->filename, d->d_name, len);
+			fileinfo->filename[len] = '\0';
+
+			return dir;
+#else
 			tmpstr = malloc (strlen(folder) + strlen(d->d_name) + 4 );
 			if( tmpstr )
 			{
@@ -167,6 +184,7 @@ DIR * fs_find_first_file(char *folder, filefoundinfo* fileinfo)
 
 				free(tmpstr);
 			}
+#endif
 		}
 
 		closedir(dir);
@@ -191,6 +209,23 @@ int fs_find_next_file(DIR* dir, char *folder, filefoundinfo* fileinfo)
 
 	if( d )
 	{
+#ifndef MTP_USE_FILE_STAT_OPERATION
+		int len;
+
+		fileinfo->isdirectory = (d->d_type == DT_DIR) ? 1 : 0;
+		fileinfo->size = d->fsize;
+
+		len = strlen(d->d_name);
+		if (len >= FS_HANDLE_MAX_FILENAME_SIZE)
+		{
+			len = FS_HANDLE_MAX_FILENAME_SIZE;
+		}
+
+		strncpy(fileinfo->filename, d->d_name, len);
+		fileinfo->filename[len] = '\0';
+
+		ret = 1;
+#else
 		tmpstr = malloc (strlen(folder) + strlen(d->d_name) + 4 );
 		if( tmpstr )
 		{
@@ -207,6 +242,7 @@ int fs_find_next_file(DIR* dir, char *folder, filefoundinfo* fileinfo)
 
 			free(tmpstr);
 		}
+#endif
 	}
 
 	return ret;
@@ -422,6 +458,7 @@ int scan_and_add_folder(fs_handles_db * db, char * base, uint32_t parent, uint32
 		fs_find_close(dir);
 	}
 
+#ifdef MTP_USE_FILE_STAT_OPERATION
 	// Scan the DB to find and remove deleted files...
 	init_search_handle(db, parent, storage_id);
 	do
@@ -453,6 +490,7 @@ int scan_and_add_folder(fs_handles_db * db, char * base, uint32_t parent, uint32
 			}
 		}
 	}while(entry);
+#endif
 
 	if(dir)
 		return 0;
