@@ -322,7 +322,11 @@ static void dwc2_set_default_params(struct dwc2_hsotg *hsotg)
 
     {
         p->host_dma = dma_capable;
+#ifdef DWC2_DRV_DMA_DESC_ENABLE
+        p->dma_desc_enable = true;
+#else
         p->dma_desc_enable = false;
+#endif
         p->dma_desc_fs_enable = false;
         p->host_support_fs_ls_low_power = false;
         p->host_ls_low_power_phy_clk = false;
