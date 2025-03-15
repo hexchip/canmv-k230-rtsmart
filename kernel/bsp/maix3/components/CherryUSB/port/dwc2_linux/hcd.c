@@ -1589,9 +1589,9 @@ int dwc2_hcd_init(struct dwc2_hsotg *hsotg)
     if (hsotg->params.dma_desc_enable ||
         hsotg->params.dma_desc_fs_enable) {
 
-        hsotg->desc_gen_cache = rt_mp_create_align("dwc2-gen-desc", 100,
+        hsotg->desc_gen_cache = rt_mp_create_align("dwc2-gen-desc", 10,
                                              sizeof(struct dwc2_dma_desc) *
-                                             MAX_DMA_DESC_NUM_GENERIC, 512);
+                                             MAX_DMA_DESC_NUM_GENERIC, 0x1000);
         if (!hsotg->desc_gen_cache) {
             dev_err(hsotg->dev,
                     "unable to create dwc2 generic desc cache\n");
@@ -1605,9 +1605,9 @@ int dwc2_hcd_init(struct dwc2_hsotg *hsotg)
             goto error3;
         }
 
-        hsotg->desc_hsisoc_cache = rt_mp_create_align("dwc2-hsisoc-desc", 100,
+        hsotg->desc_hsisoc_cache = rt_mp_create_align("dwc2-hsisoc-desc", 10,
                                                 sizeof(struct dwc2_dma_desc) *
-                                                MAX_DMA_DESC_NUM_HS_ISOC, 512);
+                                                MAX_DMA_DESC_NUM_HS_ISOC, 0x1000);
         if (!hsotg->desc_hsisoc_cache) {
             dev_err(hsotg->dev,
                     "unable to create dwc2 hs isoc desc cache\n");
@@ -1629,7 +1629,7 @@ int dwc2_hcd_init(struct dwc2_hsotg *hsotg)
          * Create kmem caches to handle non-aligned buffer
          * in Buffer DMA mode.
          */
-        hsotg->unaligned_cache = rt_mp_create_align("dwc2-unaligned-dma", 100,
+        hsotg->unaligned_cache = rt_mp_create_align("dwc2-unaligned-dma", 10,
                                                     DWC2_KMEM_UNALIGNED_BUF_SIZE, 4);
         if (!hsotg->unaligned_cache) {
             dev_err(hsotg->dev,
@@ -4234,10 +4234,9 @@ static int dwc2_alloc_split_dma_aligned_buf(struct dwc2_hsotg *hsotg,
         chan->max_packet > DWC2_KMEM_UNALIGNED_BUF_SIZE)
         return -ENOMEM;
 
-    /* todo : change RT_WAITING_FOREVER to RT_WAITING_NO */
     if (!qh->dw_align_buf) {
         qh->dw_align_buf = kmem_cache_alloc(hsotg->unaligned_cache,
-                                            RT_WAITING_FOREVER);
+                                            RT_WAITING_NO);
         if (!qh->dw_align_buf)
             return -ENOMEM;
     }

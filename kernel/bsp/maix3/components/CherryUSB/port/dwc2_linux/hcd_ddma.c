@@ -95,7 +95,7 @@ static int dwc2_frame_list_alloc(struct dwc2_hsotg *hsotg, gfp_t mem_flags)
         return 0;
 
     hsotg->frame_list_sz = 4 * FRLISTEN_64_SIZE;
-    hsotg->frame_list = rt_malloc_align(hsotg->frame_list_sz, 512);
+    hsotg->frame_list = rt_malloc_align(hsotg->frame_list_sz, 0x1000);
     if (!hsotg->frame_list)
         return -ENOMEM;
 
