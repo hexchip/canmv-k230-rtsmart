@@ -1192,7 +1192,7 @@ void usbh_video_run(struct usbh_video *video_class)
 
     ret = rt_device_register(device, dev_name, RT_DEVICE_FLAG_RDWR);
     if (ret) {
-        USB_LOG_ERR("%d register fail\n", dev_name);
+        USB_LOG_ERR("%s register fail\n", dev_name);
     }
 
     device->fops = &uvc_fops;

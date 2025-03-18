@@ -110,11 +110,11 @@ menu "Components Configuration"
                         bool "Enable MSC"
                         default n
 
-                        if CHERRY_USB_HC_DRV_DWC2
-                            config CHERRY_USB_HOST_ENABLE_CLASS_UVC
-                                bool "Enable UVC"
-                                default n
-                        endif
+                    if CHERRY_USB_HC_DRV_DWC2
+                        config CHERRY_USB_HOST_ENABLE_CLASS_UVC
+                            bool "Enable UVC"
+                            default n
+                    endif
 
                     config CHERRY_USB_HOST_ENABLE_CLASS_NET_RTL8152
                         bool "Enable net RTL8152"
