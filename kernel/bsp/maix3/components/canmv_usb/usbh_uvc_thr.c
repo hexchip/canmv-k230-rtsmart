@@ -870,15 +870,19 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
 
         memset(&uvc_queue, 0 , sizeof(uvc_queue));
 
-        USB_LOG_DBG("size = %d, count = %d\n",
-                   video->current_frame->dwMaxVideoFrameBufferSize, request->count);
+        if (video->current_format == USBH_VIDEO_FORMAT_UNCOMPRESSED) {
+            buffer_size = video->current_frame->wHeight * video->current_frame->wWidth * 2;
+        }
+
+        USB_LOG_DBG("buffer_size = %d, dwMaxVideoFrameBufferSize = %d, count = %d\n",
+                   buffer_size, video->current_frame->dwMaxVideoFrameBufferSize, request->count);
         if (request->count > MAX_UVC_BUFFER) {
             USB_LOG_ERR("Too many buffer required: %s %d\n", __func__, __LINE__);
             return -RT_EINVAL;
         }
 #if VB_VERSION
         k_u32 pool_id;
-        int alloc_size = video->current_frame->dwMaxVideoFrameBufferSize + VDEC_ALIGN_SIZE;
+        int alloc_size = buffer_size + VDEC_ALIGN_SIZE;
 
         USB_LOG_DBG("alloc_size = 0x%x\n", alloc_size);
         if (vb_create_pool(&pool_id, request->count + 1, alloc_size,
