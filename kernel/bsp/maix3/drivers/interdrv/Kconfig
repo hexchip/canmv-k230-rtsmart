@@ -1,0 +1,252 @@
+menu "InterDriver"
+    config RT_USING_ADC
+        bool "Using ADC device drivers"
+        default n
+
+    menuconfig RT_USING_CIPHER
+        bool "Enable CIPHER"
+        default n
+
+        if RT_USING_CIPHER
+            config RT_USING_AES
+                bool "Use HW AES accelerator"
+                default n
+            config RT_USING_HASH
+                bool "Use HW SHA256 accelerator"
+                default n
+            config RT_USING_SM4
+                bool "Use HW SM4 accelerator"
+                default n
+        endif
+
+    config RT_USING_GNNE
+        bool "Enable GNNE driver for ai"
+        default y
+
+    config RT_USING_GPIO
+        bool "Enable GPIO Driver"
+        default n
+
+    config RT_USING_HARDLOCK
+        bool "Enable HardLock Driver"
+        default n
+
+    config RT_USING_PDMA
+        bool "Enable PDMA Driver"
+        default n
+
+    menuconfig RT_USING_HWTIMER
+        bool "Using hardware timer device drivers"
+        default n
+        
+        if RT_USING_HWTIMER
+            config RT_USING_HW_TIMER0
+                bool "Enable HW Timer0"
+                default n
+            config RT_USING_HW_TIMER1
+                bool "Enable HW Timer1"
+                default n
+            config RT_USING_HW_TIMER2
+                bool "Enable HW Timer2"
+                default n
+            config RT_USING_HW_TIMER3
+                bool "Enable HW Timer3"
+                default n
+            config RT_USING_HW_TIMER4
+                bool "Enable HW Timer4"
+                default n
+            config RT_USING_HW_TIMER5
+                bool "Enable HW Timer5"
+                default n
+        endif
+
+    menuconfig RT_USING_I2C
+        bool "Enable I2C"
+        default n
+
+        if RT_USING_I2C
+            config RT_USING_SOFT_I2C
+                bool "Enable Soft I2C"
+                default n
+
+            config RT_USING_I2C_SLAVE_EEPROM
+                bool "Enable I2C Slave Server as eeprom"
+                default n
+
+            config RT_USING_I2C0
+                bool "Enable I2C0"
+                default n
+
+                if RT_USING_I2C0
+                    config RT_USING_I2C0_SLAVE
+                    bool "Enable I2C0 SLAVE mode"
+                    select RT_USING_I2C_SLAVE_EEPROM
+                    default n
+                endif
+            config RT_USING_I2C1
+                bool "Enable I2C1"
+                default n
+
+                if RT_USING_I2C1
+                    config RT_USING_I2C1_SLAVE
+                    bool "Enable I2C1 SLAVE mode"
+                    select RT_USING_I2C_SLAVE_EEPROM
+                    default n
+                endif
+            config RT_USING_I2C2
+                bool "Enable I2C2"
+                default n
+
+                if RT_USING_I2C2
+                    config RT_USING_I2C2_SLAVE
+                    bool "Enable I2C2 SLAVE mode"
+                    select RT_USING_I2C_SLAVE_EEPROM
+                    default n
+                endif
+            config RT_USING_I2C3
+                bool "Enable I2C3"
+                default n
+
+                if RT_USING_I2C3
+                    config RT_USING_I2C3_SLAVE
+                    bool "Enable I2C3 SLAVE mode"
+                    select RT_USING_I2C_SLAVE_EEPROM
+                    default n
+                endif
+            config RT_USING_I2C4
+                bool "Enable I2C4"
+                default n
+
+                if RT_USING_I2C4
+                    config RT_USING_I2C4_SLAVE
+                    bool "Enable I2C4 SLAVE mode"
+                    select RT_USING_I2C_SLAVE_EEPROM
+                    default n
+                endif
+        endif
+
+    menuconfig RT_USING_SPI
+        bool "Enable SPI Driver"
+        default n
+
+        if RT_USING_SPI
+            config RT_USING_SPI0
+                bool "Enable SPI0"
+                default n
+            config RT_SPI0_RXSD
+                int "SPI0 ReadSample Delay"
+                default 0
+
+            config RT_USING_SPI1
+                bool "Enable SPI1"
+                default n
+            config RT_SPI1_RXSD
+                int "SPI1 ReadSample Delay"
+                default 0
+
+            config RT_USING_SPI2
+                bool "Enable SPI2"
+                default n
+            config RT_SPI2_RXSD
+                int "SPI2 ReadSample Delay"
+                default 0
+        endif
+
+    config RT_USING_PWM
+        bool "Using PWM device drivers"
+        default n
+
+    config RT_USING_RTC_PMU
+        bool "Using RTC device drivers"
+        default n
+
+    menuconfig RT_USING_SDIO
+        bool "Enable SDIO Driver"
+        default n
+
+        if RT_USING_SDIO
+            config RT_USING_SDIO0
+                bool "Enable SDIO0"
+                default n
+
+            if RT_USING_SDIO0
+                config RT_SDIO0_EMMC
+                    bool "SDIO0 device is eMMC"
+                    default n
+                config RT_SDIO0_1V8
+                    bool "SDIO0 device is 1.8V"
+                    default n
+            endif
+
+            config RT_USING_SDIO1
+                bool "Enable SDIO1"
+                default n
+
+            choice SDCARD_ON_SDIO_DEV
+                bool "SdCard is on SDIOx"
+
+                config SDCARD_ON_SDIO_DEV0
+                    bool "SdCard is on SDIO0"
+
+                config SDCARD_ON_SDIO_DEV1
+                    bool "SdCard is on SDIO1"
+            endchoice
+
+            config SDCARD_ON_SDIO_DEV
+                int 
+                default 0 if SDCARD_ON_SDIO_DEV0
+                default 1 if SDCARD_ON_SDIO_DEV1
+        endif
+
+        config RT_USING_SPI
+            bool "Enable SPI1 device driver"
+            default n
+
+        menuconfig RT_USING_TS
+            bool "Enable Tsensor driver"
+            default n
+
+            if RT_USING_TS
+
+                config DRV_TS_USE_RT_DEVICE
+                    bool "Tsensor driver use RT Device framework"
+                    default n
+
+            endif
+        
+        menuconfig RT_USING_CANAAN_UART
+            bool "Enable Uart Canaan device model driver"
+            default n
+            
+            if RT_USING_CANAAN_UART
+                config RT_USING_UART_CANAAN_1
+                    bool "Enable Uart Canaan device 1"
+                    default n
+                config RT_USING_UART_CANAAN_2
+                    bool "Enable Uart Canaan device 2"
+                    default n
+                config RT_USING_UART_CANAAN_3
+                    bool "Enable Uart Canaan device 3"
+                    default n
+                config RT_USING_UART_CANAAN_4
+                    bool "Enable Uart Canaan device 4"
+                    default n
+
+                config CANAAN_UART_BUFFER_SIZE
+                    int "Uart Canaan Buffer size in Bytes"
+                    default 131072
+
+                config POLLIN_SIZE
+                    int
+                    default CANAAN_UART_BUFFER_SIZE/2
+
+                config UART_TIMEOUT
+                    int "Uart Canaan Pool timeout"
+                    default 1000
+            endif
+
+        config RT_USING_WDT
+            bool "Using Watch Dog device drivers"
+            default n
+
+endmenu

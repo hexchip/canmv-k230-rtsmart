@@ -1,0 +1,113 @@
+menu "Ext Driver"
+    menuconfig RT_USING_CYW43XX
+        bool "Enable CYW43XX WiFi Driver"
+        default n
+
+        if RT_USING_CYW43XX
+            choice CYW43XX_SDIO_DEV
+                bool "CYW43XX Wifi Use SDIO Device"
+
+                config CYW43XX_SDIO_DEV0
+                    bool "Using SDIO0"
+                config CYW43XX_SDIO_DEV1
+                    bool "Using SDIO1"
+            endchoice
+
+            config CYW43XX_SDIO_DEV
+                int
+                default 0 if CYW43XX_SDIO_DEV0
+                default 1 if CYW43XX_SDIO_DEV1
+
+            config CYW43_PIN_WL_REG_ON
+                int "CYW43XX REG_ON Pin"
+                default 1
+
+            config CYW43XX_THREAD_PRIORITY
+                int
+                default 10
+            config CYW43XX_THREAD_STACK_SIZE
+                int
+                default 4096
+        endif
+
+    menuconfig RT_USING_EEPROM
+        bool "Enable EEPROM over GPIO Driver"
+        default n
+
+        if RT_USING_EEPROM
+
+
+        endif
+
+    menuconfig RT_USING_REALTEK
+        bool "Enable Realtek WiFi Driver"
+        default n
+
+        if RT_USING_REALTEK
+            choice REALTEK_SDIO_DEV
+                bool "Realtek Wifi Use SDIO Device"
+
+                config REALTEK_SDIO_DEV0
+                    bool "Using SDIO0"
+                config REALTEK_SDIO_DEV1
+                    bool "Using SDIO1"
+            endchoice
+
+            config REALTEK_SDIO_DEV
+                int
+                default 0 if REALTEK_SDIO_DEV0
+                default 1 if REALTEK_SDIO_DEV1
+        endif
+
+    menuconfig RT_USING_REGULATOR
+        bool "Enable regulator Driver"
+        depends on RT_USING_PM
+        default n
+
+        if RT_USING_REGULATOR
+            config RT_USING_REGULATOR_TPS6286X
+                bool "Use TPS6286X"
+                default n
+
+            menuconfig RT_USING_REGULATOR_CPU
+                bool "Enable regulator for CPU"
+
+                if RT_USING_REGULATOR_CPU
+                    config RT_REGULATOR_CPU_I2C_DEV
+                        string "Regulator for CPU I2C Device name"
+                endif
+
+            menuconfig RT_USING_REGULATOR_KPU
+                bool "Enable regulator for KPU"
+
+                if RT_USING_REGULATOR_KPU
+                    config RT_REGULATOR_KPU_I2C_DEV
+                        string "Regulator for KPU I2C Device name"
+                endif
+        endif
+
+    source "drivers/extdrv/touch/Kconfig"
+
+    menuconfig RT_USING_WS2812
+        bool "Enable WS2812"
+        default n
+
+        if RT_USING_WS2812
+            choice WS2812_USE_DRV
+                bool "WS2812 Use Drive mode"
+                default WS2812_USE_DRV_GPIO
+
+                config WS2812_USE_DRV_GPIO
+                    bool "Using GPIO"
+                config WS2812_USE_DRV_I2S
+                    bool "Using I2S"
+            endchoice
+
+            if WS2812_USE_DRV_GPIO
+                config WS2812_GPIO_PIN_NUM
+                    int "WS2812 GPIO Output Pin"
+                    default 35
+            endif
+        endif
+
+endmenu
