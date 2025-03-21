@@ -7,6 +7,7 @@
 #include <rthw.h>
 #include "usb_config.h"
 #include "usb_log.h"
+#include <riscv_io.h>
 
 #ifdef ENABLE_CHERRY_USB
 #define DEFAULT_USB_HCLK_FREQ_MHZ 200
@@ -15,15 +16,38 @@ uint32_t SystemCoreClock = (DEFAULT_USB_HCLK_FREQ_MHZ * 1000 * 1000);
 uintptr_t g_usb_otg0_base = (uintptr_t)0x91500000UL;
 uintptr_t g_usb_otg1_base = (uintptr_t)0x91540000UL;
 
+#define SYSCTL_USB_DONE_SHIFT (28)
+#define SYSCTL_USB_DONE_MASK (0xF << SYSCTL_USB_DONE_SHIFT)
+
+#define SYSCTL_USB_RESET_SHIFT (0)
+#define SYSCTL_USB_RESET_MASK (0x3 << SYSCTL_USB_RESET_SHIFT)
+
 static void sysctl_reset_hw_done(volatile uint32_t *reset_reg, uint8_t reset_bit, uint8_t done_bit)
 {
-    *reset_reg |= (1 << done_bit);      /* clear done bit */
-    rt_thread_mdelay(1);
-    
-    *reset_reg |= (1 << reset_bit);     /* set reset bit */
-    rt_thread_mdelay(1);
-    /* check done bit */
-    while(*reset_reg & (1 << done_bit) == 0);
+    uint32_t val;
+    rt_base_t level;
+    uint32_t done = ((1 << done_bit) | (1 << (done_bit + 2)));
+    uint32_t reset = (1 << reset_bit);
+
+    level = rt_hw_interrupt_disable();
+
+    /* clear done bit */
+    val = readl(reset_reg);
+    val &= ~(SYSCTL_USB_DONE_MASK | SYSCTL_USB_RESET_MASK);
+    val |= done;
+    writel(val, reset_reg);
+
+    /* set reset bit */
+    val = readl(reset_reg);
+    val &= ~(SYSCTL_USB_DONE_MASK | SYSCTL_USB_RESET_MASK);
+    val |= reset;
+    writel(val, reset_reg);
+
+    rt_hw_interrupt_enable(level);
+
+    /* wait done bit */
+    while ((readl(reset_reg) & done) != done);
+
 }
 
 #define USB_IDPULLUP0 		(1<<4)
