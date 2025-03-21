@@ -34,8 +34,8 @@
 
 #include "drv_gpio.h"
 
-#define TOUCH_MAX_POINT_NUMBER      5
-#define TOUCH_READ_REG_MAX_SIZE     32
+#define TOUCH_MAX_POINT_NUMBER      10
+#define TOUCH_READ_REG_MAX_SIZE     128
 #define TOUCH_READ_MQ_MSG_COUNT     3
 #define TOUCH_TIMEOUT_MS            1000
 
@@ -62,8 +62,9 @@ struct drv_touch_dev {
     struct {
         struct rt_i2c_bus_device *bus;
         const char *name;
-        const  uint32_t speed;
+        const uint32_t speed;
         uint16_t addr;
+        uint16_t reg_width; // 1 or 2
     } i2c;
 
     struct {
@@ -107,7 +108,7 @@ struct drv_touch_dev {
  */
 int touch_dev_write_reg(struct drv_touch_dev *dev, rt_uint8_t *buffer, rt_size_t length);
 
-int touch_dev_read_reg(struct drv_touch_dev *dev, rt_uint8_t addr,
+int touch_dev_read_reg(struct drv_touch_dev *dev, rt_uint16_t addr,
     rt_uint8_t *buffer, rt_size_t length);
 
 /**
@@ -120,3 +121,4 @@ typedef int (*drv_touch_probe)(struct drv_touch_dev *);
 int drv_touch_probe_ft5x16(struct drv_touch_dev *dev);
 int drv_touch_probe_cst128(struct drv_touch_dev *dev);
 int drv_touch_probe_chsc5xxx(struct drv_touch_dev *dev);
+int drv_touch_probe_gt911(struct drv_touch_dev *dev);

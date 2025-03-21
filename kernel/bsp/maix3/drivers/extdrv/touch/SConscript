@@ -17,6 +17,9 @@ if GetDepend(['TOUCH_TYPE_CST128']):
 if GetDepend(['TOUCH_TYPE_CHSC5XXX']):
     src += Glob('chsc5xxx.c')
 
+if GetDepend(['TOUCH_TYPE_GT911']):
+    src += Glob('gt911.c')
+
 group = DefineGroup('touch', src, depend = ['RT_USING_TOUCH'], CPPPATH = CPPPATH)
 
 Return('group')

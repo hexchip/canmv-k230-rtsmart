@@ -133,11 +133,11 @@ int drv_touch_probe_cst128(struct drv_touch_dev *dev) {
     struct touch_register reg_data;
 
     dev->i2c.addr = 0x38;
+    dev->i2c.reg_width = 1;
 
     rt_thread_mdelay(50); // wait touch startup.
 
     if(0x00 != touch_dev_read_reg(dev, 0xA3, &chip_id, 1)) {
-        LOG_E("%s->%d\n", __func__, __LINE__);
         return -2;
     }
     rt_kprintf("cst128 id: 0x%02X\n", chip_id);

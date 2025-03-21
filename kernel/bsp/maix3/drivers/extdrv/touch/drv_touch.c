@@ -81,17 +81,24 @@ int touch_dev_write_reg(struct drv_touch_dev *dev, rt_uint8_t *buffer, rt_size_t
     }
 }
 
-int touch_dev_read_reg(struct drv_touch_dev *dev, rt_uint8_t addr,
+int touch_dev_read_reg(struct drv_touch_dev *dev, rt_uint16_t addr,
     rt_uint8_t *buffer, rt_size_t length)
 {
-    rt_uint8_t _addr = addr;
+    rt_uint8_t _addr_buf[2];
+
+    if(0x01 == dev->i2c.reg_width) {
+        _addr_buf[0] = addr & 0xFF;
+    } else if(0x02 == dev->i2c.reg_width) {
+        _addr_buf[0] = (addr >> 8) & 0xFF;
+        _addr_buf[1] = addr & 0xFF;
+    }
 
     struct rt_i2c_msg msgs[2] = {
         {
             .addr   = dev->i2c.addr,
             .flags  = RT_I2C_WR,
-            .buf    = &_addr,
-            .len    = 1,
+            .buf    = &_addr_buf[0],
+            .len    = dev->i2c.reg_width,
         },
         {
             .addr   = dev->i2c.addr,
@@ -408,6 +415,9 @@ static const drv_touch_probe touch_probes[] = {
 #if defined TOUCH_TYPE_CHSC5XXX
     drv_touch_probe_chsc5xxx,
 #endif // TOUCH_TYPE_CHSC5XXX
+#if defined TOUCH_TYPE_GT911
+    drv_touch_probe_gt911,
+#endif // TOUCH_TYPE_GT911
     NULL
 };
 
@@ -415,6 +425,7 @@ static int drv_touch_init(void) {
     int ret;
     struct drv_touch_dev *dev = &touch_dev;
 
+    dev->i2c.reg_width = 1;
     if(NULL == (dev->i2c.bus = rt_i2c_bus_device_find(dev->i2c.name))) {
         LOG_E("Can't find Touch Device I2C Bus %s", dev->i2c.name);
         return -1;

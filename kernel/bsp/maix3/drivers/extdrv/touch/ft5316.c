@@ -141,6 +141,7 @@ int drv_touch_probe_ft5x16(struct drv_touch_dev *dev) {
     uint8_t vendor;
 
     dev->i2c.addr = 0x38;
+    dev->i2c.reg_width = 1;
 
     if(0x00 != touch_dev_read_reg(dev, 0xA8, &vendor, 1)) {
         return -1;
