@@ -1,0 +1,12 @@
+from building import *
+
+cwd = GetCurrentDir()
+src = Glob('nand_auto_mount.c')
+CPPPATH = [cwd]
+
+if GetDepend(['ENABLE_SPI_NAND_WINBOND']):
+    src += Glob('winbond.c')
+
+group = DefineGroup('NAND', src, depend = ['RT_USING_MTD_NAND'], CPPPATH = CPPPATH)
+
+Return('group')

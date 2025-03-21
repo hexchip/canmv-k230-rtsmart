@@ -421,7 +421,7 @@ static rt_uint32_t drv_spi_xfer(struct rt_spi_device* device, struct rt_spi_mess
         }
         spi->ser = 0;
         spi->ssienr = 0;
-        if(msg->parent.cs_release &&cfg->parent.soft_cs & 0x80) {
+        if(msg->parent.cs_release && cfg->parent.soft_cs & 0x80) {
             uint8_t cs_pin = cfg->parent.soft_cs & 0x7F;
 
             if(63 < cs_pin) {
@@ -713,7 +713,7 @@ int rt_hw_spi_bus_init(void)
     spi_bus0.base = rt_ioremap((void*)SPI_OPI_BASE_ADDR, SPI_OPI_IO_SIZE);
     spi_bus0.idx = 0;
     spi_bus0.rdse = 0;
-    spi_bus0.rdsd = 0;
+    spi_bus0.rdsd = RT_SPI0_RXSD;
     spi_bus0.max_line = 8;
     spi_bus0.max_hz = 200000000;
 
@@ -737,7 +737,7 @@ int rt_hw_spi_bus_init(void)
     spi_bus1.base = rt_ioremap((void*)SPI_QOPI_BASE_ADDR, SPI_OPI_IO_SIZE);
     spi_bus1.idx = 1;
     spi_bus1.rdse = 0;
-    spi_bus1.rdsd = 0;
+    spi_bus1.rdsd = RT_SPI1_RXSD;
     spi_bus1.max_line = 4;
     spi_bus1.max_hz = 100000000;
 
@@ -761,7 +761,7 @@ int rt_hw_spi_bus_init(void)
     spi_bus2.base = rt_ioremap((void*)SPI_QOPI_BASE_ADDR + SPI_OPI_IO_SIZE, SPI_OPI_IO_SIZE);
     spi_bus2.idx = 2;
     spi_bus2.rdse = 0;
-    spi_bus2.rdsd = 0;
+    spi_bus2.rdsd = RT_SPI2_RXSD;
     spi_bus2.max_line = 4;
     spi_bus2.max_hz = 100000000;
 

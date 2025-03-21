@@ -135,12 +135,24 @@ menu "Drivers Configuration"
                 config RT_USING_SPI0
                     bool "Enable SPI0"
                     default n
+
+                config RT_SPI0_RXSD
+                    int "SPI0 ReadSample Delay"
+                    default 0
+
                 config RT_USING_SPI1
                     bool "Enable SPI1"
                     default n
+                config RT_SPI1_RXSD
+                    int "SPI1 ReadSample Delay"
+                    default 0
+
                 config RT_USING_SPI2
                     bool "Enable SPI2"
                     default n
+                config RT_SPI2_RXSD
+                    int "SPI2 ReadSample Delay"
+                    default 0
             endif
 
         config RT_USING_PWM
@@ -438,7 +450,7 @@ menu "Drivers Configuration"
             default n
 
             if RT_USING_WS2812
-                choice WS2812_USE_DRV
+                choice
                     bool "WS2812 Use Drive mode"
                     default WS2812_USE_DRV_GPIO
 
@@ -454,5 +466,35 @@ menu "Drivers Configuration"
                         default 35
                 endif
             endif
+
+        menuconfig RT_USING_MTD_NAND
+            bool "Enable SPI Nand Support"
+            default n
+
+            if RT_USING_MTD_NAND
+
+                choice
+                    bool "SPI Nand On SPI"
+                    default SPI_NAND_ON_SPI0
+                    
+                    config SPI_NAND_ON_SPI0
+                        bool "OSPI (SPI0)"
+                    config SPI_NAND_ON_SPI1
+                        bool "QSPI0 (SPI1)"
+                    config SPI_NAND_ON_SPI2
+                        bool "QSPI1 (SPI2)"
+                endchoice
+
+                config SPI_NAND_SPI_DEV
+                    string 
+                    default "spi0" if SPI_NAND_ON_SPI0
+                    default "spi1" if SPI_NAND_ON_SPI1
+                    default "spi2" if SPI_NAND_ON_SPI2
+
+                config ENABLE_SPI_NAND_WINBOND
+                    bool "Enable WinBond SPI Nand Flash Support"
+                    default n
+            endif
+
     endmenu
 endmenu

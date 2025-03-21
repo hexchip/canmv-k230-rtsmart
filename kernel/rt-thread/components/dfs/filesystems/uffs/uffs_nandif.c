@@ -217,7 +217,9 @@ static int WritePageWithLayout(uffs_Device         *dev,
     res = rt_mtd_nand_write(RT_MTD_NAND_DEVICE(dev->_private),
                             page, data, data_len, spare, spare_len);
     if (res != RT_EOK)
+    {
         goto __error;
+    }
 
     return UFFS_FLASH_NO_ERR;
 
@@ -269,16 +271,21 @@ static URET ReadPageWithLayout(uffs_Device   *dev,
     }
 
     res = rt_mtd_nand_read(RT_MTD_NAND_DEVICE(dev->_private),
-                           page, data, data_len, spare, spare_len);
+                           page, data, data_len, ts ? spare : NULL,
+                           ts ? spare_len : 0);
     if (res == 0)
+    {
         res = UFFS_FLASH_NO_ERR;
+    }
     else if (res == -1)
     {
         //TODO ecc correct, add code to use hardware do ecc correct
         res = UFFS_FLASH_ECC_OK;
     }
     else
+    {
         res = UFFS_FLASH_ECC_FAIL;
+    }
 
     if (ts != RT_NULL)
     {
@@ -286,7 +293,9 @@ static URET ReadPageWithLayout(uffs_Device   *dev,
         uffs_FlashUnloadSpare(dev, (const u8 *)spare, ts, RT_NULL);
 
         if ((spare[spare_len - 1] == 0xFF) && (res == UFFS_FLASH_NO_ERR))
+        {
             res = UFFS_FLASH_NOT_SEALED;
+        }
 
         dev->st.io_read += spare_len;
         dev->st.spare_read_count++;
