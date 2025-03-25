@@ -420,6 +420,8 @@ static int misc_get_timezone(void *args) {
   return 0;
 }
 
+static int mpy_auto_exec_py_stage = 0;
+
 #if defined (RT_RECOVERY_MPY_AUTO_EXEC_PY)
 ///////////////////////////////////////////////////////////////////////////////
 // Solve the problem that micropython                                        //
@@ -446,8 +448,6 @@ struct delete_file_mark {
   uint32_t path_crc32;
   char path[64];
 };
-
-static int mpy_auto_exec_py_stage = 0;
 
 extern uint32_t gpt_crc32(const void *data, size_t len);
 
