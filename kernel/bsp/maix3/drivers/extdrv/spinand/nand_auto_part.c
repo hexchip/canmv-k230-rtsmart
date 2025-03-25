@@ -23,7 +23,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "nand_auto_mount.h"
+#include "nand_auto_part.h"
 #include "rtthread.h"
 #include <drivers/spi.h>
 
@@ -43,8 +43,7 @@ struct mtd_nand_partition {
 };
 
 static struct mtd_nand_partition mtd_nand_part_tbl[] = {
-    // bin: 40M ~ 50M
-    { 0x2800000, 0x2800000 + 80 * 2048 * 64 },
+    #include "spinand_parts.h"
 };
 
 rt_err_t nand_standard_transfer(rt_uint8_t* in, rt_uint8_t* out, rt_uint32_t size)

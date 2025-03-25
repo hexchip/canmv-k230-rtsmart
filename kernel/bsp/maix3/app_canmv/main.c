@@ -65,6 +65,13 @@ static const struct dfs_mount_tbl custom_mount_table[] = {
   {SD_DEV_PART("sd", SDCARD_ON_SDIO_DEV, "2"), "/data", "elm", 0, 0},
   {0}
 };
+#else
+static const struct dfs_mount_tbl custom_mount_table[] = {
+  { "nand0", "/bin", "uffs", 0, 0},
+  { "nand1", "/sdcard", "uffs", 0, 0},
+  {0}
+};
+#endif // RT_USING_SDIO
 
 #ifndef CHERRY_USB_DEVICE_ENABLE_CLASS_MTP
 bool g_fs_mount_data_succ = false;
@@ -92,8 +99,10 @@ static void mnt_mount_table(void)
             rt_kprintf("mount fs[%s] on %s failed(%d), error %d.\n", custom_mount_table[index].filesystemtype,
                        custom_mount_table[index].path, ret, err);
 
-          if(0x00 == strcmp("/data", custom_mount_table[index].path)) {
+          if(0x00 == rt_strcmp("/data", custom_mount_table[index].path)) {
               g_fs_mount_data_succ = false;
+
+#ifdef RT_USING_SDIO
 
 #if defined (CONFIG_RT_AUTO_RESIZE_PARTITION)
               if(0 <= (fd = open("/bin/auto_mkfs_data", O_RDONLY))) {
@@ -116,9 +125,10 @@ static void mnt_mount_table(void)
               if((-19) == err) {
                 rt_kprintf("Please format the partition[2] to FAT32.\nRefer to https://support.microsoft.com/zh-cn/windows/%E5%88%9B%E5%BB%BA%E5%92%8C%E6%A0%BC%E5%BC%8F%E5%8C%96%E7%A1%AC%E7%9B%98%E5%88%86%E5%8C%BA-bbb8e185-1bda-ecd1-3465-c9728f7d7d2e\n");
               }
+#endif
             }
         } else {
-          if(0x00 == strcmp("/data", custom_mount_table[index].path)) {
+          if(0x00 == rt_strcmp("/data", custom_mount_table[index].path)) {
             g_fs_mount_data_succ = true;
           }
         }
@@ -126,7 +136,6 @@ static void mnt_mount_table(void)
         index ++;
     }
 }
-#endif // RT_USING_SDIO
 
 static void check_bank_voltage(void)
 {
@@ -169,10 +178,10 @@ int main(void) {
 #ifdef RT_USING_SDIO
   while (mmcsd_wait_cd_changed(100) != MMCSD_HOST_PLUGED) {
   }
-  mnt_mount_table();
-
-  excute_sdcard_config();
 #endif //RT_USING_SDIO
+
+  mnt_mount_table();
+  excute_sdcard_config();
 
 #if defined (RT_RECOVERY_MPY_AUTO_EXEC_PY)
   extern int check_delete_file_mark(void);

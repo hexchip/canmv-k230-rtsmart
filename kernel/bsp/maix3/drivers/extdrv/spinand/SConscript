@@ -1,8 +1,10 @@
 from building import *
 
 cwd = GetCurrentDir()
-src = Glob('nand_auto_mount.c')
+src = []
 CPPPATH = [cwd]
+
+src += Glob('nand_auto_part.c')
 
 if GetDepend(['ENABLE_SPI_NAND_WINBOND']):
     src += Glob('winbond.c')

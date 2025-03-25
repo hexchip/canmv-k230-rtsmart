@@ -23,9 +23,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "nand_auto_mount.h"
+#include "nand_auto_part.h"
 #include "rtdef.h"
 #include "rtthread.h"
+#include <stdint.h>
 
 #define DBG_TAG "nand_winbond"
 #ifdef RT_SPI_DEBUG
@@ -219,11 +220,23 @@ static rt_err_t wait_idle(uint32_t ms)
 
 static rt_err_t nand_read_id(struct rt_mtd_nand_device* device) { return read_id(); }
 
+rt_uint8_t is_all_ff(rt_uint8_t* data, rt_uint32_t len)
+{
+    for (rt_uint32_t i = 0; i < len; i++) {
+        if (0xff != data[i]) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 static rt_err_t nand_read_page(struct rt_mtd_nand_device* device, rt_off_t page, rt_uint8_t* data, rt_uint32_t data_len,
                                rt_uint8_t* spare, rt_uint32_t spare_len)
 {
     rt_err_t ret;
-    uint8_t  oob[device->oob_size];
+    uint8_t  oob_len = (spare_len > device->oob_size) ? spare_len : device->oob_size;
+    uint8_t  oob[oob_len];
 
     wait_idle(1);
     page_data_read(page);
@@ -240,15 +253,23 @@ static rt_err_t nand_read_page(struct rt_mtd_nand_device* device, rt_off_t page,
     }
 
     if (spare) {
-        page_read(device->page_size, oob, device->oob_size);
-        spare[0] = 0xFF;
-        if (device->plane_num == 0) {
-            rt_memcpy(spare + 1, oob + 4, 4);
-            rt_memcpy(spare + 5, oob + 20, 4);
-            rt_memcpy(spare + 9, oob + 36, 1);
-        } else if (device->plane_num == 1) {
-            rt_memcpy(spare + 1, oob + 4, 9);
+        page_read(device->page_size, oob, oob_len);
+
+#if 0
+        if (0x00 == is_all_ff(oob, oob_len)) {
+            rt_kprintf("%s page %d, oob:\n", __func__, page);
+            for (int i = 0; i < oob_len; i++) {
+                rt_kprintf("%02X ", oob[i]);
+                if (15 == (i % 16)) {
+                    rt_kprintf("\n");
+                }
+            }
+            rt_kprintf("\n");
         }
+#endif
+
+        rt_memcpy(spare, oob, spare_len);
+        spare[spare_len - 1] = oob[2]; // seal bytes
     }
 
     return 0;
@@ -258,23 +279,35 @@ static rt_err_t nand_write_page(struct rt_mtd_nand_device* device, rt_off_t page
                                 rt_uint32_t data_len, const rt_uint8_t* spare, rt_uint32_t spare_len)
 {
     rt_err_t ret;
-    uint8_t  oob[device->oob_size];
+    uint8_t  oob_len = (spare_len > device->oob_size) ? spare_len : device->oob_size;
+    uint8_t  oob[oob_len];
 
     wait_idle(1);
     write_enable();
+
     if (data) {
         page_write(0, data, data_len, 0);
     }
+
     if (spare) {
-        rt_memset(oob, 0xff, sizeof(oob));
-        if (device->plane_num == 0) {
-            rt_memcpy(oob + 4, spare + 1, 4);
-            rt_memcpy(oob + 20, spare + 5, 4);
-            rt_memcpy(oob + 36, spare + 9, 1);
-        } else if (device->plane_num == 1) {
-            rt_memcpy(oob + 4, spare + 1, 9);
+#if 0
+        if (0x00 == is_all_ff(spare, spare_len)) {
+            rt_kprintf("%s page %d, spare:\n", __func__, page);
+            for (int i = 0; i < spare_len; i++) {
+                rt_kprintf("%02X ", spare[i]);
+                if (15 == (i % 16)) {
+                    rt_kprintf("\n");
+                }
+            }
+            rt_kprintf("\n");
         }
-        page_write(device->page_size, oob, device->oob_size, 1);
+#endif
+
+        rt_memset(oob, 0xff, oob_len);
+        rt_memcpy(oob, spare, spare_len);
+        oob[2] = spare[spare_len - 1]; // seal bytes
+
+        page_write(device->page_size, oob, oob_len, 1);
     }
     program_execute(page);
     wait_idle(2);

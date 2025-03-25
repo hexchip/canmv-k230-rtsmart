@@ -5,9 +5,7 @@ CPPPATH = [cwd]
 
 src	= Glob('main.c')
 src	+= Glob('mnt.c')
-
-if GetDepend(['RT_USING_SDIO']):
-    src	+= Glob('config.c')
+src	+= Glob('config.c')
 
 group = DefineGroup('Applications', src, depend = [''], CPPPATH = CPPPATH)
 

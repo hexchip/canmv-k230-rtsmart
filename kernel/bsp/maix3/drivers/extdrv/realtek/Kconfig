@@ -1,0 +1,19 @@
+menuconfig RT_USING_REALTEK
+    bool "Enable Realtek WiFi Driver"
+    default n
+
+    if RT_USING_REALTEK
+        choice REALTEK_SDIO_DEV
+            bool "Realtek Wifi Use SDIO Device"
+
+            config REALTEK_SDIO_DEV0
+                bool "Using SDIO0"
+            config REALTEK_SDIO_DEV1
+                bool "Using SDIO1"
+        endchoice
+
+        config REALTEK_SDIO_DEV
+            int
+            default 0 if REALTEK_SDIO_DEV0
+            default 1 if REALTEK_SDIO_DEV1
+    endif

@@ -1,0 +1,26 @@
+menuconfig RT_USING_MTD_NAND
+    bool "Enable SPI Nand"
+
+    if RT_USING_MTD_NAND
+
+        choice
+            bool "SPI Nand On"
+
+            config SPI_NAND_ON_OSPI
+                bool "ospi"
+            config SPI_NAND_ON_QSPI0
+                bool "qspi0"
+            config SPI_NAND_ON_QSPI1
+                bool "qspi1"
+        endchoice
+
+        config SPI_NAND_SPI_DEV
+            string
+            default "spi0" if SPI_NAND_ON_OSPI
+            default "spi1" if SPI_NAND_ON_QSPI0
+            default "spi2" if SPI_NAND_ON_QSPI1
+
+        config ENABLE_SPI_NAND_WINBOND
+            bool "Enable WinBond SPI Flash"
+
+    endif

@@ -323,15 +323,8 @@ const uffs_FlashOps nand_ops =
     nand_erase_block,   /* EraseBlock() */
 };
 
-static rt_uint8_t hw_flash_data_layout[UFFS_SPARE_LAYOUT_SIZE] =
-{
-    0x05, 0x08, 0xFF, 0x00
-};
-
-static rt_uint8_t hw_flash_ecc_layout[UFFS_SPARE_LAYOUT_SIZE] =
-{
-    0x00, 0x04, 0xFF, 0x00
-};
+static rt_uint8_t hw_flash_ecc_layout[UFFS_SPARE_LAYOUT_SIZE] = {0xFF, 0x00};
+static rt_uint8_t hw_flash_data_layout[UFFS_SPARE_LAYOUT_SIZE] ={0x10, 0x04, 0x20, 0x04, 0xFF, 0x00};
 
 void uffs_setup_storage(struct uffs_StorageAttrSt *attr,
                         struct rt_mtd_nand_device *nand)
@@ -343,20 +336,9 @@ void uffs_setup_storage(struct uffs_StorageAttrSt *attr,
     attr->pages_per_block = nand->pages_per_block;         /* pages per block */
     attr->spare_size = nand->oob_size;                     /* page spare size */
     attr->ecc_opt = RT_CONFIG_UFFS_ECC_MODE;               /* ecc option */
-    attr->ecc_size = nand->oob_size-nand->oob_free;        /* ecc size */
-    attr->block_status_offs = attr->ecc_size;              /* indicate block bad or good, offset in spare */
+    attr->ecc_size = nand->oob_size - nand->oob_free;        /* ecc size */
+    attr->block_status_offs = 0;              /* indicate block bad or good, offset in spare */
     attr->layout_opt = RT_CONFIG_UFFS_LAYOUT;              /* let UFFS do the spare layout */
-
-    /* calculate the ecc layout array */
-    hw_flash_data_layout[0] = attr->ecc_size + 1; /* ecc size + 1byte block status */
-    hw_flash_data_layout[1] = 0x08;
-    hw_flash_data_layout[2] = 0xFF;
-    hw_flash_data_layout[3] = 0x00;
-
-    hw_flash_ecc_layout[0] = 0;
-    hw_flash_ecc_layout[1] = attr->ecc_size;
-    hw_flash_ecc_layout[2] = 0xFF;
-    hw_flash_ecc_layout[3] = 0x00;
 
     /* initialize  _uffs_data_layout and _uffs_ecc_layout */
     rt_memcpy(attr->_uffs_data_layout, hw_flash_data_layout, UFFS_SPARE_LAYOUT_SIZE);
