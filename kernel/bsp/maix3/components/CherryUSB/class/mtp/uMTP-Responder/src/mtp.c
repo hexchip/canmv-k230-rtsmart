@@ -52,6 +52,7 @@
 
 #include "logs_out.h"
 #include "usbstring.h"
+#include "dfs_fs.h"
 
 mtp_ctx * mtp_init_responder()
 {
@@ -168,6 +169,26 @@ int build_response(mtp_ctx * ctx, uint32_t tx_id, uint16_t type, uint16_t status
 	return ofs;
 }
 
+int is_storage_enough(mtp_ctx * ctx, uint32_t storage_id, uint32_t objectsize)
+{
+	struct statfs fsbuf;
+	char *storage_path = NULL;
+
+	storage_path = mtp_get_storage_root(ctx, storage_id);
+
+	if (dfs_statfs(storage_path, &fsbuf) == 0)
+	{
+		uint64_t freespace;
+		freespace = (uint64_t)fsbuf.f_bsize * (uint64_t)fsbuf.f_bfree;
+		if (objectsize > freespace) {
+			PRINT_ERROR("%s is full, Add %ld , remain %ld", storage_path, objectsize, freespace);
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
 int parse_incomming_dataset(mtp_ctx * ctx,void * datain,int size,uint32_t * newhandle, uint32_t parent_handle, uint32_t storage_id)
 {
 	MTP_PACKET_HEADER * tmp_hdr;
@@ -238,6 +259,11 @@ int parse_incomming_dataset(mtp_ctx * ctx,void * datain,int size,uint32_t * newh
 				unicode2charstring(tmp_str, unicode_str, sizeof(tmp_str));
 
 				PRINT_DEBUG("MTP_OPERATION_SEND_OBJECT_INFO : 0x%x objectformat Size %d, Parent 0x%.8x, type: %x, strlen %d str:%s",objectformat,objectsize,parent_handle,type,string_len,tmp_str);
+
+				if (!is_storage_enough(ctx, storage_id, objectsize))
+				{
+					return MTP_RESPONSE_STORAGE_FULL;
+				}
 
 				entry = get_entry_by_handle_and_storageid(ctx->fs_db, parent_handle,storage_id);
 				if(entry)
@@ -327,6 +353,11 @@ int parse_incomming_dataset(mtp_ctx * ctx,void * datain,int size,uint32_t * newh
 				unicode2charstring(tmp_str, unicode_str, sizeof(tmp_str));
 
 				PRINT_DEBUG("MTP_OPERATION_SEND_OBJECT_INFO : 0x%x objectformat Size %d, Parent 0x%.8x, type: %x, strlen %d str:%s",objectformat,objectsize,parent_handle,type,string_len,tmp_str);
+
+				if (!is_storage_enough(ctx, storage_id, objectsize))
+				{
+					return MTP_RESPONSE_STORAGE_FULL;
+				}
 
 				entry = get_entry_by_handle_and_storageid(ctx->fs_db, parent_handle,storage_id);
 				if(entry)

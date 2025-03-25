@@ -202,7 +202,9 @@ int delete_tree(mtp_ctx * ctx,uint32_t handle)
 		{
 			if(entry->flags & ENTRY_IS_DIR)
 			{
+				pthread_mutex_unlock(&ctx->inotify_mutex);
 				ret = fs_remove_tree( path );
+				pthread_mutex_lock(&ctx->inotify_mutex);
 
 				if(!ret)
 				{
