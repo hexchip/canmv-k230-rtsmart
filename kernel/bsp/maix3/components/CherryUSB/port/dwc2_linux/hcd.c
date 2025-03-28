@@ -2715,7 +2715,7 @@ void usb_hcd_giveback_urb(struct urb *urb)
 {
     struct dwc2_hsotg *hsotg = dwc2_hcd_to_hsotg(&urb->hport->bus->hcd);
 
-    if (urb->transfer_buffer) {
+    if (urb->transfer_buffer && usb_pipein(urb->pipe)) {
         rt_hw_cpu_dcache_invalidate((void *)urb->transfer_buffer, urb->transfer_buffer_length);
     }
 
@@ -2746,7 +2746,7 @@ void __usb_hcd_giveback_urb(struct urb *urb)
 {
     struct dwc2_hsotg *hsotg = dwc2_hcd_to_hsotg(&urb->hport->bus->hcd);
 
-    if (urb->transfer_buffer) {
+    if (urb->transfer_buffer && usb_pipein(urb->pipe)) {
         rt_hw_cpu_dcache_invalidate((void *)urb->transfer_buffer, urb->transfer_buffer_length);
     }
 

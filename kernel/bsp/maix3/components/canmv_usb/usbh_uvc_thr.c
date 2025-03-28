@@ -96,9 +96,21 @@ static int usb_control_msg(struct usbh_hubport *hport, uint8_t request, uint8_t 
 #define min_t(type, a, b) min(((type) a), ((type) b))
 #define max_t(type, a, b) max(((type) a), ((type) b))
 
+static uint64_t get_ticks()
+{
+    volatile uint64_t time_elapsed;
+    __asm__ __volatile__(
+        "rdtime %0"
+        : "=r"(time_elapsed));
+    return time_elapsed;
+}
+
 static struct uvc_buffer *get_uvc_buf()
 {
     struct uvc_buffer *uvc_buf = &uvc_queue.buffer[uvc_queue.count];
+
+    rt_base_t level;
+    level = rt_hw_interrupt_disable();
 
     if (uvc_buf->buf.bytesused != 0) {
         goto out;
@@ -107,10 +119,19 @@ static struct uvc_buffer *get_uvc_buf()
     if (!rt_list_isempty(&uvc_queue.irq_queue)) {
         uvc_buf = rt_list_first_entry(&uvc_queue.irq_queue, struct uvc_buffer, irq);
     } else {
-        USB_LOG_ERR("app process too slow\n");
+        static uint64_t timeout;
+
+        /* print log per second */
+        if ((int64_t)(timeout - get_ticks()) < 0) {
+            timeout = get_ticks() + (1000 * 1000 * 1) * 27;
+            rt_hw_interrupt_enable(level);
+            USB_LOG_ERR("app process too slow\n");
+            level = rt_hw_interrupt_disable();
+        }
     }
 
 out:
+    rt_hw_interrupt_enable(level);
     return uvc_buf;
 }
 
@@ -143,7 +164,7 @@ static void uvc_decode_iso(struct usbh_urb *urb, struct uvc_buffer *uvc_buf, str
         }
 
         if (src[1] & UVC_STREAM_ERR) {
-            USB_LOG_ERR("Dropping payload (error bit set).\n");
+            rt_kprintf("Dropping payload (error bit set) (%d, %d, %p).\n", i, urb->num_of_iso_packets, urb);
             continue;
         }
 
@@ -170,6 +191,7 @@ static void uvc_decode_iso(struct usbh_urb *urb, struct uvc_buffer *uvc_buf, str
 
                 if ((video->current_format == USBH_VIDEO_FORMAT_MJPEG) ||
                     (uvc_buf->buf.bytesused == uvc_buf->buf.length)) {
+                    rt_base_t level;
 #if 0
                     static uint32_t prev;
                     int diff = rt_tick_get_millisecond() - prev;
@@ -177,7 +199,12 @@ static void uvc_decode_iso(struct usbh_urb *urb, struct uvc_buffer *uvc_buf, str
                     USB_LOG_ERR("F = %02d ms, L = %d\n", diff, uvc_buf->buf.bytesused);
 #endif
 
+                    level = rt_hw_interrupt_disable();
+
                     rt_list_remove(&uvc_buf->irq);
+
+                    rt_hw_interrupt_enable(level);
+
                     rt_wqueue_wakeup(&uvc_buf->wait_queue, 0);
                 } else {
                     uvc_buf->state = VIDEOBUF_QUEUED;
@@ -506,6 +533,7 @@ static void usbh_video_off(struct usbh_video *video_class)
             }
         }
 
+        /* todo: check return val */
         usbh_video_close(video_class);
     }
 }
@@ -724,6 +752,7 @@ extern rt_mmu_info mmu_info;
 static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
 {
     struct usbh_video *video = (struct usbh_video *)dev;
+    int ret = RT_EOK;
 
     switch (cmd) {
     case VIDIOC_ENUM_FMT: {
@@ -742,7 +771,8 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
         idx = fmt->index;
 
         if (idx >= video->num_of_formats) {
-            return -RT_EINVAL;
+            ret =-RT_EINVAL;
+            goto out;
         }
 
         fmt->format_type = video->format[idx].format_type;
@@ -780,7 +810,8 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
 
         default:
             USB_LOG_ERR("Unsupport video format type: %s %d\n", __func__, __LINE__);
-            return -RT_EINVAL;
+            ret =-RT_EINVAL;
+            goto out;
         }
 
         if (lwp_self() != NULL) {
@@ -812,7 +843,8 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
         }
         if (uvc_format == RT_NULL) {
             USB_LOG_ERR("Unsupport video format type: %s %d\n", __func__, __LINE__);
-            return -RT_EINVAL;
+            ret = -RT_EINVAL;
+            goto out;
         }
 
         /* Find the closest image size. The distance between image sizes is
@@ -840,7 +872,8 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
 
         if (frame == NULL) {
             USB_LOG_ERR("Unsupported size %ux%u.\n", fmt->width, fmt->height);
-            return -RT_EINVAL;
+            ret = -RT_EINVAL;
+            goto out;
         }
 
         fmt->width = frame->wWidth;
@@ -878,7 +911,8 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
                    buffer_size, video->current_frame->dwMaxVideoFrameBufferSize, request->count);
         if (request->count > MAX_UVC_BUFFER) {
             USB_LOG_ERR("Too many buffer required: %s %d\n", __func__, __LINE__);
-            return -RT_EINVAL;
+            ret = -RT_EINVAL;
+            goto out;
         }
 #if VB_VERSION
         k_u32 pool_id;
@@ -894,7 +928,8 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
         uvc_queue.mem = rt_malloc(buffer_size * (request->count + 1));
         if (uvc_queue.mem == RT_NULL) {
             USB_LOG_ERR("Can't alloc mem: %s %d\n", __func__, __LINE__);
-            return -RT_ENOMEM;
+            ret = -RT_ENOMEM;
+            goto out;
         }
 #endif
 
@@ -966,7 +1001,8 @@ release:
 
         if (query_buf->index >= uvc_queue.count) {
             USB_LOG_ERR("index over range: %s %d\n", __func__, __LINE__);
-            return -RT_EINVAL;
+            ret = -RT_EINVAL;
+            goto out;
         }
 
         memcpy(query_buf, &uvc_queue.buffer[query_buf->index].buf, sizeof(struct uvc_frame));
@@ -1002,7 +1038,8 @@ release:
 
         if ((i == uvc_queue.count) || (mmap->length != uvc_queue.buffer_size)) {
             USB_LOG_ERR("video buf mismatch: %s %d\n", __func__, __LINE__);
-            return -RT_ERROR;
+            ret = -RT_ERROR;
+            goto out;
         }
 
 #if !VB_VERSION
@@ -1010,14 +1047,15 @@ release:
         pa = rt_hw_mmu_v2p(&mmu_info, va);
 #else
         va = buffer->virt_addr;
-        pa = buffer->phys_addr;
+        pa = (void *)buffer->phys_addr;
 #endif
 
         if (lwp_self() != NULL) {
             addr = lwp_map_user_phy(lwp_self(), RT_NULL, pa, mmap->length, 0);
             if (addr == 0) {
                 USB_LOG_ERR("video mmap fail: %s %d\n", __func__, __LINE__);
-                return -RT_ERROR;
+                ret = -RT_ERROR;
+                goto out;
             }
             mmap->addr = addr;
             buffer->buf.userptr = (char *)addr;
@@ -1042,13 +1080,15 @@ release:
 
         if (q_buf->index >= uvc_queue.count) {
             USB_LOG_ERR("index over range: %s %d\n", __func__, __LINE__);
-            return -RT_EINVAL;
+            ret = -RT_EINVAL;
+            goto out;
         }
 
         uvc_buf = &uvc_queue.buffer[q_buf->index];
         if (uvc_buf->state != VIDEOBUF_IDLE) {
             USB_LOG_ERR("mismatch state: %s %d\n", __func__, __LINE__);
-            return -RT_EINVAL;
+            ret = -RT_EINVAL;
+            goto out;
         }
 
         rt_base_t level;
@@ -1090,21 +1130,22 @@ release:
 
         if (rt_list_isempty(&uvc_queue.app_queue)) {
             USB_LOG_ERR("queue is empty: %s %d\n", __func__, __LINE__);
-            return -RT_EINVAL;
+            ret = -RT_EINVAL;
+            goto out;
         }
 
         uvc_buf = rt_list_first_entry(&uvc_queue.app_queue, struct uvc_buffer, stream);
         switch (uvc_buf->state) {
-        case VIDEOBUF_ERROR:
-            return -RT_EIO;
         case VIDEOBUF_DONE:
             uvc_buf->state = VIDEOBUF_IDLE;
             break;
+        case VIDEOBUF_ERROR:
         case VIDEOBUF_IDLE:
         case VIDEOBUF_QUEUED:
         case VIDEOBUF_ACTIVE:
         default:
-            return -RT_EINVAL;
+            ret = -RT_EINVAL;
+            goto out;
         }
 
         memset(dq_buf, 0x0, sizeof(struct uvc_frame));
@@ -1155,7 +1196,7 @@ release:
         break;
     }
     case VIDIOC_STREAMON: {
-        return usbh_video_on(video);
+        ret = usbh_video_on(video);
         break;
     }
     case VIDIOC_STREAMOFF:
@@ -1163,10 +1204,11 @@ release:
         break;
     default:
         USB_LOG_ERR("Unsupport cmd %s\n", __func__);
-        return -RT_EINVAL;
+        ret = -RT_EINVAL;
     }
 
-    return RT_EOK;
+out:
+    return ret;
 }
 
 const static struct rt_device_ops uvc_ops =
