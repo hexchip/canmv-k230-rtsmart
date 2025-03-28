@@ -6,6 +6,20 @@
 #include <rtdevice.h>
 #include "dfs_uffs.h"
 
+#if 0
+static void inline dump_buffer(const char *tag, const uint8_t *buffer, size_t size)
+{
+    rt_kprintf("%s->%d\n", tag, size);
+    for(size_t i = 0; i < size; i++) {
+        rt_kprintf("%02X ", buffer[i]);
+        if(15 == (i % 16)) {
+            rt_kprintf("\n");
+        }
+    }
+    rt_kprintf("\n");
+}
+#endif
+
 static int nand_init_flash(uffs_Device *dev)
 {
     return UFFS_FLASH_NO_ERR;
@@ -212,6 +226,9 @@ static int WritePageWithLayout(uffs_Device         *dev,
         uffs_FlashMakeSpare(dev, ts, RT_NULL, (u8 *)spare);
         dev->st.spare_write_count++;
         dev->st.io_write += spare_len;
+
+        spare[2] = spare[spare_len - 1];
+        spare[spare_len - 1] = 0xff;
     }
 
     res = rt_mtd_nand_write(RT_MTD_NAND_DEVICE(dev->_private),
@@ -289,6 +306,7 @@ static URET ReadPageWithLayout(uffs_Device   *dev,
 
     if (ts != RT_NULL)
     {
+        spare[spare_len - 1] = spare[2];
         // unload ts and ecc from spare, you can modify it if you like
         uffs_FlashUnloadSpare(dev, (const u8 *)spare, ts, RT_NULL);
 

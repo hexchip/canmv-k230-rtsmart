@@ -460,68 +460,83 @@ static rt_uint32_t drv_spi_xfer(struct rt_spi_device* device, struct rt_spi_mess
             }
         }
 
-        if (msg->parent.length == 0) {
-            goto single_exit;
-        }
-
         uint8_t cell_size = (cfg->parent.data_width + 7) >> 3;
         rt_size_t length = msg->parent.length;
         rt_size_t count = length > 0x10000 ? 0x10000 : length;
-        rt_size_t send_single = 0, send_length = 0, recv_single = 0, recv_length = 0;
+        rt_size_t send_single = 0, send_length = 0, recv_single = 0, recv_length = 0, add_length = 0;
         void *send_buf = msg->parent.send_buf;
         void *recv_buf = msg->parent.recv_buf;
         uint8_t tmod = send_buf ? SPI_TMOD_TO : SPI_TMOD_EPROMREAD;
         tmod = recv_buf ? tmod & SPI_TMOD_RO : tmod;
-        if (tmod == SPI_TMOD_EPROMREAD) {
-            LOG_E("send_buf and recv_buf cannot both be empty");
+        if (cfg->parent.data_width == 8) {
+            if ((msg->instruction.size & 7) || (msg->address.size & 7) || (msg->dummy_cycles & 7)) {
+                LOG_E("instruction %s, address %d, dummy_cycles %d invalid", msg->instruction.size, msg->address.size, msg->dummy_cycles);
+                LOG_E("instruction, address, dummy_cycles must be set to multiples of 8");
+                return 0;
+            }
+            if (msg->instruction.size > 32 || msg->address.size > 32 || msg->dummy_cycles > 32) {
+                LOG_E("instruction %d, address %d, dummy_cycles %d invalid", msg->instruction.size, msg->address.size, msg->dummy_cycles);
+                LOG_E("instruction, address, dummy_cycles must be set to less than 32");
+                return 0;
+            }
+            add_length = (msg->instruction.size + msg->address.size + msg->dummy_cycles) / 8;
+        } else if (cfg->parent.data_width != 8 || msg->instruction.size || msg->address.size || msg->dummy_cycles) {
+            LOG_E("For data_width not equal 8, instruction, address, dummy_cycles must be set to zero");
             return 0;
         }
-
-        if ((tmod == SPI_TMOD_RO) && (0x08 == cfg->parent.data_width)) {
-            if ((msg->instruction.size & 7) || (msg->address.size & 7) || (msg->dummy_cycles & 7)) {
-                LOG_E("instruction, address, dummy_cycles invalid");
-                LOG_E("For read-only mode the instruction, address, dummy_cycles must be set to zero");
-                LOG_E("For eeprom-read mode the instruction, address, dummy_cycles must be set to multiples of 8");
+        if (tmod == SPI_TMOD_EPROMREAD) {
+            if (add_length) {
+                tmod = SPI_TMOD_TO;
+            } else {
+                LOG_E("invalid setting");
                 return 0;
-            } else if (msg->instruction.size || msg->address.size) {
-                if (length > 0x10000) {
-                    LOG_E("For eeprom-read mode, data length cannot exceed 0x10000");
-                    return 0;
-                }
+            }
+        } else if (tmod == SPI_TMOD_RO) {
+            if (length > 0x10000) {
+                LOG_E("For read-only or eeprom-read mode, data length cannot exceed 0x10000");
+                return 0;
+            }
+            if (add_length) {
                 tmod = SPI_TMOD_EPROMREAD;
             }
+        } else if (tmod == SPI_TMOD_TR && add_length) {
+            LOG_E("For read_write mode, instruction, address, dummy_cycles must be set to zero");
+            return 0;
         }
-
-        if (send_buf) {
-            send_single = count;
-            send_buf = rt_malloc(count * cell_size);
+        if (tmod == SPI_TMOD_TO || tmod == SPI_TMOD_EPROMREAD) {
+            if (tmod == SPI_TMOD_TO) {
+                send_single = count + add_length;
+                send_single = send_single > 0x10000 ? 0x10000 : send_single;
+                count = send_single - add_length;
+            } else {
+                send_single = add_length;
+            }
+            send_buf = rt_malloc(send_single * cell_size);
             if (send_buf == NULL) {
                 LOG_E("alloc mem error");
                 return 0;
             }
-            rt_memcpy(send_buf, msg->parent.send_buf, count * cell_size);
-        } else if (tmod == SPI_TMOD_EPROMREAD) {
-            send_single = msg->instruction.size / 8 + msg->address.size / 8 + msg->dummy_cycles / 8;
-            send_buf = rt_malloc(send_single);
-            if (send_buf == NULL) {
-                LOG_E("alloc mem error");
-                return 0;
+            if (add_length) {
+                uint8_t *temp = send_buf;
+                for (int i = msg->instruction.size / 8; i; i--)
+                    *temp++ = msg->instruction.content >> ((i - 1) * 8);
+                for (int i = msg->address.size / 8; i; i--)
+                    *temp++ = msg->address.content >> ((i - 1) * 8);
+                for (int i = msg->dummy_cycles / 8; i; i--)
+                    *temp++ = 0xFF;
             }
-            uint8_t *temp = send_buf;
-            for (int i = msg->instruction.size / 8; i; i--)
-                *temp++ = msg->instruction.content >> ((i - 1) * 8);
-            for (int i = msg->address.size / 8; i; i--)
-                *temp++ = msg->address.content >> ((i - 1) * 8);
-            for (int i = msg->dummy_cycles / 8; i; i--)
-                *temp++ = 0xFF;
+            if (tmod == SPI_TMOD_TO && count) {
+                rt_memcpy(send_buf + add_length, msg->parent.send_buf, count * cell_size);
+            }
         }
         if (recv_buf) {
             recv_single = count;
             recv_buf = rt_malloc(count * cell_size);
             if (recv_buf == NULL) {
                 LOG_E("alloc mem error");
-                if (send_buf)
+                if (send_buf) {
                     rt_free(send_buf);
+                }
                 return 0;
             }
         }
@@ -580,8 +595,9 @@ static rt_uint32_t drv_spi_xfer(struct rt_spi_device* device, struct rt_spi_mess
         if (event & BIT(SSI_RXF)) {
             rt_memcpy(msg->parent.recv_buf + recv_length * cell_size, recv_buf, recv_single * cell_size);
             recv_length += recv_single;
-            if (recv_length >= length)
+            if (recv_length >= length) {
                 goto single_error;
+            }
             count = length - recv_length;
             count = count > 0x10000 ? 0x10000 : count;
             spi_bus->recv_buf = recv_buf;

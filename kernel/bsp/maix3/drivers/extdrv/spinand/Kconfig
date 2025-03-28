@@ -1,26 +1,142 @@
-menuconfig RT_USING_MTD_NAND
-    bool "Enable SPI Nand"
+# Kconfig file for package spinand
+menuconfig LPKG_USING_SPINAND
+    bool "SPINAND Driver library"
+    default n
 
-    if RT_USING_MTD_NAND
+if LPKG_USING_SPINAND
 
-        choice
-            bool "SPI Nand On"
+choice
+    bool "SPI Nand On"
 
-            config SPI_NAND_ON_OSPI
-                bool "ospi"
-            config SPI_NAND_ON_QSPI0
-                bool "qspi0"
-            config SPI_NAND_ON_QSPI1
-                bool "qspi1"
-        endchoice
+    config SPI_NAND_ON_OSPI
+        bool "ospi"
+    config SPI_NAND_ON_QSPI0
+        bool "qspi0"
+    config SPI_NAND_ON_QSPI1
+        bool "qspi1"
+endchoice
 
-        config SPI_NAND_SPI_DEV
-            string
-            default "spi0" if SPI_NAND_ON_OSPI
-            default "spi1" if SPI_NAND_ON_QSPI0
-            default "spi2" if SPI_NAND_ON_QSPI1
+config SPI_NAND_SPI_DEV
+    string
+    default "spi0" if SPI_NAND_ON_OSPI
+    default "spi1" if SPI_NAND_ON_QSPI0
+    default "spi2" if SPI_NAND_ON_QSPI1
 
-        config ENABLE_SPI_NAND_WINBOND
-            bool "Enable WinBond SPI Flash"
+choice
+    bool "SPI Nand Bus Width"
+    default SPI_NAND_SPI_BUS_WIDTH_4
 
-    endif
+    config SPI_NAND_SPI_BUS_WIDTH_1
+        bool "1"
+    config SPI_NAND_SPI_BUS_WIDTH_2
+        bool "2"
+    config SPI_NAND_SPI_BUS_WIDTH_4
+        bool "4"
+endchoice
+
+config SPI_NAND_SPI_BUS_WIDTH
+    int
+    default 1 if SPI_NAND_SPI_BUS_WIDTH_1
+    default 2 if SPI_NAND_SPI_BUS_WIDTH_2
+    default 4 if SPI_NAND_SPI_BUS_WIDTH_4
+
+config SPI_NAND_SPI_FREQ
+    int "SPI Nand Bus Freq"
+    default 50000000
+
+config SPI_NAND_DOSILICON
+	bool "Support Dosilicon SPI NAND"
+    default n
+	help
+        Enable this driver for Dosilicon SPI NAND flash.
+
+config SPI_NAND_ETRON
+	bool "Support Etron SPI NAND"
+    default n
+	help
+        Enable this driver for Etron SPI NAND flash.
+
+config SPI_NAND_MICRON
+	bool "Support Micron SPI NAND"
+    default n
+	help
+        Enable this driver for Micron SPI NAND flash.
+
+config SPI_NAND_MACRONIX
+    bool "Support Macronix SPI NAND"
+    default n
+    help
+        Enable this driver for Macronix SPI NAND flash.
+
+config SPI_NAND_WINBOND
+    bool "Support Winbond SPI NAND"
+    default y
+    help
+        Enable this driver for Winbond SPI NAND flash.
+
+config SPI_NAND_GIGADEVICE
+    bool "Support GigaDevice SPI NAND"
+    default n
+    help
+        Enable this driver for GigaDevice SPI NAND flash.
+
+config SPI_NAND_TOSHIBA
+    bool "Support Toshiba SPI NAND"
+    default n
+    help
+        Enable this driver for Toshiba/Kioxia SPI NAND flash.
+
+config SPI_NAND_FORESEE
+    bool "Support Foresee SPI NAND"
+    default n
+    help
+        Enable this driver for Foresee SPI NAND flash.
+
+config SPI_NAND_XTX
+    bool "Support Xtx SPI NAND"
+    default n
+    help
+        Enable this driver for Xtx SPI NAND flash.
+
+config SPI_NAND_ZETTA
+    bool "Support Zetta SPI NAND"
+    default n
+    help
+        Enable this driver for Zetta SPI NAND flash.
+
+config SPI_NAND_ZBIT
+	bool "Support Zbit SPI NAND"
+	default n
+	help
+	  Enable this driver for Zbit SPI NAND flash.
+
+config SPI_NAND_ESMT
+	bool "Support ESMT SPI NAND"
+	default n
+	help
+	  Enable this driver for ESMT SPI NAND flash.
+
+config SPI_NAND_UMTEK
+	bool "Support UMTEK SPI NAND"
+	default n
+	help
+	  Enable this driver for UnitedMemory SPI NAND flash.
+
+config SPI_NAND_QUANXING
+	bool "Support QUANXING SPI NAND"
+	default n
+	help
+	  Enable this driver for QUANXING SPI NAND flash.
+
+config SPI_NAND_XINCUN
+	bool "Support XINCUN SPI NAND"
+	default n
+	help
+	  Enable this driver for XINCUN SPI NAND flash.
+
+config SPI_NAND_FUDANMICRO
+	bool "Support FUDANMICRO SPI NAND"
+	default n
+	help
+	  Enable this driver for FUDANMICRO SPI NAND flash.
+endif

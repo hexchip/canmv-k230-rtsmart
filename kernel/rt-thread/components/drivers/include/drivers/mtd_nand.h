@@ -47,6 +47,8 @@ struct rt_mtd_nand_device
 
     /* operations interface */
     const struct rt_mtd_nand_driver_ops *ops;
+
+    void *priv;
 };
 
 struct rt_mtd_nand_driver_ops

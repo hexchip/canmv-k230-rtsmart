@@ -1,14 +1,74 @@
 from building import *
+Import('rtconfig')
 
-cwd = GetCurrentDir()
-src = []
+src   = []
+cwd   = GetCurrentDir()
+
 CPPPATH = [cwd]
+LOCAL_CFLAGS = ''
 
-src += Glob('nand_auto_part.c')
+if GetDepend('SPI_NAND_DOSILICON'):
+    src += ['flash/dosilicon.c']
 
-if GetDepend(['ENABLE_SPI_NAND_WINBOND']):
-    src += Glob('winbond.c')
+if GetDepend('SPI_NAND_ETRON'):
+    src += ['flash/etron.c']
 
-group = DefineGroup('NAND', src, depend = ['RT_USING_MTD_NAND'], CPPPATH = CPPPATH)
+if GetDepend('SPI_NAND_MACRONIX'):
+    src += ['flash/macronix.c']
+
+if GetDepend('SPI_NAND_WINBOND'):
+    src += ['flash/winbond.c']
+
+if GetDepend('SPI_NAND_GIGADEVICE'):
+    src += ['flash/gigadevice.c']
+
+if GetDepend('SPI_NAND_TOSHIBA'):
+    src += ['flash/toshiba.c']
+
+if GetDepend('SPI_NAND_FORESEE'):
+    src += ['flash/foresee.c']
+
+if GetDepend('SPI_NAND_XTX'):
+    src += ['flash/xtx.c']
+
+if GetDepend('SPI_NAND_ZETTA'):
+    src += ['flash/zetta.c']
+
+if GetDepend('SPI_NAND_MICRON'):
+    src += ['flash/micron.c']
+
+if GetDepend('SPI_NAND_ZBIT'):
+    src += ['flash/zbit.c']
+
+if GetDepend('SPI_NAND_ESMT'):
+    src += ['flash/esmt.c']
+
+if GetDepend('SPI_NAND_UMTEK'):
+    src += ['flash/umtek.c']
+
+if GetDepend('SPI_NAND_QUANXING'):
+    src += ['flash/quanxing.c']
+
+if GetDepend('SPI_NAND_XINCUN'):
+    src += ['flash/xincun.c']
+
+if GetDepend('SPI_NAND_FUDANMICRO'):
+    src += ['flash/fudanmicro.c']
+
+if GetDepend('LPKG_USING_SPINAND'):
+    src += ['spinand.c']
+    src += ['spinand_port.c']
+    src += ['spinand_ooblayout.c']
+    src += ['bbt.c']
+
+    CPPPATH += [cwd + '/inc']
+
+    if rtconfig.PLATFORM in ['gcc', 'armclang']:
+        LOCAL_CFLAGS += ' -std=c99'
+    elif rtconfig.PLATFORM in ['armcc']:
+        LOCAL_CFLAGS += ' --c99'
+
+# add src and include to group.
+group = DefineGroup('spinand', src, depend = ['LPKG_USING_SPINAND'], CPPPATH = CPPPATH, LOCAL_CFLAGS = LOCAL_CFLAGS)
 
 Return('group')
