@@ -464,6 +464,7 @@ rt_err_t rt_hw_mtd_spinand_init(struct aic_spinand *flash)
     if (result != RT_EOK) {
         return -RT_ERROR;
     }
+    rt_kprintf("Found spi nand flash %s\n", flash->info->sz_description);
 
     g_mtd_partitions_cnt = sizeof(mtd_nand_part_tbl) / sizeof(mtd_nand_part_tbl[0]);
     g_mtd_partitions = rt_malloc(sizeof(struct rt_mtd_nand_device) * g_mtd_partitions_cnt);

@@ -188,7 +188,7 @@ static int WritePageWithLayout(uffs_Device         *dev,
     int spare_len;
     rt_uint8_t spare[UFFS_MAX_SPARE_SIZE];
 
-    RT_ASSERT(UFFS_MAX_SPARE_SIZE >= dev->attr->spare_size);
+    // RT_ASSERT(UFFS_MAX_SPARE_SIZE >= dev->attr->spare_size);
 
     page = block * dev->attr->pages_per_block + page;
     spare_len = dev->mem.spare_data_size;
@@ -204,7 +204,7 @@ static int WritePageWithLayout(uffs_Device         *dev,
 
         res = rt_mtd_nand_write(RT_MTD_NAND_DEVICE(dev->_private),
                                 page, RT_NULL, 0,
-                                spare, dev->attr->spare_size);//dev->mem.spare_data_size
+                                spare, sizeof(spare));
         if (res != RT_EOK)
             goto __error;
 
@@ -257,7 +257,7 @@ static URET ReadPageWithLayout(uffs_Device   *dev,
     int spare_len;
     rt_uint8_t spare[UFFS_MAX_SPARE_SIZE];
 
-    RT_ASSERT(UFFS_MAX_SPARE_SIZE >= dev->attr->spare_size);
+    // RT_ASSERT(UFFS_MAX_SPARE_SIZE >= dev->attr->spare_size);
 
     page = block * dev->attr->pages_per_block + page;
     spare_len = dev->mem.spare_data_size;
@@ -271,7 +271,7 @@ static URET ReadPageWithLayout(uffs_Device   *dev,
 
         rt_mtd_nand_read(RT_MTD_NAND_DEVICE(dev->_private),
                          page, RT_NULL, 0,
-                         spare, dev->attr->spare_size);//dev->mem.spare_data_size
+                         spare, sizeof(spare));
 
         dev->st.io_read++;
 
