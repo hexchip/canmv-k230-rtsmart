@@ -435,9 +435,9 @@ static int rt_hw_rtc_init(void)
     rt_kprintf("rtc driver register OK\n");
 #endif
 
-#if 0
+    // set default time 20250101000000
     struct tm tm;
-    tm.tm_year = 1970 - 1900;
+    tm.tm_year = 2025 - 1900;
     tm.tm_mon = 1 - 1;
     tm.tm_mday = 1;
     tm.tm_wday = 5;
@@ -447,7 +447,6 @@ static int rt_hw_rtc_init(void)
 
     time_t t = timegm(&tm);
     rtc_timer_set(&t);
-#endif
 
     return 0;
 }
