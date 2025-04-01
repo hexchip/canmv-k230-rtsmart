@@ -580,6 +580,85 @@ exit_spinand_init:
     return result;
 }
 
+#if 1
+int spinand_read_page(struct aic_spinand* flash, uint32_t page, uint8_t* data, uint32_t data_len, uint8_t* spare,
+                      uint32_t spare_len)
+{
+    int      result = SPINAND_SUCCESS;
+    uint32_t cpos __attribute__((unused));
+    uint8_t* buf    = NULL;
+    uint32_t nbytes = 0;
+    uint16_t blk    = 0;
+    uint16_t column = 0;
+    uint8_t  status;
+    uint8_t  spare_only     = SPINAND_FALSE;
+    uint8_t  data_copy_mode = SPINAND_TRUE;
+
+    if (!flash) {
+        LOG_E("flash is NULL\r\n");
+        return -SPINAND_ERR;
+    }
+
+    LOG_D("[R-%d]data len: %d, spare len: %d\n", page, data_len, spare_len);
+
+    /* Data load, Read data from flash to cache */
+    result = spinand_load_page_op(flash, page);
+    if (result != SPINAND_SUCCESS)
+        goto exit_spinand_read_page;
+
+    if (spinand_isbusy(flash, &status)) {
+        result = -SPINAND_ERR;
+        goto exit_spinand_read_page;
+    }
+
+    result = spinand_check_ecc_status(flash, status);
+    if (result < 0) {
+        LOG_E("Error ECC status error[0x%x], page: %u.\n", status, page);
+        goto exit_spinand_read_page;
+    } else if (result > 0) {
+        LOG_D("with %d bit/page ECC corrections, status : [0x%x].\n", result, status);
+    }
+
+    if (data && data_len) {
+        buf    = flash->databuf;
+        nbytes = flash->info->page_size;
+        column = 0;
+    }
+
+    if (spare && spare_len) {
+        if (!buf) {
+            buf        = flash->oobbuf;
+            column     = flash->info->page_size;
+        }
+        nbytes += flash->info->oob_size;
+    }
+
+    /* cpos = cmd.nbyte + addr.nbyte + dummy.nbyte */
+    cpos = get_command_cpos_rd(flash);
+    if (cpos < 0) {
+        cpos = 1 + 2 + 1;
+    }
+
+    blk = page / flash->info->pages_per_eraseblock;
+    spinand_cache_op_adjust_colum(flash, blk, &column);
+
+    result = spinand_read_from_cache_op(flash, column, buf, nbytes);
+    if (result != SPINAND_SUCCESS) {
+        goto exit_spinand_read_page;
+    }
+
+    if (data && data_len) {
+        memcpy(data, flash->databuf, data_len);
+    }
+
+    if (spare && spare_len) {
+        memcpy(spare, flash->oobbuf, spare_len);
+    }
+
+exit_spinand_read_page:
+    return result;
+}
+#else
 int spinand_check_if_do_memcpy(struct aic_spinand *flash, uint8_t *data,
                                uint32_t data_len, uint8_t *spare, uint32_t spare_len)
 {
@@ -699,6 +778,7 @@ int spinand_read_page(struct aic_spinand *flash, uint32_t page, uint8_t *data,
 exit_spinand_read_page:
     return result;
 }
+#endif
 
 bool spinand_isbad(struct aic_spinand *flash, uint16_t blk)
 {
@@ -838,6 +918,101 @@ exit_spinand_continuous_read:
 }
 #endif
 
+#if 1
+int spinand_write_page(struct aic_spinand* flash, uint32_t page, const uint8_t* data, uint32_t data_len,
+                       const uint8_t* spare, uint32_t spare_len)
+{
+    int      result = SPINAND_SUCCESS;
+    uint32_t cpos __attribute__((unused));
+    uint8_t* buf    = NULL;
+    uint32_t nbytes = 0;
+    uint16_t column = 0;
+    uint16_t blk    = 0;
+    uint8_t  status;
+
+    if (!flash) {
+        LOG_E("flash is NULL\r\n");
+        return -SPINAND_ERR;
+    }
+
+    LOG_D("[W-%d]data len: %d, spare len: %d\n", page, data_len, spare_len);
+
+    if (flash->info->is_die_select == 1) {
+        /* Select die. */
+        if ((result = spinand_die_select(flash, SPINAND_DIE_ID0)) != SPINAND_SUCCESS)
+            goto exit_spinand_write_page;
+    }
+
+    if (data && data_len) {
+        memset(flash->databuf, 0xFF, nbytes);
+        memcpy(flash->databuf, data, data_len);
+
+        buf = flash->databuf;
+        nbytes = flash->info->page_size;
+    }
+
+    if (spare && spare_len) {
+        memset(flash->oobbuf, 0xFF, flash->info->oob_size);
+        memcpy(flash->oobbuf, spare, spare_len);
+
+        if (!buf) {
+            buf    = flash->oobbuf;
+            column = flash->info->page_size;
+        }
+        nbytes += flash->info->oob_size;
+    }
+
+    result = spinand_write_enable_op(flash);
+    if (result != SPINAND_SUCCESS) {
+        goto exit_spinand_write_page;
+    }
+
+    /* cpos = cmd.nbyte + addr.nbyte + dummy.nbyte */
+    cpos = get_command_cpos_wr(flash);
+    if (cpos < 0) {
+        cpos = 1 + 2;
+    }
+
+    blk = page / flash->info->pages_per_eraseblock;
+    spinand_cache_op_adjust_colum(flash, blk, &column);
+
+    result = spinand_write_to_cache_op(flash, column, (uint8_t*)buf, nbytes);
+    if (result != SPINAND_SUCCESS) {
+        goto exit_spinand_write_page;
+    }
+
+    /* Flush data in cache to flash */
+    result = spinand_program_op(flash, page);
+    if (result != SPINAND_SUCCESS)
+        goto exit_spinand_write_page;
+
+    result = spinand_isbusy(flash, &status);
+    if (result != SPINAND_SUCCESS) {
+        result = -SPINAND_ERR;
+        goto exit_spinand_write_page;
+    }
+
+    if ((status & STATUS_PROG_FAILED)) {
+        result = -SPINAND_ERR;
+        LOG_E("Error write status!\n");
+        goto exit_spinand_write_page;
+    }
+
+    result = spinand_check_ecc_status(flash, status);
+    if (result < 0) {
+        LOG_E("Error ECC status error[0x%x].\n", status);
+        goto exit_spinand_write_page;
+    } else if (result > 0) {
+        LOG_D("with %d bit/page ECC corrections, status : [0x%x].\n", result, status);
+    }
+
+    result = SPINAND_SUCCESS;
+
+exit_spinand_write_page:
+
+    return result;
+}
+#else
 int spinand_write_page(struct aic_spinand *flash, uint32_t page, const uint8_t *data,
                        uint32_t data_len, const uint8_t *spare, uint32_t spare_len)
 {
@@ -944,6 +1119,7 @@ exit_spinand_write_page:
 
     return result;
 }
+#endif
 
 int spinand_block_markbad(struct aic_spinand *flash, uint16_t blk)
 {

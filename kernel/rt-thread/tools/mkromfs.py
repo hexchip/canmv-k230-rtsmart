@@ -1,13 +1,20 @@
 #!/usr/bin/env python
 
+from __future__ import print_function  # Ensure print works in Python 2 and 3
+
 import sys
 import os
-
 import struct
 from collections import namedtuple
-import StringIO
+
+try:
+    from io import StringIO  # Python 3
+except ImportError:
+    from StringIO import StringIO  # Python 2
 
 import argparse
+from functools import cmp_to_key  # For Python 3 compatibility in sorting
+
 parser = argparse.ArgumentParser()
 parser.add_argument('rootdir', type=str, help='the path to rootfs')
 parser.add_argument('output', type=argparse.FileType('wb'), nargs='?', help='output file name')
@@ -18,7 +25,8 @@ parser.add_argument('--addr', default='0', help='set the base address of the bin
 class File(object):
     def __init__(self, name):
         self._name = name
-        self._data = open(name, 'rb').read()
+        with open(name, 'rb') as f:
+            self._data = f.read()
 
     @property
     def name(self):
@@ -26,7 +34,8 @@ class File(object):
 
     @property
     def c_name(self):
-        return '_' + self._name.replace('.', '_')
+        # Replace hyphens with underscores and dots with underscores
+        return '_' + self._name.replace('.', '_').replace('-', '_')
 
     @property
     def bin_name(self):
@@ -36,7 +45,7 @@ class File(object):
         return bn
 
     def c_data(self, prefix=''):
-        '''Get the C code represent of the file content.'''
+        '''Get the C code representation of the file content.'''
         head = 'static const rt_uint8_t %s[] = {\n' % \
                 (prefix + self.c_name)
         tail = '\n};'
@@ -44,14 +53,22 @@ class File(object):
         if self.entry_size == 0:
             return ''
 
-        return head + ','.join(('0x%02x' % ord(i) for i in self._data)) + tail
+        # Handle Python 2 and 3 compatibility
+        if sys.version_info[0] == 2:
+            # Python 2: data is a string, use ord() to get integer values
+            data_values = ['0x%02x' % ord(i) for i in self._data]
+        else:
+            # Python 3: data is bytes (integers), no need for ord()
+            data_values = ['0x%02x' % i for i in self._data]
+
+        return head + ','.join(data_values) + tail
 
     @property
     def entry_size(self):
         return len(self._data)
 
     def bin_data(self, base_addr=0x0):
-        return bytes(self._data)
+        return self._data
 
     def dump(self, indent=0):
         print('%s%s' % (' ' * indent, self._name))
@@ -70,8 +87,8 @@ class Folder(object):
 
     @property
     def c_name(self):
-        # add _ to avoid conflict with C key words.
-        return '_' + self._name
+        # Replace hyphens with underscores
+        return '_' + self._name.replace('-', '_')
 
     @property
     def bin_name(self):
@@ -85,7 +102,14 @@ class Folder(object):
         # TODO: take care of the unicode names
         for ent in os.listdir(u'.'):
             if os.path.isdir(ent):
-                cwd = os.getcwdu()
+
+                if sys.version_info[0] == 2:
+                    # Python 2: Decode the byte string to Unicode
+                    cwd = os.getcwd().decode('utf-8')
+                else:
+                    # Python 3: os.getcwd() already returns Unicode
+                    cwd = os.getcwd()
+
                 d = Folder(ent)
                 # depth-first
                 os.chdir(os.path.join(cwd, ent))
@@ -104,7 +128,9 @@ class Folder(object):
                 return 1
             else:
                 return -1
-        self._children.sort(cmp=_sort)
+
+        # Use cmp_to_key for Python 3 compatibility
+        self._children.sort(key=cmp_to_key(_sort))
 
         # sort recursively
         for c in self._children:
@@ -118,21 +144,19 @@ class Folder(object):
 
     def c_data(self, prefix=''):
         '''get the C code represent of the folder.
-
-           It is recursive.'''
-        # make the current dirent
-        # static is good. Only root dirent is global visible.
+        It is recursive.'''
         if self.entry_size == 0:
             return ''
 
         dhead = 'static const struct romfs_dirent %s[] = {\n' % (prefix + self.c_name)
         dtail = '\n};'
         body_fmt = '    {{{type}, "{name}", (rt_uint8_t *){data}, sizeof({data})/sizeof({data}[0])}}'
-        body_fmt0= '    {{{type}, "{name}", RT_NULL, 0}}'
-        # prefix of children
-        cpf = prefix+self.c_name
+        body_fmt0 = '    {{{type}, "{name}", RT_NULL, 0}}'
+
+        cpf = prefix + self.c_name
         body_li = []
         payload_li = []
+
         for c in self._children:
             entry_size = c.entry_size
             if isinstance(c, File):
@@ -140,18 +164,35 @@ class Folder(object):
             elif isinstance(c, Folder):
                 tp = 'ROMFS_DIRENT_DIR'
             else:
-                assert False, 'Unkown instance:%s' % str(c)
+                assert False, 'Unknown instance:%s' % str(c)
+
             if entry_size == 0:
-                body_li.append(body_fmt0.format(type=tp, name = c.name))
+                body_li.append(body_fmt0.format(type=tp, name=c.name))
             else:
-                body_li.append(body_fmt.format(type=tp,
-                                            name=c.name,
-                                            data=cpf+c.c_name))
+                body_li.append(body_fmt.format(type=tp, name=c.name, data=cpf + c.c_name))
             payload_li.append(c.c_data(prefix=cpf))
 
-        # All the data we need is defined in payload so we should append the
-        # dirent to it. It also meet the depth-first policy in this code.
-        payload_li.append(dhead + ',\n'.join(body_li) + dtail)
+        # Only add custom_dir if this is the root folder (prefix is empty)
+        if prefix == '':
+            custom_dir = '''
+#ifdef RT_USING_DFS_DEVFS
+    {ROMFS_DIRENT_DIR, "dev",       RT_NULL, 0},
+#endif
+#ifdef RT_USING_DFS_NFS
+    {ROMFS_DIRENT_DIR, "nfs",       RT_NULL, 0},
+#endif
+#ifdef RT_USING_DFS_PROCFS
+    {ROMFS_DIRENT_DIR, "proc",      RT_NULL, 0},
+#endif
+#ifdef RT_USING_DFS_TMPFS
+    {ROMFS_DIRENT_DIR, "tmp",       RT_NULL, 0},
+#endif
+    {ROMFS_DIRENT_DIR, "sdcard",    RT_NULL, 0},
+    {ROMFS_DIRENT_DIR, "data",      RT_NULL, 0},
+'''
+            payload_li.append(dhead + custom_dir + ',\n'.join(body_li) + dtail)
+        else:
+            payload_li.append(dhead + ',\n'.join(body_li) + dtail)
 
         return '\n\n'.join(payload_li)
 
@@ -160,7 +201,7 @@ class Folder(object):
         return len(self._children)
 
     def bin_data(self, base_addr=0x0):
-        '''Return StringIO object'''
+        '''Return bytes object'''
         # The binary layout is different from the C code layout. We put the
         # dirent before the payload in this mode. But the idea is still simple:
         #                           Depth-First.
@@ -188,7 +229,7 @@ class Folder(object):
             else:
                 assert False, 'Unkown instance:%s' % str(c)
 
-            name = bytes(c.bin_name)
+            name = c.bin_name.encode('utf-8')  # Ensure bytes in Python 3
             name_addr = v_len
             v_len += len(name)
 
@@ -197,7 +238,7 @@ class Folder(object):
             # pad the data to 4 bytes boundary
             pad_len = 4
             if len(data) % pad_len != 0:
-                data += '\0' * (pad_len - len(data) % pad_len)
+                data += b'\0' * (pad_len - len(data) % pad_len)
             v_len += len(data)
 
             d_li.append(self.bin_fmt.pack(*self.bin_item(
@@ -208,7 +249,7 @@ class Folder(object):
 
             p_li.extend((name, data))
 
-        return bytes().join(d_li) + bytes().join(p_li)
+        return b''.join(d_li) + b''.join(p_li)
 
 def get_c_data(tree):
     # Handle the root dirent specially.
@@ -229,7 +270,7 @@ const struct romfs_dirent {name} = {{
 
 def get_bin_data(tree, base_addr):
     v_len = base_addr + Folder.bin_fmt.size
-    name = bytes('/\0\0\0')
+    name = b'/\0\0\0'  # Ensure bytes in Python 3
     name_addr = v_len
     v_len += len(name)
     data_addr = v_len
@@ -261,4 +302,10 @@ if __name__ == '__main__':
     if not output:
         output = sys.stdout
 
-    output.write(data)
+    if sys.version_info[0] == 2:
+        output.write(data)
+    else:
+        if args.binary:
+            output.write(data)
+        else:
+            output.write(data.encode('utf-8'))  # Ensure bytes in Python 3
