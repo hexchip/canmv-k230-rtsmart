@@ -117,7 +117,8 @@ int usbh_videostreaming_set_cur_probe(struct usbh_video *video_class, uint8_t fo
     video_class->probe.bFormatIndex = formatindex;
     video_class->probe.bFrameIndex = frameindex;
     video_class->probe.dwMaxPayloadTransferSize = 0;
-    video_class->probe.dwFrameInterval = 333333;
+    video_class->probe.dwFrameInterval = video_class->current_frame.dwRequestFrameInterval;
+
     return usbh_video_set(video_class, VIDEO_REQUEST_SET_CUR, video_class->data_intf, 0x00, VIDEO_VS_PROBE_CONTROL, (uint8_t *)&video_class->probe, 26);
 }
 
@@ -126,11 +127,8 @@ int usbh_videostreaming_set_cur_commit(struct usbh_video *video_class, uint8_t f
     usb_memcpy(&video_class->commit, &video_class->probe, sizeof(struct video_probe_and_commit_controls));
     video_class->commit.bFormatIndex = formatindex;
     video_class->commit.bFrameIndex = frameindex;
-#if 0
-    video_class->commit.dwFrameInterval = 333333;
-#else
-    video_class->commit.dwFrameInterval = video_class->format[formatindex - 1].frame[frameindex - 1].dwDefaultFrameInterval;
-#endif
+    video_class->commit.dwFrameInterval = video_class->current_frame.dwRequestFrameInterval;
+
     return usbh_video_set(video_class, VIDEO_REQUEST_SET_CUR, video_class->data_intf, 0x00, VIDEO_VS_COMMIT_CONTROL, (uint8_t *)&video_class->commit, 26);
 }
 
@@ -383,7 +381,7 @@ void usbh_video_list_info(struct usbh_video *video_class)
         USB_LOG_RAW("  Resolution:\r\n");
         for (uint8_t j = 0; j < video_class->format[i].num_of_frames; j++) {
             USB_LOG_RAW("      FrameIndex:%u\r\n", j + 1);
-            USB_LOG_RAW("      wWidth: %d, wHeight: %d, dwDefaultFrameInterval: %d\r\n",
+            USB_LOG_RAW("      wWidth: %4d, wHeight: %4d, dwDefaultFrameInterval: %d\r\n",
                          video_class->format[i].frame[j].wWidth,
                          video_class->format[i].frame[j].wHeight,
                          video_class->format[i].frame[j].dwDefaultFrameInterval);
@@ -401,6 +399,7 @@ static int usbh_video_ctrl_connect(struct usbh_hubport *hport, uint8_t intf)
     uint8_t frame_index = 0xff;
     uint8_t format_index = 0xff;
     uint8_t num_of_frames = 0xff;
+    uint8_t num_of_interval = 0xff;
     uint8_t *p;
 
     struct usbh_video *video_class = usbh_video_class_alloc();
@@ -475,6 +474,10 @@ static int usbh_video_ctrl_connect(struct usbh_hubport *hport, uint8_t intf)
                             video_class->format[format_index - 1].frame[frame_index - 1].wHeight = ((struct video_cs_if_vs_frame_uncompressed_descriptor *)p)->wHeight;
                             video_class->format[format_index - 1].frame[frame_index - 1].dwDefaultFrameInterval = ((struct video_cs_if_vs_frame_uncompressed_descriptor *)p)->dwDefaultFrameInterval;
                             video_class->format[format_index - 1].frame[frame_index - 1].dwMaxVideoFrameBufferSize = ((struct video_cs_if_vs_frame_uncompressed_descriptor *)p)->dwMaxVideoFrameBufferSize;
+                            num_of_interval = video_class->format[format_index - 1].frame[frame_index - 1].bFrameIntervalType = ((struct video_cs_if_vs_frame_uncompressed_descriptor *)p)->bFrameIntervalType;
+                            for (int i = 0; i < num_of_interval && i < MAX_INTERVAL_NUM; i ++) {
+                                video_class->format[format_index - 1].frame[frame_index - 1].dwFrameInterval[i] = *(uint32_t *)(p + 26 + 4*i);
+                            }
                             break;
                         case VIDEO_VS_FRAME_MJPEG_DESCRIPTOR_SUBTYPE:
                             frame_index = p[DESC_bFrameIndex];
@@ -483,6 +486,10 @@ static int usbh_video_ctrl_connect(struct usbh_hubport *hport, uint8_t intf)
                             video_class->format[format_index - 1].frame[frame_index - 1].wHeight = ((struct video_cs_if_vs_frame_mjpeg_descriptor *)p)->wHeight;
                             video_class->format[format_index - 1].frame[frame_index - 1].dwDefaultFrameInterval = ((struct video_cs_if_vs_frame_mjpeg_descriptor *)p)->dwDefaultFrameInterval;
                             video_class->format[format_index - 1].frame[frame_index - 1].dwMaxVideoFrameBufferSize = ((struct video_cs_if_vs_frame_mjpeg_descriptor *)p)->dwMaxVideoFrameBufferSize;
+                            num_of_interval = video_class->format[format_index - 1].frame[frame_index - 1].bFrameIntervalType = ((struct video_cs_if_vs_frame_mjpeg_descriptor *)p)->bFrameIntervalType;
+                            for (int i = 0; i < num_of_interval && i < MAX_INTERVAL_NUM; i ++) {
+                                video_class->format[format_index - 1].frame[frame_index - 1].dwFrameInterval[i] = *(uint32_t *)(p + 26 + 4*i);
+                            }
                             break;
                         default:
                             break;

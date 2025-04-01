@@ -13,16 +13,19 @@
 
 #define MAX_FORMAT_NUM (3)
 #define MAX_FRAME_NUM (30)
+#define MAX_INTERVAL_NUM (10)
 
-struct usbh_video_resolution {
+struct usbh_video_frame {
     uint16_t wWidth;
     uint16_t wHeight;
     uint32_t dwDefaultFrameInterval;
+    uint8_t  bFrameIntervalType;
+    uint32_t dwFrameInterval[MAX_INTERVAL_NUM];
     uint32_t dwMaxVideoFrameBufferSize;
 };
 
 struct usbh_video_format {
-    struct usbh_video_resolution frame[MAX_FRAME_NUM];
+    struct usbh_video_frame frame[MAX_FRAME_NUM];
     uint8_t format_type;
     uint8_t num_of_frames;
     uint8_t guidFormat[16];
@@ -41,6 +44,13 @@ struct usbh_videostreaming {
     uint32_t bufoffset;
     uint16_t width;
     uint16_t height;
+};
+
+struct request_frame {
+    uint16_t wWidth;
+    uint16_t wHeight;
+    uint32_t dwRequestFrameInterval;
+    uint32_t dwMaxVideoFrameBufferSize;
 };
 
 struct usbh_video {
@@ -68,7 +78,7 @@ struct usbh_video {
     uint16_t isoout_mps;
     bool is_opened;
     uint8_t current_format;
-    struct usbh_video_resolution *current_frame;
+    struct request_frame current_frame;
     uint16_t bcdVDC;
     uint8_t num_of_intf_altsettings;
     uint8_t num_of_formats;
@@ -94,6 +104,7 @@ struct uvc_format {
     uint32_t width;
     uint32_t height;
     uint8_t format_type;
+    uint32_t frameinterval;
 };
 
 struct uvc_requestbuffers {
@@ -112,15 +123,33 @@ struct uvc_frame {
     };
 };
 
-#define VIDIOC_ENUM_FMT     _IOWR('V', 1, struct uvc_fmtdesc)
-#define VIDIOC_S_FMT        _IOWR('V', 2, struct uvc_format)
-#define VIDIOC_REQBUFS      _IOWR('V', 3, struct uvc_requestbuffers)
-#define VIDIOC_QUERYBUF     _IOWR('V',  4, struct uvc_frame)
-#define VIDIOC_QBUF         _IOWR('V', 5, struct uvc_frame)
-#define VIDIOC_DQBUF        _IOWR('V', 6, struct uvc_frame)
-#define VIDIOC_BUFMMAP      _IOW('V', 7, struct dfs_mmap2_args)
-#define VIDIOC_STREAMON     _IOW('V', 8, int)
-#define VIDIOC_STREAMOFF    _IOW('V', 9, int)
+struct uvc_framedesc {
+    uint32_t index;
+    uint8_t format_type;
+    uint32_t width;
+    uint32_t height;
+    uint32_t defaultframeinterval;
+};
+
+struct uvc_fpsdesc {
+    uint32_t index;
+    uint8_t format_type;
+    uint32_t width;
+    uint32_t height;
+    uint32_t frameinterval;
+};
+
+#define VIDIOC_ENUM_FMT         _IOWR('V', 1, struct uvc_fmtdesc)
+#define VIDIOC_S_FMT            _IOWR('V', 2, struct uvc_format)
+#define VIDIOC_REQBUFS          _IOWR('V', 3, struct uvc_requestbuffers)
+#define VIDIOC_QUERYBUF         _IOWR('V',  4, struct uvc_frame)
+#define VIDIOC_QBUF             _IOWR('V', 5, struct uvc_frame)
+#define VIDIOC_DQBUF            _IOWR('V', 6, struct uvc_frame)
+#define VIDIOC_BUFMMAP          _IOW('V', 7, struct dfs_mmap2_args)
+#define VIDIOC_STREAMON         _IOW('V', 8, int)
+#define VIDIOC_STREAMOFF        _IOW('V', 9, int)
+#define VIDIOC_ENUM_FRAME       _IOWR('V', 10, struct uvc_framedesc)
+#define VIDIOC_ENUM_INTERVAL    _IOWR('V', 11, struct uvc_fpsdesc)
 
 enum videobuf_state {
     VIDEOBUF_NEEDS_INIT = 0,
