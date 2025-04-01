@@ -458,8 +458,8 @@ static int usbh_video_on(struct usbh_video *video_class)
     int ret;
 
     ret = usbh_video_open(video_class, video_class->current_format,
-                          video_class->current_frame->wWidth,
-                          video_class->current_frame->wHeight, -1);
+                          video_class->current_frame.wWidth,
+                          video_class->current_frame.wHeight, -1);
     if (ret < 0) {
         goto out;
     }
@@ -771,7 +771,7 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
         idx = fmt->index;
 
         if (idx >= video->num_of_formats) {
-            ret =-RT_EINVAL;
+            ret = -RT_EINVAL;
             goto out;
         }
 
@@ -795,6 +795,8 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
                 }
                 rt_kprintf("\n");
                 memset(fmt->description, 0, sizeof(fmt->description));
+                ret = -RT_EINVAL;
+                goto out;
             } else {
                 memcpy(fmt->description, uvc_fmts[i].name, sizeof(fmt->description));
                 fmt->description[sizeof(fmt->description) - 1] = '\0';
@@ -810,12 +812,103 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
 
         default:
             USB_LOG_ERR("Unsupport video format type: %s %d\n", __func__, __LINE__);
-            ret =-RT_EINVAL;
+            ret = -RT_EINVAL;
             goto out;
         }
 
         if (lwp_self() != NULL) {
             lwp_put_to_user(args, fmt, sizeof(*fmt));
+        }
+        break;
+    }
+    case VIDIOC_ENUM_FRAME: {
+        int i;
+        struct uvc_framedesc local_frame;
+        struct uvc_framedesc *frame_desc;
+        struct usbh_video_format *format = NULL;
+
+        if (lwp_self() == NULL) {
+            frame_desc = (struct uvc_framedesc *)args;
+        } else {
+            frame_desc = &local_frame;
+            lwp_get_from_user(frame_desc, args, sizeof(*frame_desc));
+        }
+
+        for (i = 0; i < video->num_of_formats; i++) {
+            if (frame_desc->format_type == video->format[i].format_type) {
+                format = &video->format[i];
+                break;
+            }
+        }
+
+        if (format == NULL) {
+            USB_LOG_ERR("unmatch video format type: %s %d\n", __func__, __LINE__);
+            ret = -RT_EINVAL;
+            goto out;
+        }
+
+        if (frame_desc->index >= format->num_of_frames) {
+            ret = -RT_EINVAL;
+            goto out;
+        }
+
+        frame_desc->width = format->frame[frame_desc->index].wWidth;
+        frame_desc->height = format->frame[frame_desc->index].wHeight;
+        frame_desc->defaultframeinterval = format->frame[frame_desc->index].dwDefaultFrameInterval;
+
+        if (lwp_self() != NULL) {
+            lwp_put_to_user(args, frame_desc, sizeof(*frame_desc));
+        }
+
+        break;
+    }
+    case VIDIOC_ENUM_INTERVAL: {
+        int i;
+        struct uvc_fpsdesc local_fps;
+        struct uvc_fpsdesc *fps_desc;
+        struct usbh_video_format *format = NULL;
+        struct usbh_video_frame *frame = NULL;
+
+        if (lwp_self() == NULL) {
+            fps_desc = (struct uvc_fpsdesc *)args;
+        } else {
+            fps_desc = &local_fps;
+            lwp_get_from_user(fps_desc, args, sizeof(*fps_desc));
+        }
+
+        for (i = 0; i < video->num_of_formats; i++) {
+            if (fps_desc->format_type == video->format[i].format_type) {
+                format = &video->format[i];
+                break;
+            }
+        }
+
+        if (format == NULL) {
+            USB_LOG_ERR("unmatch video format type: %s %d\n", __func__, __LINE__);
+            ret = -RT_EINVAL;
+            goto out;
+        }
+
+        for (i = 0; i < format->num_of_frames; i++) {
+            if ((fps_desc->width == format->frame[i].wWidth) &&
+                (fps_desc->height == format->frame[i].wHeight))
+                frame = &format->frame[i];
+        }
+
+        if (frame->bFrameIntervalType) {
+            if (fps_desc->index >= frame->bFrameIntervalType) {
+                ret = -RT_EINVAL;
+                goto out;
+            }
+
+            fps_desc->frameinterval = frame->dwFrameInterval[fps_desc->index];
+
+        } else {
+            USB_LOG_ERR("have no interval field ?: %s %d\n", __func__, __LINE__);
+        }
+
+        if (lwp_self() != NULL) {
+            lwp_put_to_user(args, fps_desc, sizeof(*fps_desc));
         }
         break;
     }
@@ -826,7 +919,7 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
         unsigned int d, maxd;
         int i, nframes;
         struct usbh_video_format *uvc_format = RT_NULL;
-        struct usbh_video_resolution *frame = RT_NULL;
+        struct usbh_video_frame *frame = RT_NULL;
 
         if (lwp_self() == NULL) {
             fmt = (struct uvc_format *)args;
@@ -876,11 +969,25 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
             goto out;
         }
 
+        for (i = 0; i < frame->bFrameIntervalType; i++) {
+            if (fmt->frameinterval == frame->dwFrameInterval[i])
+                break;
+        }
+
+        if (i >= frame->bFrameIntervalType) {
+            USB_LOG_ERR("Unsupported interval %d in (%ux%u). use default interval = %d\n",
+                        fmt->frameinterval, fmt->width, fmt->height, frame->dwDefaultFrameInterval);
+            fmt->frameinterval = frame->dwDefaultFrameInterval;
+        }
+
         fmt->width = frame->wWidth;
         fmt->height = frame->wHeight;
 
         video->current_format = fmt->format_type;
-        video->current_frame = frame;
+        video->current_frame.wWidth = frame->wWidth;
+        video->current_frame.wHeight = frame->wHeight;
+        video->current_frame.dwRequestFrameInterval = fmt->frameinterval;
+        video->current_frame.dwMaxVideoFrameBufferSize = frame->dwMaxVideoFrameBufferSize;
 
         if (lwp_self() != NULL) {
             lwp_put_to_user(args, fmt, sizeof(*fmt));
@@ -892,7 +999,7 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
         int i = 0;
         struct uvc_requestbuffers local_request;
         struct uvc_requestbuffers *request;
-        uint32_t buffer_size = video->current_frame->dwMaxVideoFrameBufferSize;
+        uint32_t buffer_size = video->current_frame.dwMaxVideoFrameBufferSize;
 
         if (lwp_self() == NULL) {
             request = (struct uvc_requestbuffers *)args;
@@ -904,11 +1011,11 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
         memset(&uvc_queue, 0 , sizeof(uvc_queue));
 
         if (video->current_format == USBH_VIDEO_FORMAT_UNCOMPRESSED) {
-            buffer_size = video->current_frame->wHeight * video->current_frame->wWidth * 2;
+            buffer_size = video->current_frame.wHeight * video->current_frame.wWidth * 2;
         }
 
         USB_LOG_DBG("buffer_size = %d, dwMaxVideoFrameBufferSize = %d, count = %d\n",
-                   buffer_size, video->current_frame->dwMaxVideoFrameBufferSize, request->count);
+                   buffer_size, video->current_frame.dwMaxVideoFrameBufferSize, request->count);
         if (request->count > MAX_UVC_BUFFER) {
             USB_LOG_ERR("Too many buffer required: %s %d\n", __func__, __LINE__);
             ret = -RT_EINVAL;
@@ -1153,11 +1260,11 @@ release:
 
 #if VB_VERSION
         if (video->current_format == USBH_VIDEO_FORMAT_UNCOMPRESSED) {
-            dq_buf->v_info.v_frame.width = video->current_frame->wWidth;
-            dq_buf->v_info.v_frame.height = video->current_frame->wHeight;
+            dq_buf->v_info.v_frame.width = video->current_frame.wWidth;
+            dq_buf->v_info.v_frame.height = video->current_frame.wHeight;
 
             /* todo */
-            dq_buf->v_info.v_frame.stride[0] = video->current_frame->wWidth;
+            dq_buf->v_info.v_frame.stride[0] = video->current_frame.wWidth;
             dq_buf->v_info.v_frame.pixel_format = PIXEL_FORMAT_YUYV_PACKAGE_422;
             dq_buf->v_info.v_frame.phys_addr[0] = uvc_buf->phys_addr;
             dq_buf->v_info.v_frame.virt_addr[0] = (uint64_t)uvc_buf->virt_addr;
