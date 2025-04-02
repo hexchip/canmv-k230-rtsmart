@@ -568,6 +568,12 @@ INIT_COMPONENT_EXPORT(uvc_iomutex_init);
 
 static int uvc_fops_open(struct dfs_fd *fd)
 {
+    for (int i = 0; i < MAX_UVC_BUFFER + 1; i++) {
+        uvc_queue.buffer[i].handle = VB_INVALID_HANDLE;
+        uvc_queue.buffer[i].pool_id = VB_INVALID_POOLID;
+        uvc_queue.buffer[i].buf.userptr = RT_NULL;
+    }
+
     return 0;
 }
 
@@ -586,21 +592,24 @@ static int uvc_fops_close(struct dfs_fd *fd)
 
 #if VB_VERSION
     for (int i = 0; i < uvc_queue.count + 1; i ++) {
-        if (uvc_queue.buffer[i].handle != RT_NULL) {
+        if (uvc_queue.buffer[i].handle != VB_INVALID_HANDLE) {
             int ret;
             ret = vb_user_sub(uvc_queue.buffer[i].pool_id,
                               uvc_queue.buffer[i].phys_addr, VB_UID_V_VI);
             if (ret != K_SUCCESS) {
                 USB_LOG_ERR("put blk[%d] fail\n", i);
             } else {
-                uvc_queue.buffer[i].handle = RT_NULL;
+                uvc_queue.buffer[i].handle = VB_INVALID_HANDLE;
             }
         }
     }
 
-    if (vb_destroy_pool(uvc_queue.buffer[0].pool_id) != 0) {
-        USB_LOG_ERR("fail to destroyed pool %d: %s %d\n",
-                   uvc_queue.buffer[0].pool_id, __func__, __LINE__);
+    if (uvc_queue.buffer[0].pool_id != VB_INVALID_POOLID) {
+        if (vb_destroy_pool(uvc_queue.buffer[0].pool_id) != 0) {
+            USB_LOG_ERR("fail to destroyed pool %d: %s %d\n",
+                        uvc_queue.buffer[0].pool_id, __func__, __LINE__);
+        }
+        uvc_queue.buffer[0].pool_id = VB_INVALID_POOLID;
     }
 
 #else
