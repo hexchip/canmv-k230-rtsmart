@@ -86,6 +86,7 @@ struct usbh_video {
 };
 
 #define VB_VERSION (1)
+#define MAX_USB_STRING_LEN (64)
 
 #define ALIGN_UP(x, align) (((x) + ((align) - 1)) & ~((align)-1))
 #define VDEC_ALIGN_SIZE (0x1000)
@@ -93,6 +94,7 @@ struct usbh_video {
 #include "comm/k_video_comm.h"
 #include "comm/k_vb_comm.h"
 #include "comm/k_vdec_comm.h"
+
 
 struct uvc_fmtdesc {
     uint32_t index;
@@ -139,6 +141,16 @@ struct uvc_fpsdesc {
     uint32_t frameinterval;
 };
 
+struct usb_string {
+    uint8_t index;
+    char str[MAX_USB_STRING_LEN];
+};
+
+struct usb_index {
+    uint8_t iManufacturer;      /* Index to manufacturer string */
+    uint8_t iProduct;           /* Index to product string */
+};
+
 #define VIDIOC_ENUM_FMT         _IOWR('V', 1, struct uvc_fmtdesc)
 #define VIDIOC_S_FMT            _IOWR('V', 2, struct uvc_format)
 #define VIDIOC_REQBUFS          _IOWR('V', 3, struct uvc_requestbuffers)
@@ -150,6 +162,8 @@ struct uvc_fpsdesc {
 #define VIDIOC_STREAMOFF        _IOW('V', 9, int)
 #define VIDIOC_ENUM_FRAME       _IOWR('V', 10, struct uvc_framedesc)
 #define VIDIOC_ENUM_INTERVAL    _IOWR('V', 11, struct uvc_fpsdesc)
+#define VIDIOC_GET_STRING       _IOWR('V', 12, struct usb_string)
+#define VIDIOC_GET_INDEX        _IOWR('V', 13, struct usb_index)
 
 enum videobuf_state {
     VIDEOBUF_NEEDS_INIT = 0,

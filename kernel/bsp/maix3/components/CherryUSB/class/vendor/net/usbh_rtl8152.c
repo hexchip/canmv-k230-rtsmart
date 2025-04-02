@@ -2040,7 +2040,7 @@ static int usbh_rtl8152_connect(struct usbh_hubport *hport, uint8_t intf)
     }
 
     usb_memset(mac_buffer, 0, 12);
-    ret = usbh_get_string_desc(rtl8152_class->hport, 3, (uint8_t *)mac_buffer);
+    ret = usbh_get_string_desc(rtl8152_class->hport, 3, (uint8_t *)mac_buffer, sizeof(mac_buffer));
     if (ret < 0) {
         return ret;
     }

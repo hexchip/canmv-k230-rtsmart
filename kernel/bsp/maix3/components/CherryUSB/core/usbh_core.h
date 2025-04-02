@@ -320,7 +320,7 @@ int usbh_control_transfer(struct usbh_hubport *hport, struct usb_setup_packet *s
  * @param output Pointer to the buffer where the retrieved descriptor will be stored.
  * @return On success will return 0, and others indicate fail.
  */
-int usbh_get_string_desc(struct usbh_hubport *hport, uint8_t index, uint8_t *output);
+int usbh_get_string_desc(struct usbh_hubport *hport, uint8_t index, uint8_t *output, uint32_t output_len);
 
 /**
  * @brief Sets the alternate setting for a USB interface on a specific hub port.

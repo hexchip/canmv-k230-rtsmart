@@ -755,6 +755,53 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
     int ret = RT_EOK;
 
     switch (cmd) {
+    case VIDIOC_GET_INDEX: {
+        struct usb_index local_index;
+        struct usb_index *index;
+
+        if (lwp_self() == NULL) {
+            index = (struct usb_index *)args;
+        } else {
+            index = &local_index;
+            lwp_get_from_user(index, args, sizeof(*index));
+        }
+
+        index->iManufacturer = video->hport->device_desc.iManufacturer;
+        index->iProduct = video->hport->device_desc.iProduct;
+
+        if (lwp_self() != NULL) {
+            lwp_put_to_user(args, index, sizeof(*index));
+        }
+        break;
+    }
+    case VIDIOC_GET_STRING: {
+        struct usb_string local_string;
+        struct usb_string *string;
+        const char *init_name = "usb video device";
+
+        if (lwp_self() == NULL) {
+            string = (struct usb_string *)args;
+        } else {
+            string = &local_string;
+            lwp_get_from_user(string, args, sizeof(*string));
+        }
+
+        memset(string->str, '\0', sizeof(string->str));
+
+        ret = usbh_get_string_desc(video->hport, string->index, string->str, sizeof(string->str));
+        if (ret < 0) {
+            memcpy(string->str, init_name, strlen(init_name) + 1);
+        } else {
+            string->str[MAX_USB_STRING_LEN - 1] = '\0';
+        }
+
+        ret = RT_EOK;
+
+        if (lwp_self() != NULL) {
+            lwp_put_to_user(args, string, sizeof(*string));
+        }
+        break;
+    }
     case VIDIOC_ENUM_FMT: {
         int i;
         struct uvc_fmtdesc local_fmt;
