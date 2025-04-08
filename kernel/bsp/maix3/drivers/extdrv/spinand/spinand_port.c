@@ -388,33 +388,33 @@ static rt_err_t spinand_mtd_block_markbad(struct rt_mtd_nand_device *device,
 //     return result;
 // }
 
-// static rt_err_t spinand_map_user(struct rt_mtd_nand_device *device,
-//                                         rt_uint8_t *oobbuf, rt_uint8_t *buf,
-//                                         rt_base_t start, rt_base_t nbytes)
-// {
-//     rt_err_t result = RT_EOK;
-//     struct aic_spinand *flash = (struct aic_spinand *)device->priv;
+static rt_err_t spinand_map_user(struct rt_mtd_nand_device *device,
+                                        rt_uint8_t *oobbuf, rt_uint8_t *buf,
+                                        rt_base_t start, rt_base_t nbytes)
+{
+    rt_err_t result = RT_EOK;
+    struct aic_spinand *flash = (struct aic_spinand *)device->priv;
 
-//     RT_ASSERT(device != RT_NULL);
+    RT_ASSERT(device != RT_NULL);
 
-//     result = spinand_ooblayout_map_user(flash, oobbuf, buf, start, nbytes);
+    result = spinand_ooblayout_map_user(flash, oobbuf, buf, start, nbytes);
 
-//     return result;
-// }
+    return result;
+}
 
-// static rt_err_t spinand_unmap_user(struct rt_mtd_nand_device *device,
-//                                         rt_uint8_t *dst, rt_uint8_t *src,
-//                                         rt_base_t start, rt_base_t nbytes)
-// {
-//     rt_err_t result = RT_EOK;
-//     struct aic_spinand *flash = (struct aic_spinand *)device->priv;
+static rt_err_t spinand_unmap_user(struct rt_mtd_nand_device *device,
+                                        rt_uint8_t *dst, rt_uint8_t *src,
+                                        rt_base_t start, rt_base_t nbytes)
+{
+    rt_err_t result = RT_EOK;
+    struct aic_spinand *flash = (struct aic_spinand *)device->priv;
 
-//     RT_ASSERT(device != RT_NULL);
+    RT_ASSERT(device != RT_NULL);
 
-//     result = spinand_ooblayout_unmap_user(flash, dst, src, start, nbytes);
+    result = spinand_ooblayout_unmap_user(flash, dst, src, start, nbytes);
 
-//     return result;
-// }
+    return result;
+}
 
 static struct rt_mtd_nand_driver_ops spinand_ops = {
     spinand_read_id,                // read_id
@@ -427,8 +427,8 @@ static struct rt_mtd_nand_driver_ops spinand_ops = {
     // spinand_mtd_continuous_read,
     // spinand_set_block_status,
     // spinand_get_block_status,
-    // spinand_map_user, 
-    // spinand_unmap_user
+    spinand_map_user, 
+    spinand_unmap_user
 };
 
 ///////////////////////////////////////////////////////////////////////////////

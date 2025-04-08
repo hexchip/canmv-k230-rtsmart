@@ -185,13 +185,19 @@ static int WritePageWithLayout(uffs_Device         *dev,
                                const uffs_TagStore *ts)
 {
     int res;
-    int spare_len;
+    int spare_len, oob_size;
     rt_uint8_t spare[UFFS_MAX_SPARE_SIZE];
+    rt_uint8_t spare_temp[UFFS_MAX_SPARE_SIZE];
 
     // RT_ASSERT(UFFS_MAX_SPARE_SIZE >= dev->attr->spare_size);
 
     page = block * dev->attr->pages_per_block + page;
     spare_len = dev->mem.spare_data_size;
+
+    oob_size = RT_MTD_NAND_DEVICE(dev->_private)->oob_size;
+    if(oob_size > UFFS_MAX_SPARE_SIZE) {
+        oob_size = UFFS_MAX_SPARE_SIZE;
+    }
 
     if (data == NULL && ts == NULL)
     {
@@ -229,6 +235,9 @@ static int WritePageWithLayout(uffs_Device         *dev,
 
         spare[2] = spare[spare_len - 1];
         spare[spare_len - 1] = 0xff;
+
+        rt_memcpy(spare_temp, spare, spare_len);
+        rt_mtd_nand_map_user(RT_MTD_NAND_DEVICE(dev->_private), spare, spare_temp, 0, spare_len);
     }
 
     res = rt_mtd_nand_write(RT_MTD_NAND_DEVICE(dev->_private),
@@ -254,13 +263,19 @@ static URET ReadPageWithLayout(uffs_Device   *dev,
                                u8            *ecc_store)        //NULL
 {
     int res = UFFS_FLASH_NO_ERR;
-    int spare_len;
+    int spare_len, oob_size;
     rt_uint8_t spare[UFFS_MAX_SPARE_SIZE];
+    rt_uint8_t spare_temp[UFFS_MAX_SPARE_SIZE];
 
     // RT_ASSERT(UFFS_MAX_SPARE_SIZE >= dev->attr->spare_size);
 
     page = block * dev->attr->pages_per_block + page;
     spare_len = dev->mem.spare_data_size;
+
+    oob_size = RT_MTD_NAND_DEVICE(dev->_private)->oob_size;
+    if(oob_size > UFFS_MAX_SPARE_SIZE) {
+        oob_size = UFFS_MAX_SPARE_SIZE;
+    }
 
     if (data == RT_NULL && ts == RT_NULL)
     {
@@ -289,7 +304,7 @@ static URET ReadPageWithLayout(uffs_Device   *dev,
 
     res = rt_mtd_nand_read(RT_MTD_NAND_DEVICE(dev->_private),
                            page, data, data_len, ts ? spare : NULL,
-                           ts ? spare_len : 0);
+                           ts ? oob_size : 0);
     if (res == 0)
     {
         res = UFFS_FLASH_NO_ERR;
@@ -306,7 +321,9 @@ static URET ReadPageWithLayout(uffs_Device   *dev,
 
     if (ts != RT_NULL)
     {
-        spare[spare_len - 1] = spare[2];
+        rt_memcpy(spare_temp, spare, oob_size);
+        rt_mtd_nand_unmap_user(RT_MTD_NAND_DEVICE(dev->_private), spare, spare_temp, 0, 16);
+
         // unload ts and ecc from spare, you can modify it if you like
         uffs_FlashUnloadSpare(dev, (const u8 *)spare, ts, RT_NULL);
 
@@ -342,7 +359,7 @@ const uffs_FlashOps nand_ops =
 };
 
 static rt_uint8_t hw_flash_ecc_layout[UFFS_SPARE_LAYOUT_SIZE] = {0xFF, 0x00};
-static rt_uint8_t hw_flash_data_layout[UFFS_SPARE_LAYOUT_SIZE] ={0x10, 0x04, 0x20, 0x04, 0xFF, 0x00};
+static rt_uint8_t hw_flash_data_layout[UFFS_SPARE_LAYOUT_SIZE] ={0x00, 0x09, 0xFF, 0x00};
 
 void uffs_setup_storage(struct uffs_StorageAttrSt *attr,
                         struct rt_mtd_nand_device *nand)

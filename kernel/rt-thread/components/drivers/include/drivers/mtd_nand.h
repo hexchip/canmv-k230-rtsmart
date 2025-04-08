@@ -69,6 +69,9 @@ struct rt_mtd_nand_driver_ops
     rt_err_t (*erase_block)(struct rt_mtd_nand_device *device, rt_uint32_t block);
     rt_err_t (*check_block)(struct rt_mtd_nand_device *device, rt_uint32_t block);
     rt_err_t (*mark_badblock)(struct rt_mtd_nand_device *device, rt_uint32_t block);
+
+    rt_err_t (*map_user)(struct rt_mtd_nand_device *device, rt_uint8_t *oobbuf, rt_uint8_t *buf, rt_base_t start, rt_base_t nbytes);
+    rt_err_t (*unmap_user)(struct rt_mtd_nand_device *device, rt_uint8_t *dst, rt_uint8_t *src, rt_base_t start, rt_base_t nbytes);
 };
 
 rt_err_t rt_mtd_nand_register_device(const char *name, struct rt_mtd_nand_device *device);
@@ -134,6 +137,20 @@ rt_inline rt_err_t rt_mtd_nand_mark_badblock(struct rt_mtd_nand_device *device, 
     {
         return -RT_ENOSYS;
     }
+}
+
+rt_inline rt_err_t rt_mtd_nand_map_user(struct rt_mtd_nand_device* device, rt_uint8_t* oobbuf, rt_uint8_t* data,
+                                        rt_base_t start, rt_base_t nbytes)
+{
+    RT_ASSERT(device->ops->map_user);
+    return device->ops->map_user(device, oobbuf, data, start, nbytes);
+}
+
+rt_inline rt_err_t rt_mtd_nand_unmap_user(struct rt_mtd_nand_device* device, rt_uint8_t* dst, rt_uint8_t* src,
+                                          rt_base_t start, rt_base_t nbytes)
+{
+    RT_ASSERT(device->ops->map_user);
+    return device->ops->unmap_user(device, dst, src, start, nbytes);
 }
 
 #endif /* MTD_NAND_H_ */
