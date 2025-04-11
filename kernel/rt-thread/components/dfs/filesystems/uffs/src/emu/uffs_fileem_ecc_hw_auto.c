@@ -64,9 +64,9 @@
 #define MSG(msg,...) uffs_PerrorRaw(UFFS_MSG_NORMAL, msg, ## __VA_ARGS__)
 #define MSGLN(msg,...) uffs_Perror(UFFS_MSG_NORMAL, msg, ## __VA_ARGS__)
 
-#define RS_ECC_SIZE			10
-#define PAGE_DATA_SIZE		508
-#define PAGE_SPARE_SIZE		20
+#define RS_ECC_SIZE			24
+#define PAGE_DATA_SIZE		2048
+#define PAGE_SPARE_SIZE		64
 #define PAGE_FULL_SIZE		(PAGE_DATA_SIZE + PAGE_SPARE_SIZE)
 static u8 g_sdata_buf[PAGE_FULL_SIZE];	// emulating LPC32x0's 528-bytes serial data buffer
 
@@ -257,6 +257,8 @@ static int femu_hw_auto_WritePageWithLayout(uffs_Device *dev, u32 block, u32 pag
 		}
 	}
 	else {
+		/* nerver reached here */
+		uffs_Panic();
 		// mark bad block
 
 		// feed data to serial data buffer to make MLC controller happy
@@ -286,19 +288,17 @@ static URET femu_hw_auto_ReadPageWithLayout(uffs_Device *dev, u32 block, u32 pag
 									uffs_TagStore *ts, u8 *ecc_store)
 {
 	uffs_FileEmu *emu;
-	int abs_page;
 	struct uffs_StorageAttrSt *attr = dev->attr;
 	unsigned char status;
 	u8 spare[PAGE_SPARE_SIZE];
 	int ret = UFFS_FLASH_IO_ERR;
+    u8 spare_len = dev->mem.spare_data_size;
 
 	emu = (uffs_FileEmu *)(dev->attr->_private);
 
 	if (!emu || !(emu->fp)) {
 		goto ext;
 	}
-
-	abs_page = attr->pages_per_block * block + page;
 
 	// now load full page to serial data buffer
 	ret = load_sdata(dev, block, page);
@@ -328,9 +328,16 @@ static URET femu_hw_auto_ReadPageWithLayout(uffs_Device *dev, u32 block, u32 pag
 
 			// unload ts from spare
 			uffs_FlashUnloadSpare(dev, spare, ts, NULL);
+
+			if ((spare[spare_len - 1] == 0xFF) && (ret == UFFS_FLASH_NO_ERR)) {
+				ret = UFFS_FLASH_NOT_SEALED;
+			}
 		}
 	}
 	else {
+		/* nerver reached here */
+		uffs_Panic();
+
 		// read bad block mark
 		drain_sdata(NULL, attr->page_data_size + attr->block_status_offs - 1);
 		drain_sdata(&status, 1);
@@ -342,15 +349,44 @@ ext:
 	return ret;
 }
 
+/**
+* Check block status.
+*
+* \note flash driver may maintain a bad block table to speed up bad block checking or
+*		it will require one or two read spare I/O to check block status.
+*
+* \note if this function is not implented by driver, UFFS check the block_status byte in spare.
+*
+* \return 1 if it's a bad block, 0 if it's not.
+*/
+static int femu_hw_auto_IsBadBlock(uffs_Device *dev, u32 block)
+{
+	// emu not mark bad block
+	return 0;
+}
+
+/**
+* Mark a new bad block.
+*
+* \note if this function is not implemented, UFFS mark bad block by call 'WritePage()/WritePageWithLayout()'
+*       with: data == NULL && spare == NULL && ts == NULL.
+*
+* \return 0 if success, otherwise return -1.
+*/
+static int femu_hw_auto_MarkBadBlock(uffs_Device *dev, u32 block)
+{
+	// emu not mark bad block
+	return 0;
+}
 
 uffs_FlashOps g_femu_ops_ecc_hw_auto = {
-	femu_hw_auto_InitFlash,			// InitFlash()
-	femu_ReleaseFlash,			// ReleaseFlash()
-	NULL,					// ReadPage()
+	femu_hw_auto_InitFlash,				// InitFlash()
+	femu_ReleaseFlash,					// ReleaseFlash()
+	NULL,								// ReadPage()
 	femu_hw_auto_ReadPageWithLayout,	// ReadPageWithLayout()
-	NULL,					// WritePage()
-	femu_hw_auto_WritePageWithLayout,	// WritePageWithLayout()
-	NULL,					// IsBadBlock(), let UFFS take care of it.
-	NULL,					// MarkBadBlock(), let UFFS take care of it.
+	NULL,								// WritePage()
+	femu_hw_auto_WritePageWithLayout,	// WirtePageWithLayout()
+	femu_hw_auto_IsBadBlock,			// IsBadBlock(), let UFFS take care of it.
+	femu_hw_auto_MarkBadBlock,			// MarkBadBlock(), let UFFS take care of it.
 	femu_EraseBlock,			// EraseBlock()
 };

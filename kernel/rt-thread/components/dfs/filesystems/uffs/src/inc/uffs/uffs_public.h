@@ -60,6 +60,12 @@ extern "C"{
 #endif
 
 /** 
+ * \def CONFIG_UFFS_DBG_SHOW_LINE_NUM
+ * \brief show function and line number in debug message
+ */
+#define CONFIG_UFFS_DBG_SHOW_LINE_NUM
+
+/** 
  * \def MAX_FILENAME_LENGTH 
  * \note Be careful: it's part of the physical format (see: uffs_FileInfoSt.name)
  *    !!DO NOT CHANGE IT AFTER FILE SYSTEM IS FORMATED!!
@@ -83,7 +89,7 @@ struct uffs_FileInfoSt {
     u32 reserved;
     u32 name_len;           //!< length of file/dir name
     char name[MAX_FILENAME_LENGTH];
-}; //6*4 + sizeof(name) = 24 + 128 = 152 Bytes
+};
 typedef struct uffs_FileInfoSt uffs_FileInfo;
 
 /**
@@ -95,6 +101,25 @@ typedef struct uffs_ObjectInfoSt {
     u32 len;                //!< length of file
     u16 serial;             //!< object serial num
 } uffs_ObjectInfo;
+
+
+/**
+ * \def UFFS_TAG_PAGE_ID_SIZE_BITS
+ * \brief define number of bits used for page_id in tag,
+ *        this defines the maximum pages per block you can have.
+ *        e.g. '9' ==> maximum 512 pages per block
+ **/
+#define UFFS_TAG_PAGE_ID_SIZE_BITS  6
+
+#if UFFS_TAG_RESERVED_BITS > 10
+#error "UFFS_TAG_PAGE_ID_SIZE_BITS can not bigger than 10 !"
+#endif
+
+/**
+ * \def UFFS_TAG_RESERVED_BITS
+ * \brief the number of bits left to be used for the furture (UFFS2).
+ **/
+#define UFFS_TAG_RESERVED_BITS (10 - UFFS_TAG_PAGE_ID_SIZE_BITS)
 
 
 /**
@@ -110,8 +135,10 @@ struct uffs_TagStoreSt {
 	u32 serial:14;		//!< serial number
 
 	u32 parent:10;		//!< parent's serial number
-	u32 page_id:6;		//!< page id
-	u32 reserved:4;		//!< reserved, for UFFS2
+	u32 page_id:UFFS_TAG_PAGE_ID_SIZE_BITS;		//!< page id
+#if UFFS_TAG_RESERVED_BITS != 0
+	u32 reserved:UFFS_TAG_RESERVED_BITS;		//!< reserved, for UFFS2
+#endif
 	u32 tag_ecc:12;		//!< tag ECC
 };
 
@@ -186,28 +213,34 @@ UBOOL uffs_IsSrcNewerThanObj(int src, int obj);
 
 #if !defined(RT_THREAD)
 struct uffs_DebugMsgOutputSt;
-URET uffs_InitDebugMessageOutput(struct uffs_DebugMsgOutputSt *ops, int msg_level);
+URET uffs_InitDebugMessageOutput(struct uffs_DebugMsgOutputSt* ops, int msg_level);
 void uffs_DebugSetMessageLevel(int msg_level);
 
-void uffs_DebugMessage(int level, const char *prefix, const char *suffix, const char *errFmt, ...);
-void uffs_AssertCall(const char *file, int line, const char *msg, ...);
+void uffs_DebugMessage(int level, const char* prefix, const char* suffix, int line, const char* errFmt, ...);
+void uffs_AssertCall(const char* file, int line, const char* msg, ...);
 #else
 
-#define UFFS_DBG_LEVEL  UFFS_MSG_NORMAL
+#define UFFS_DBG_LEVEL UFFS_MSG_NORMAL
 
 #ifdef CONFIG_ENABLE_UFFS_DEBUG_MSG
-#define uffs_DebugMessage(level, prefix, suffix, errFmt, ...) do { \
-	if (level >= UFFS_DBG_LEVEL) \
-		rt_kprintf(prefix errFmt suffix, ##__VA_ARGS__); \
-} while(0)
 
-#define uffs_AssertCall(file, line, msg, ...) \
-	rt_kprintf("ASSERT %s:%d - :" msg "\n", (const char *)file, (int)line, ##__VA_ARGS__)
+#define uffs_DebugMessage(level, prefix, suffix, errFmt, line, ...)                                                    \
+    do {                                                                                                               \
+        if (level >= UFFS_DBG_LEVEL) {                                                                                 \
+            rt_kprintf(prefix errFmt suffix "line: %d", line, ##__VA_ARGS__);                                          \
+        }                                                                                                              \
+    } while (0)
+
+#define uffs_AssertCall(file, line, msg, ...)                                                                          \
+    rt_kprintf("ASSERT %s:%d - :" msg "\n", (const char*)file, (int)line, ##__VA_ARGS__)
 #else
+
 #define uffs_DebugMessage(level, prefix, suffix, errFmt, ...)
 #define uffs_AssertCall(file, line, msg, ...)
-#endif //CONFIG_ENABLE_UFFS_DEBUG_MSG
-#endif //RT_THREAD
+
+#endif // CONFIG_ENABLE_UFFS_DEBUG_MSG
+
+#endif // RT_THREAD
 
 #ifdef _COMPILER_DO_NOT_SUPPORT_MACRO_VALIST_REPLACE_
 /* For those compilers do not support valist parameter replace in macro define */
@@ -218,24 +251,26 @@ UBOOL uffs_Assert(UBOOL expr, const char *fmt, ...);
 
 #if !defined(RT_THREAD)
 #define uffs_Perror(level, fmt, ... ) \
-	uffs_DebugMessage(level, PFX, TENDSTR, fmt, ## __VA_ARGS__)
+	uffs_DebugMessage(level, PFX, TENDSTR, __LINE__, fmt, ## __VA_ARGS__)
 
 #define uffs_PerrorRaw(level, fmt, ... ) \
-	uffs_DebugMessage(level, NULL, NULL, fmt, ## __VA_ARGS__)
+	uffs_DebugMessage(level, NULL, NULL, -1, fmt, ## __VA_ARGS__)
 
 #else
 
 #ifdef CONFIG_ENABLE_UFFS_DEBUG_MSG
 
-#define uffs_Perror(level, fmt, ... ) do{\
-	if (level >= UFFS_DBG_LEVEL) \
-		rt_kprintf(PFX fmt TENDSTR, ##__VA_ARGS__); \
-} while(0)
+#define uffs_Perror(level, fmt, ...)                                                                                   \
+    do {                                                                                                               \
+        if (level >= UFFS_DBG_LEVEL)                                                                                   \
+            rt_kprintf(PFX fmt TENDSTR, ##__VA_ARGS__);                                                                \
+    } while (0)
 
-#define uffs_PerrorRaw(level, fmt, ... ) do{\
-	if (level >= UFFS_DBG_LEVEL) \
-		rt_kprintf(fmt, ##__VA_ARGS__); \
-} while(0)
+#define uffs_PerrorRaw(level, fmt, ...)                                                                                \
+    do {                                                                                                               \
+        if (level >= UFFS_DBG_LEVEL)                                                                                   \
+            rt_kprintf(fmt, ##__VA_ARGS__);                                                                            \
+    } while (0)
 #else
 #define uffs_Perror(level, fmt, ... )
 #define uffs_PerrorRaw(level, fmt, ... )
@@ -272,6 +307,12 @@ UBOOL uffs_IsBlockBad(uffs_Device *dev, uffs_BlockInfo *bc);
  * \brief macro for invalid page number
  */
 #define UFFS_INVALID_PAGE	(0xfffe)
+
+/**
+ * \def UFFS_MAX_PAGES_PER_BLOCK
+ * \brief maximum allowed pages per block
+ **/
+#define UFFS_MAX_PAGES_PER_BLOCK    (1 << UFFS_TAG_PAGE_ID_SIZE_BITS)
 
 /** 
  * \def UFFS_INVALID_BLOCK

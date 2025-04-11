@@ -99,7 +99,7 @@ uffs_Pool * uffs_GetObjectPool(void)
 URET uffs_InitObjectBuf(void)
 {
 	return uffs_PoolInit(&_object_pool, _object_data, sizeof(_object_data),
-			sizeof(uffs_Object), MAX_OBJECT_HANDLE);
+			sizeof(uffs_Object), MAX_OBJECT_HANDLE, U_FALSE);
 }
 
 /**
@@ -206,7 +206,7 @@ uffs_Object * uffs_GetObjectByIndex(int idx)
 	return (uffs_Object *) uffs_PoolGetBufByIndex(&_object_pool, idx);
 }
 
-#ifdef CONFIG_PER_DEVICE_LOCK
+#ifdef CONFIG_USE_PER_DEVICE_LOCK
 static void uffs_ObjectDevLock(uffs_Object *obj)
 {
 	if (obj) {
@@ -1312,7 +1312,7 @@ static URET do_TruncateInternalWithBlockRecover(uffs_Object *obj,
 	TreeNode *node;
 	uffs_Buf *buf = NULL;
 	u8 type;
-	u32 block_start;
+	u32 block_start, block_offset;
 	u16 parent, serial;
 	int slot;
 	uffs_BlockInfo *bc = NULL;
@@ -1363,10 +1363,10 @@ static URET do_TruncateInternalWithBlockRecover(uffs_Object *obj,
 	}
 	
 	// find the last page *after* truncate
-	for (page_id = (fdn == 0 ? 1 : 0); page_id <= max_page_id; page_id++) {
-		if (block_start + (page_id + 1) * dev->com.pg_data_size >= remain)
-			break;
-	}
+	block_offset = remain - block_start;
+	page_id = block_offset / dev->com.pg_data_size;
+	if (fdn == 0)
+		page_id++;
 
 	if (!uffs_Assert(page_id <= max_page_id, "fdn = %d, block_start = %d, remain = %d\n", fdn, block_start, remain)) {
 		obj->err = UEUNKNOWN_ERR;
@@ -1478,10 +1478,6 @@ static URET do_TruncateObject(uffs_Object *obj, u32 remain, RunOptionE run_opt)
 		goto ext;
 	}
 
-	if (remain >= fnode->u.file.len) {
-		goto ext;	//!< nothing to do ... 
-	}
-
 	flen = fnode->u.file.len;
 
 	if (flen < remain) {
@@ -1535,12 +1531,10 @@ static URET do_TruncateObject(uffs_Object *obj, u32 remain, RunOptionE run_opt)
 
 				if (run_opt == eREAL_RUN) {
 					uffs_BreakFromEntry(dev, UFFS_TYPE_DATA, node);
-					uffs_FlashEraseBlock(dev, bc->block);
+
 					node->u.list.block = bc->block;
-					if (HAVE_BADBLOCK(dev))
-						uffs_BadBlockProcess(dev, node);
-					else
-						uffs_TreeInsertToErasedListTail(dev, node);
+					uffs_TreeEraseNode(dev, node);
+					uffs_TreeInsertToErasedListTail(dev, node);
 
 					fnode->u.file.len = block_start;
 				}
@@ -1649,7 +1643,6 @@ URET uffs_DeleteObject(const char * name, int *err)
 	uffs_Device *dev = NULL;
 	u16 block;
 	u16 serial, parent, last_serial;
-	UBOOL bad = U_FALSE;
 	URET ret = U_FAIL;
 
 	obj = uffs_GetObject();
@@ -1719,22 +1712,14 @@ URET uffs_DeleteObject(const char * name, int *err)
 	last_serial = (obj->type == UFFS_TYPE_FILE && node->u.file.len > 0 ? GetFdnByOfs(obj, node->u.file.len - 1) : 0);
 
 	uffs_BreakFromEntry(dev, obj->type, node);
-	uffs_FlashEraseBlock(dev, block);
 	node->u.list.block = block;
-	node->u.list.u.serial = obj->serial;
+	uffs_TreeEraseNode(dev, node);
 
 	// From now on, the object is gone physically,
 	// but we need to 'suspend' this node so that no one will re-use
-	// the serial number during deleting the reset part of object.
-
-	if (HAVE_BADBLOCK(dev)) {
-		uffs_BadBlockProcessSuspend(dev, node);
-		bad = U_TRUE;  // will be put into 'bad' list later
-	}
-	else {
-		uffs_TreeSuspendAdd(dev, node);
-		bad = U_FALSE;	// will be put into erased list later
-	}
+	// the serial number during deleting the rest part of object.
+	node->u.list.u.serial = obj->serial;
+	uffs_TreeSuspendAdd(dev, node);
 
 	// now erase DATA blocks
 	if (obj->type == UFFS_TYPE_FILE && last_serial > 0) {
@@ -1748,22 +1733,16 @@ URET uffs_DeleteObject(const char * name, int *err)
 			if (uffs_Assert(d_node != NULL, "Can't find DATA node parent = %d, serial = %d\n", parent, serial)) {
 				uffs_BreakFromEntry(dev, UFFS_TYPE_DATA, d_node);
 				block = d_node->u.data.block;
-				uffs_FlashEraseBlock(dev, block);
 				d_node->u.list.block = block;
-				if (HAVE_BADBLOCK(dev))
-					uffs_BadBlockProcess(dev, d_node);
-				else
-					uffs_TreeInsertToErasedListTail(dev, d_node);
+				uffs_TreeEraseNode(dev, d_node);
+				uffs_TreeInsertToErasedListTail(dev, d_node);
 			}
 		}
 	}
 	
 	// now process the suspend node
 	uffs_TreeRemoveSuspendNode(dev, node);
-	if (bad)
-		uffs_TreeInsertToBadBlockList(dev, node);
-	else
-		uffs_TreeInsertToErasedListTail(dev, node);
+	uffs_TreeInsertToErasedListTail(dev, node);
 
 	ret = U_SUCC;
 

@@ -39,6 +39,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <sys/stat.h>
+
 #include "uffs_config.h"
 #include "uffs/uffs_os.h"
 #include "uffs/uffs_public.h"
@@ -77,14 +80,14 @@ const char * conf_emu_filename = DEFAULT_EMU_FILENAME;
 
 
 /* default basic parameters of the NAND device */
-#define PAGES_PER_BLOCK_DEFAULT			32
-#define PAGE_DATA_SIZE_DEFAULT			512
-#define PAGE_SPARE_SIZE_DEFAULT			16
-#define STATUS_BYTE_OFFSET_DEFAULT		5
+#define PAGES_PER_BLOCK_DEFAULT			64
+#define PAGE_DATA_SIZE_DEFAULT			2048
+#define PAGE_SPARE_SIZE_DEFAULT			64
+#define STATUS_BYTE_OFFSET_DEFAULT		0
 #define TOTAL_BLOCKS_DEFAULT			128
-#define ECC_OPTION_DEFAULT				UFFS_ECC_SOFT
+// #define ECC_OPTION_DEFAULT				UFFS_ECC_SOFT
 //#define ECC_OPTION_DEFAULT			UFFS_ECC_HW
-//#define ECC_OPTION_DEFAULT			UFFS_ECC_HW_AUTO
+#define ECC_OPTION_DEFAULT			UFFS_ECC_HW_AUTO
 
 #define MAX_MOUNT_TABLES		10
 #define MAX_MOUNT_POINT_NAME	32
@@ -97,11 +100,16 @@ static int conf_total_blocks = TOTAL_BLOCKS_DEFAULT;
 static int conf_ecc_option = ECC_OPTION_DEFAULT;
 static int conf_ecc_size = 0; // 0 - Let UFFS choose the size
 
+static const char *conf_dir = NULL;
+
 static const char *g_ecc_option_strings[] = UFFS_ECC_OPTION_STRING;
 
 static struct uffs_MountTableEntrySt conf_mounts[MAX_MOUNT_TABLES] = {{0}};
 static uffs_Device conf_devices[MAX_MOUNT_TABLES] = {{0}};
 static char mount_point_name[MAX_MOUNT_TABLES][MAX_MOUNT_POINT_NAME] = {{0}};
+
+static unsigned char hw_flash_ecc_layout[UFFS_SPARE_LAYOUT_SIZE] = {0xFF, 0x00};
+static unsigned char hw_flash_data_layout[UFFS_SPARE_LAYOUT_SIZE] ={0x00, 0x09, 0xFF, 0x00};
 
 static void setup_storage(struct uffs_StorageAttrSt *attr)
 {
@@ -113,7 +121,14 @@ static void setup_storage(struct uffs_StorageAttrSt *attr)
 	attr->block_status_offs = conf_status_byte_offset;	/* block status offset is 5th byte in spare */
 	attr->ecc_opt = conf_ecc_option;					/* ECC option */
 	attr->ecc_size = conf_ecc_size;						/* ECC size */
-	attr->layout_opt = UFFS_LAYOUT_UFFS;				/* let UFFS handle layout */
+	attr->layout_opt = UFFS_LAYOUT_FLASH;				/* let UFFS handle layout */
+
+    /* initialize  _uffs_data_layout and _uffs_ecc_layout */
+    memcpy(attr->_uffs_data_layout, hw_flash_data_layout, UFFS_SPARE_LAYOUT_SIZE);
+    memcpy(attr->_uffs_ecc_layout, hw_flash_ecc_layout, UFFS_SPARE_LAYOUT_SIZE);
+
+    attr->data_layout = attr->_uffs_data_layout;
+    attr->ecc_layout = attr->_uffs_ecc_layout;
 }
 
 
@@ -340,6 +355,24 @@ static int parse_options(int argc, char *argv[])
 					usage++;
 				}
 			}
+			else if (!strcmp(arg, "-d") || !strcmp(arg, "--dir")) {
+				if (++iarg >= argc) {
+					usage++;
+				} else {
+					if (access(argv[iarg], F_OK) == 0) {
+						struct stat st;
+						if (stat(argv[iarg], &st) == 0 && S_ISDIR(st.st_mode)) {
+							conf_dir = argv[iarg];
+						} else {
+							MSGLN("Error: %s is not a valid directory", argv[iarg]);
+							return -1;
+						}
+					} else {
+						MSGLN("Error: Directory %s does not exist", argv[iarg]);
+						return -1;
+					}
+				}
+			}
             else {
                 MSGLN("Unknown option: %s, try %s --help", arg, argv[0]);
 				return -1;
@@ -366,6 +399,7 @@ static int parse_options(int argc, char *argv[])
 		MSGLN("  -x  --ecc-option     <none|soft|hw|auto>  ECC option, default=%s", g_ecc_option_strings[ECC_OPTION_DEFAULT]);
 		MSGLN("  -z  --ecc-size       <n>                  ECC size, default=0 (auto)");
         MSGLN("  -e  --exec           <file>               execute a script file");
+        MSGLN("  -d  --dir            <path>               copy files from dir to uffs");
         MSGLN("");
 
         return -1;
@@ -405,7 +439,7 @@ static void print_params(void)
 	MSGLN("");
 }
 
-#ifdef UNIX
+#if defined(UNIX) && !defined(__CYGWIN32__)
 #include <execinfo.h>
 #include <signal.h>
 void crash_handler(int sig)
@@ -427,7 +461,7 @@ int main(int argc, char *argv[])
 {
 	int ret;
 
-#ifdef UNIX
+#if defined(UNIX) && !defined(__CYGWIN32__)
 	signal(SIGSEGV, crash_handler);
 #endif
 
@@ -466,20 +500,29 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	cli_add_commandset(get_helper_cmds());
-	cli_add_commandset(get_test_cmds());
-	if (conf_command_line_mode) {
-		if (conf_exec_script) {
-			cli_interpret(script_command);
-		}
-		cli_main_entry();
-	}
-	else {
-		if (conf_exec_script) {
-			cli_interpret(script_command);
+	if(conf_dir) {
+		extern int clone_uffs(const char *path);
+
+		int ret = clone_uffs(conf_dir);
+		release_uffs_fs();
+
+		return ret;
+	} else {
+		cli_add_commandset(get_helper_cmds());
+		cli_add_commandset(get_test_cmds());
+		if (conf_command_line_mode) {
+			if (conf_exec_script) {
+				cli_interpret(script_command);
+			}
+			cli_main_entry();
 		}
 		else {
-			cli_main_entry();
+			if (conf_exec_script) {
+				cli_interpret(script_command);
+			}
+			else {
+				cli_main_entry();
+			}
 		}
 	}
 

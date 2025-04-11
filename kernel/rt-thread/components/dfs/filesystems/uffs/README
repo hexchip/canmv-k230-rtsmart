@@ -12,6 +12,7 @@ INTRODUCTION
 UFFS is a nand flash file system designed for embedded system.
 
 UFFS have some unique and advanced features:
+
   * Low cost: e.g. it needs only 41K bytes RAM for 64MB NAND flash (page size 2048).
     
   * Fast booting: it reads only a few spares from each block, typically
@@ -34,11 +35,13 @@ UFFS have some unique and advanced features:
   * Fully simulated on PC (Windows/Linux) platform.
 
 Disadvantage:
+
   * space inefficency for small files: UFFS use at least one
    'block'(the minial erase unit for NAND flash, e.g. 16K ) for a file.
   * maximum supported blocks: 2^16 = 65535
 
 Memory consuming example:
+
     For page size = 512:
         [VARY]Tree nodes: 16 * total_blocks 
         [CONST]Page Bufs: MAX_CACHED_BUFFERS(10) * (40 + pageSize(512)) = 5.4K 
@@ -172,6 +175,30 @@ UFFS v1.3.4
   - Optional page data CRC.
   - Bug fixes.
   - Other improvements.
+
+UFFS v1.3.5
+  - Code directory structure changed
+  - Improved platform independency
+  - Fixed unclean page tag not expired bug
+  - Added test server/client, reuse sqlite test suite
+  - Allow fine tuning uffs config per device in run-time
+  - Prevent a file in use from being deleted
+  - Deleting file/dir now atomic
+  - Fixed flush issue when CONFIG_FLUSH_BUG_AFTER_WRITE config enabled
+  - Fixed truncating small file bug
+  - Many small improvements
+
+UFFS v1.3.6
+  - Removed unnecessary semaphore creations
+  - Use a seperated list for clone buffers
+  - Improved bad block handling
+  - Fixed bugs:
+    * tree node broken when mounting uffs and there are unclean nodes
+    * flash op result (UFFS_FLASH_ECC_OK) could be overwritten by following page
+    * uffs_ftrancate() not able to expand file bug
+  - Many other small improvements
+
+ 
   
 LICENCE
 -------
@@ -271,5 +298,5 @@ Special thanks for your contributions to:
 * Mick D <mick-eng@sourceforge.net>
 * Paul <paulr227@gmail.com>
 * Rogerz <rogerz.zhang@gmail.com>
-
+* Savin Zlobec <savin.zlobec@gmail.com>
 

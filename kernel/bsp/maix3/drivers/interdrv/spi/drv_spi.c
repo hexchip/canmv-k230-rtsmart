@@ -366,10 +366,12 @@ static rt_uint32_t drv_spi_xfer(struct rt_spi_device* device, struct rt_spi_mess
             spi->ctrlr1 = length - 1;
             spi->spidr = msg->instruction.content;
             spi->spiar = msg->address.content;
-            if (tmod == 1) {
+
+            if (tmod == SPI_TMOD_TO) {
                 rt_memcpy(buf, msg->parent.send_buf, length * cell_size);
-                rt_hw_cpu_dcache_clean(buf, CACHE_ALIGN_TOP(length * cell_size));
             }
+            rt_hw_cpu_dcache_clean(buf, length * cell_size);
+
             spi->axiar0 = (uint32_t)((uint64_t)buf);
             spi->axiar1 = (uint32_t)((uint64_t)buf >> 32);
         } else {

@@ -60,11 +60,13 @@ void uffs_BufInspect(uffs_Device *dev)
 {
 	struct uffs_PageBufDescSt *pb = &dev->buf;
 	uffs_Buf *buf;
+	int count = 0, empty_count = 0;
 
 	uffs_PerrorRaw(UFFS_MSG_NORMAL,
 					"------------- page buffer inspect ---------" TENDSTR);
 	uffs_PerrorRaw(UFFS_MSG_NORMAL, "all buffers: " TENDSTR);
 	for (buf = pb->head; buf; buf = buf->next) {
+		count++;
 		if (buf->mark != 0) {
 			uffs_PerrorRaw(UFFS_MSG_NORMAL,
 				"\tF:%04x S:%04x P:%02d R:%02d D:%03d M:%c EM:%d" TENDSTR,
@@ -73,9 +75,127 @@ void uffs_BufInspect(uffs_Device *dev)
 				buf->data_len, buf->mark == UFFS_BUF_VALID ? 'V' : 'D',
 				buf->ext_mark);
 		}
+		else {
+			empty_count++;
+		}
 	}
+	uffs_PerrorRaw(UFFS_MSG_NORMAL, "\ttotal: %d, empty: %d" TENDSTR, count, empty_count);
 	uffs_PerrorRaw(UFFS_MSG_NORMAL,
 					"--------------------------------------------"  TENDSTR);
+}
+
+/**
+ * \brief break a buf from buffer pool list
+ * \param[in] dev uffs device
+ * \param[in] buf buffer to be broke
+ */
+static void _BreakFromBufList(uffs_Device *dev, uffs_Buf *buf)
+{
+	if(buf->next)
+		buf->next->prev = buf->prev;
+
+	if(buf->prev)
+		buf->prev->next = buf->next;
+
+	if(dev->buf.head == buf)
+		dev->buf.head = buf->next;
+
+	if(dev->buf.tail == buf)
+		dev->buf.tail = buf->prev;
+
+}
+
+/**
+ * \brief put a buf in buffer pool list head
+ * \param[in] dev uffs device
+ * \param[in] buf buffer to be put
+ */
+static void _LinkToBufListHead(uffs_Device *dev, uffs_Buf *buf)
+{
+	if (buf == dev->buf.head)
+		return;
+
+	buf->prev = NULL;
+	buf->next = dev->buf.head;
+
+	if (dev->buf.head)
+		dev->buf.head->prev = buf;
+
+	if (dev->buf.tail == NULL)
+		dev->buf.tail = buf;
+
+	dev->buf.head = buf;
+}
+
+#if 0
+/**
+ * \brief put a buf in buffer pool list tail
+ * \param[in] dev uffs device
+ * \param[in] buf buffer to be put
+ */
+static void _LinkToBufListTail(uffs_Device *dev, uffs_Buf *buf)
+{
+	if (dev->buf.tail == buf)
+		return;
+
+	buf->prev = dev->buf.tail;
+	buf->next = NULL;
+
+	if (dev->buf.tail)
+		dev->buf.tail->next = buf;
+
+	if (dev->buf.head == NULL)
+		dev->buf.head = buf;
+
+	dev->buf.tail = buf;
+}
+#endif
+
+/**
+ * \brief move a buf up to the head of buffer pool list
+ * \param[in] dev uffs device
+ * \param[in] p buffer to be moved
+ */
+static void _MoveNodeToHead(uffs_Device *dev, uffs_Buf *p)
+{
+	if (p == dev->buf.head)
+		return;
+
+	//break from list
+	_BreakFromBufList(dev, p);
+
+	//link to head
+	_LinkToBufListHead(dev, p);
+}
+
+
+/**
+ * \brief put the buffer in clone buffers list
+ * \param[in] dev uffs device
+ * \param[in] buf buffer to be put in clone list
+ */
+static void _InsertToCloneBufList(uffs_Device *dev, uffs_Buf *buf)
+{
+	struct uffs_PageBufDescSt *pb = &dev->buf;
+
+	buf->next = pb->clone;
+	pb->clone = buf;
+}
+
+/**
+ * \brief get a buf from clone buffer list
+ * \param[in] dev uffs device
+ * \return NULL if there is no free clone buffer available, otherwise return buf.
+ */
+static uffs_Buf * _GetFreeCloneBuf(uffs_Device *dev)
+{
+	struct uffs_PageBufDescSt *pb = &dev->buf;
+	uffs_Buf *buf = pb->clone;
+
+	if (pb->clone)
+		pb->clone = pb->clone->next;
+	
+	return buf;
 }
 
 /**
@@ -161,6 +281,15 @@ URET uffs_BufInit(uffs_Device *dev, int buf_max, int dirty_buf_max)
 		dev->buf.dirtyGroup[slot].dirty = NULL;
 		dev->buf.dirtyGroup[slot].count = 0;
 	}
+
+	// prepare clone buffers
+	dev->buf.clone = NULL;
+	for (i = 0; i < CLONE_BUFFERS_THRESHOLD; i++) {
+		buf = dev->buf.head;
+		_BreakFromBufList(dev, buf);
+		_InsertToCloneBufList(dev, buf);
+	}
+
 	return U_SUCC;
 }
 
@@ -223,70 +352,6 @@ URET uffs_BufReleaseAll(uffs_Device *dev)
 	return U_SUCC;
 }
 
-
-static void _BreakFromBufList(uffs_Device *dev, uffs_Buf *buf)
-{
-	if(buf->next)
-		buf->next->prev = buf->prev;
-
-	if(buf->prev)
-		buf->prev->next = buf->next;
-
-	if(dev->buf.head == buf)
-		dev->buf.head = buf->next;
-
-	if(dev->buf.tail == buf)
-		dev->buf.tail = buf->prev;
-
-}
-
-static void _LinkToBufListHead(uffs_Device *dev, uffs_Buf *buf)
-{
-	if (buf == dev->buf.head)
-		return;
-
-	buf->prev = NULL;
-	buf->next = dev->buf.head;
-
-	if (dev->buf.head)
-		dev->buf.head->prev = buf;
-
-	if (dev->buf.tail == NULL)
-		dev->buf.tail = buf;
-
-	dev->buf.head = buf;
-}
-
-static void _LinkToBufListTail(uffs_Device *dev, uffs_Buf *buf)
-{
-	if (dev->buf.tail == buf)
-		return;
-
-	buf->prev = dev->buf.tail;
-	buf->next = NULL;
-
-	if (dev->buf.tail)
-		dev->buf.tail->next = buf;
-
-	if (dev->buf.head == NULL)
-		dev->buf.head = buf;
-
-	dev->buf.tail = buf;
-}
-
-//move a node which linked in the list to the head of list
-static void _MoveNodeToHead(uffs_Device *dev, uffs_Buf *p)
-{
-	if (p == dev->buf.head)
-		return;
-
-	//break from list
-	_BreakFromBufList(dev, p);
-
-	//link to head
-	_LinkToBufListHead(dev, p);
-}
-
 // check if the buf is already in dirty list
 static UBOOL _IsBufInInDirtyList(uffs_Device *dev, int slot, uffs_Buf *buf)
 {
@@ -321,30 +386,9 @@ static void _LinkToDirtyList(uffs_Device *dev, int slot, uffs_Buf *buf)
 	dev->buf.dirtyGroup[slot].count++;
 }
 
-static int CountFreeBuf(uffs_Device *dev)
-{
-	int count = 0;
-
-	uffs_Buf *buf = dev->buf.head;
-
-	while (buf) {
-
-		if (buf->ref_count == 0 && 
-			buf->mark != UFFS_BUF_DIRTY)
-			count++;
-
-		buf = buf->next;
-	}
-
-	return count;
-}
-
-static uffs_Buf * _FindFreeBufEx(uffs_Device *dev, int clone)
+static uffs_Buf * _FindFreeBuf(uffs_Device *dev)
 {
 	uffs_Buf *buf;
-
-	if (!clone && CountFreeBuf(dev) <= CLONE_BUFFERS_THRESHOLD)
-		return NULL;
 
 #if 0
 	buf = dev->buf.head;
@@ -369,65 +413,6 @@ static uffs_Buf * _FindFreeBufEx(uffs_Device *dev, int clone)
 #endif
 
 	return buf;
-}
-
-static uffs_Buf * _FindFreeBuf(uffs_Device *dev)
-{
-	return _FindFreeBufEx(dev, 0);
-}
-
-
-/** 
- * load psychical page data into buf and do ecc check 
- * \param[in] dev uffs device
- * \param[in] buf buf to be load in
- * \param[in] block psychical block number
- * \param[in] page psychical page number
- * \return return U_SUCC if no error,
- *	 return U_FAIL if I/O error or ecc check fail
- */
-URET uffs_BufLoadPhyData(uffs_Device *dev, uffs_Buf *buf, u32 block, u32 page)
-{
-	int ret;
-
-	ret = uffs_FlashReadPage(dev, block, page, buf, U_FALSE);
-
-	if (UFFS_FLASH_HAVE_ERR(ret)) {
-		buf->mark = UFFS_BUF_EMPTY;
-		return U_FAIL;
-	}
-	else {
-		buf->mark = UFFS_BUF_VALID;
-		return U_SUCC;
-	}
-}
-
-/** 
- * \brief load psychical page data into buf and ignore ECC result
- *
- * \param[in] dev uffs device
- * \param[in] buf buf to be load in
- * \param[in] block psychical block number
- * \param[in] page psychical page number
- *
- * \return return U_SUCC if no error, return U_FAIL if I/O error
- * \note this function should be only used when doing bad block recover.
- */
-URET uffs_LoadPhyDataToBufEccUnCare(uffs_Device *dev,
-									uffs_Buf *buf, u32 block, u32 page)
-{
-	int ret;
-
-	ret = uffs_FlashReadPage(dev, block, page, buf, U_TRUE);
-
-	if (ret == UFFS_FLASH_IO_ERR) {
-		buf->mark = UFFS_BUF_EMPTY;
-		return U_FAIL;
-	}
-	else {
-		buf->mark = UFFS_BUF_VALID;
-		return U_SUCC;
-	}
 }
 
 /** 
@@ -528,7 +513,6 @@ static u16 _GetDirOrFileNameSum(uffs_Device *dev, uffs_Buf *buf)
 	u16 data_sum = 0; //default: 0
 	uffs_FileInfo *fi;
 	
-	dev = dev;
 	//FIXME: We use the same schema for both dir and file.
 	if (buf->type == UFFS_TYPE_FILE || buf->type == UFFS_TYPE_DIR) {
 		if (buf->page_id == 0) {
@@ -606,11 +590,12 @@ uffs_Buf * _FindMinimunPageIdFromDirtyList(uffs_Buf *dirtyList)
  *	\note IT'S IMPORTANT TO KEEP OLD NODE IN THE LIST,
  *		 so you don't need to update the obj->node :-)
  */
-static URET uffs_BufFlush_Exist_With_BlockCover(
+static URET uffs_BufFlush_Exist_With_BlockRecover(
 			uffs_Device *dev,
 			int slot,			//!< dirty group slot
 			TreeNode *node,		//!< old data node on tree
-			uffs_BlockInfo *bc	//!< old data block info
+			uffs_BlockInfo *bc,	//!< old data block info
+			UBOOL badBlock      //!< old data block is a bad block
 			)
 {
 	u16 i;
@@ -620,11 +605,11 @@ static URET uffs_BufFlush_Exist_With_BlockCover(
 	TreeNode *newNode;
 	uffs_BlockInfo *newBc;
 	uffs_Tags *tag, *oldTag;
-	int x;
 	u16 newBlock;
-	UBOOL succRecover;			//U_TRUE: recover successful, erase old block,
-								//U_FALSE: fail to recover, erase new block
-	UBOOL flash_op_err;
+	UBOOL succRecover;			// U_TRUE: recover successful, erase old block,
+								// U_FALSE: fail to recover, erase new block
+	int flash_op_new;			// flash operation (write) result for new block
+	int flash_op_old;			// flash operation (read) result for old block
 	u16 data_sum = 0xFFFF;
 
 	UBOOL useCloneBuf;
@@ -636,7 +621,8 @@ static URET uffs_BufFlush_Exist_With_BlockCover(
 retry:
 	uffs_BlockInfoLoad(dev, bc, UFFS_ALL_PAGES);
 
-	flash_op_err = UFFS_FLASH_NO_ERR;
+	flash_op_new = UFFS_FLASH_NO_ERR;
+	flash_op_old = UFFS_FLASH_NO_ERR;
 	succRecover = U_FALSE;
 
 	newNode = uffs_TreeGetErasedNode(dev);
@@ -678,8 +664,7 @@ retry:
 		TAG_PARENT(tag) = parent;
 		TAG_SERIAL(tag) = serial;
 		TAG_TYPE(tag) = type;
-		TAG_PAGE_ID(tag) = (u8)(i & 0xFF);	// now, page_id = page.
-									// FIX ME!! if more than 256 pages in a block
+		TAG_PAGE_ID(tag) = i;	// now, page_id = page.
 
 		SEAL_TAG(tag);
 		
@@ -704,34 +689,17 @@ retry:
 				}
 
 				if (buf->data_len > 0) {
-					flash_op_err = uffs_FlashWritePageCombine(dev, newBlock, i, buf, tag);
+					flash_op_new = uffs_FlashWritePageCombine(dev, newBlock, i, buf, tag);
 				}
 				else {
 					// data_len == 0, no I/O needed.
-					flash_op_err = UFFS_FLASH_NO_ERR;
+					flash_op_new = UFFS_FLASH_NO_ERR;
 				}
 				succRecover = U_TRUE;
 				break;
 			}
-			else
-				flash_op_err = uffs_FlashWritePageCombine(dev, newBlock, i, buf, tag);
-
-			if (flash_op_err != UFFS_FLASH_NO_ERR) {
-				if (flash_op_err == UFFS_FLASH_BAD_BLK) {
-					uffs_Perror(UFFS_MSG_NORMAL,
-								"new bad block %d discovered.", newBlock);
-					break;
-				}
-				else if (flash_op_err == UFFS_FLASH_IO_ERR) {
-					uffs_Perror(UFFS_MSG_NORMAL,
-								"writing to block %d page %d, I/O error ?", 
-								(int)newBlock, (int)i);
-					break;
-				}
-				else {
-					uffs_Perror(UFFS_MSG_SERIOUS, "Unhandled flash op result: %d", flash_op_err);
-					break;
-				}
+			else {
+				flash_op_new = uffs_FlashWritePageCombine(dev, newBlock, i, buf, tag);
 			}
 		}
 		else {
@@ -758,21 +726,20 @@ retry:
 					uffs_Perror(UFFS_MSG_SERIOUS, "Can't clone a new buf!");
 					break;
 				}
-				x = uffs_BufLoadPhyData(dev, buf, bc->block, page);
-				if (x == U_FAIL) {
-					if (HAVE_BADBLOCK(dev) && dev->bad.block == bc->block) {
-						// the old block is a bad block, we'll process it later.
-						uffs_Perror(UFFS_MSG_SERIOUS,
-									"the old block %d is a bad block, \
-									but ignore it for now.",
-									bc->block);
-					}
-					else {
-						uffs_Perror(UFFS_MSG_SERIOUS, "I/O error ?");
-						uffs_BufFreeClone(dev, buf);
-						flash_op_err = UFFS_FLASH_IO_ERR;
-						break;
-					}
+				flash_op_old = uffs_FlashReadPage(dev, bc->block, page, buf, U_FALSE);
+
+                if (uffs_BadBlockAddByFlashResult(dev, bc->block, flash_op_old) != UFFS_PENDING_BLK_NONE) {
+					// the old block is a bad block, we'll process it later.
+					uffs_Perror(UFFS_MSG_SERIOUS,
+								"the old block %d is a bad block, pending it for now.",
+								bc->block);
+					buf->mark = UFFS_BUF_VALID;
+				}
+				else if (UFFS_FLASH_HAVE_ERR(flash_op_old)) {
+					buf->mark = UFFS_BUF_EMPTY;
+					uffs_Perror(UFFS_MSG_SERIOUS, "Read block %d page %d error (%d)", bc->block, page, flash_op_old);
+					uffs_BufFreeClone(dev, buf);
+					break;
 				}
 
 				buf->type = type;
@@ -804,7 +771,7 @@ retry:
 			if (i == 0)
 				data_sum = _GetDirOrFileNameSum(dev, buf);
 
-			flash_op_err = uffs_FlashWritePageCombine(dev, newBlock, i, buf, tag);
+			flash_op_new = uffs_FlashWritePageCombine(dev, newBlock, i, buf, tag);
 
 			if (buf) {
 				if (useCloneBuf)
@@ -812,17 +779,19 @@ retry:
 				else
 					uffs_BufPut(dev, buf);
 			}
-
-			if (flash_op_err == UFFS_FLASH_BAD_BLK) {
-				uffs_Perror(UFFS_MSG_NORMAL,
-							"new bad block %d discovered.", newBlock);
-				break;
-			}
-			else if (flash_op_err == UFFS_FLASH_IO_ERR) {
-				uffs_Perror(UFFS_MSG_NORMAL, "I/O error ?", newBlock);
-				break;
-			}
 		}
+
+		// stop if new block write op has error or bad block
+		if (UFFS_FLASH_HAVE_ERR(flash_op_new) || UFFS_FLASH_IS_BAD_BLOCK(flash_op_new))
+			break;
+
+#ifdef CONFIG_UFFS_REFRESH_BLOCK
+		if (flash_op_new == UFFS_FLASH_ECC_OK) {
+			// new block has bit flip and corrected by ECC ? break now (will retry)
+			break;
+		}
+#endif
+
 	} //end of for
 
 	if (i == dev->attr->pages_per_block)
@@ -832,19 +801,41 @@ retry:
 		uffs_BlockInfoExpire(dev, newBc, i);
 	}
 
-	if (flash_op_err == UFFS_FLASH_BAD_BLK) {
-		uffs_BlockInfoExpire(dev, newBc, UFFS_ALL_PAGES);
+	if (UFFS_FLASH_IS_BAD_BLOCK(flash_op_new)) {
+		// bad block ? mark and retry.
+		uffs_Perror(UFFS_MSG_NORMAL,
+					"new bad block %d discovered.", newBlock);
+		uffs_BadBlockProcessNode(dev, newNode);	// erase, mark 'bad' and put in bad block list
 		uffs_BlockInfoPut(dev, newBc);
-		if (newNode->u.list.block == dev->bad.block) {
-			// the recovered block is a BAD block (buy me a lotto, please :-), we need to 
-			// deal with it immediately (mark it as 'bad' and put into bad block list).
-			uffs_BadBlockProcess(dev, newNode);
-		}
-
-		uffs_Perror(UFFS_MSG_NORMAL, "Retry block cover ...");
+		uffs_Perror(UFFS_MSG_NORMAL, "Retry block recover because of bad block...");
 
 		goto retry; // retry on a new erased block ...
 	}
+	else if (UFFS_FLASH_HAVE_ERR(flash_op_new)) {
+		// other error ? just retry.
+		if (flash_op_new == UFFS_FLASH_IO_ERR) {
+			uffs_Perror(UFFS_MSG_NORMAL,
+						"writing to block %d page %d, I/O error ?", 
+						(int)newBlock, (int)i);
+		}
+		else {
+			uffs_Perror(UFFS_MSG_SERIOUS, "flash op error result: %d", flash_op_new);
+		}
+		uffs_BlockInfoPut(dev, newBc);
+		uffs_Perror(UFFS_MSG_NORMAL, "Retry block recover because of flash op failure...");
+		goto retry;	// retry, hope that help...
+	}
+
+#ifdef CONFIG_UFFS_REFRESH_BLOCK
+	if (flash_op_new == UFFS_FLASH_ECC_OK) {
+		// need refresh ? there is no valid data at this point so just erase and retry.
+		uffs_TreeEraseNode(dev, newNode);				// erase the block
+		uffs_TreeInsertToErasedListTail(dev, newNode);	// and put it to erased list
+		uffs_BlockInfoPut(dev, newBc);
+		uffs_Perror(UFFS_MSG_NORMAL, "Retry block recover because of refresh...");
+		goto retry;
+	}
+#endif
 
 	if (succRecover == U_TRUE) {
 		// now it's time to clean the dirty buffers
@@ -887,32 +878,31 @@ retry:
 
 		newNode->u.list.block = bc->block;
 
-		// if the recovered block is a bad block, it's time to process it.
-		if (HAVE_BADBLOCK(dev) && dev->bad.block == newNode->u.list.block) {
-			//uffs_Perror(UFFS_MSG_SERIOUS, "Still have bad block ?");
-			uffs_BadBlockProcess(dev, newNode);
+		if (badBlock) {
+			// Old block was a bad block, process it.
+			uffs_BadBlockProcessNode(dev, newNode);
 		}
 		else {
-			// erase recovered block, put it back to erased block list.
+			// Only erase the 'to be recovered block' when it's not empty.
+			// When flush buffers to a new created block, we passe an empty 'node' and we don't need to erase it in that case.
 			if (uffs_IsThisBlockUsed(dev, bc)) {
-				uffs_FlashEraseBlock(dev, bc->block);
+				// erase recovered block
+				uffs_TreeEraseNode(dev, newNode);
 			}
-			if (HAVE_BADBLOCK(dev))
-				uffs_BadBlockProcess(dev, newNode);
-			else
-				uffs_TreeInsertToErasedListTail(dev, newNode);
+			uffs_TreeInsertToErasedListTail(dev, newNode);
 		}
 	}
 	else {
+		if (badBlock) {
+			// Old block was a bad block, don't process it since recovery failed. 
+			uffs_BadBlockPendingRemove(dev, bc->block);
+		}
 
 		uffs_BlockInfoExpire(dev, bc, UFFS_ALL_PAGES);  // FIXME: this might not be necessary ...
 
-		uffs_FlashEraseBlock(dev, newBlock);
-		newNode->u.list.block = newBlock;
-		if (HAVE_BADBLOCK(dev))
-			uffs_BadBlockProcess(dev, newNode);
-		else
-			uffs_TreeInsertToErasedListTail(dev, newNode);
+		newNode->u.list.block = newBlock;	// just in case the newNode was changed
+		uffs_TreeEraseNode(dev, newNode);
+		uffs_TreeInsertToErasedListTail(dev, newNode);
 	}
 
 	if (dev->buf.dirtyGroup[slot].dirty != NULL ||
@@ -960,13 +950,15 @@ static URET _BufFlush_NewBlock(uffs_Device *dev, int slot)
 
 	type = dev->buf.dirtyGroup[slot].dirty->type;
 	
-	ret = uffs_BufFlush_Exist_With_BlockCover(dev, slot, node, bc);
+	ret = uffs_BufFlush_Exist_With_BlockRecover(dev, slot, node, bc, U_FALSE);
 
 	if (ret == U_SUCC)
-		uffs_InsertNodeToTree(dev, type, node);
+		uffs_InsertNodeToTree(dev, type, node);  // if blockcover success, the node now has valid data
 	else {
-		uffs_FlashEraseBlock(dev, bc->block);
-		uffs_TreeInsertToErasedListTail(dev, node);
+		// block recover failed ? erase the block
+		node->u.list.block = bc->block;
+		uffs_TreeEraseNode(dev, node);
+		uffs_TreeInsertToErasedListTail(dev, node); //put node back to erased list
 	}		
 
 	uffs_BlockInfoPut(dev, bc);
@@ -1029,7 +1021,7 @@ URET
 		TAG_TYPE(tag) = buf->type;
 		TAG_PARENT(tag) = buf->parent;
 		TAG_SERIAL(tag) = buf->serial;
-		TAG_PAGE_ID(tag) = (u8)(buf->page_id);
+		TAG_PAGE_ID(tag) = buf->page_id;
 
 		SEAL_TAG(tag);
 
@@ -1039,8 +1031,9 @@ URET
 			goto ext;
 		}
 		else if (x == UFFS_FLASH_BAD_BLK) {
-			uffs_Perror(UFFS_MSG_NORMAL, "Bad blcok found, start block cover ...");
-			ret = uffs_BufFlush_Exist_With_BlockCover(dev, slot, node, bc);
+			uffs_Perror(UFFS_MSG_NORMAL, "Bad blcok found, start block recover ...");
+
+			ret = uffs_BufFlush_Exist_With_BlockRecover(dev, slot, node, bc, U_TRUE);
 			goto ext;
 		}
 		else {
@@ -1140,7 +1133,7 @@ URET _BufFlush(struct uffs_DeviceSt *dev,
 				ret = uffs_BufFlush_Exist_With_Enough_FreePage(dev,	slot, node, bc);
 			}
 			else {
-				ret = uffs_BufFlush_Exist_With_BlockCover(dev, slot, node, bc);
+				ret = uffs_BufFlush_Exist_With_BlockRecover(dev, slot, node, bc, U_FALSE);
 			}
 		}
 		uffs_BlockInfoPut(dev, bc);
@@ -1452,6 +1445,7 @@ uffs_Buf *uffs_BufGetEx(struct uffs_DeviceSt *dev,
 	uffs_Buf *buf;
 	u16 parent, serial, block, page;
 	uffs_BlockInfo *bc;
+	int ret, pending_type;
 
 	switch (type) {
 	case UFFS_TYPE_DIR:
@@ -1533,8 +1527,19 @@ uffs_Buf *uffs_BufGetEx(struct uffs_DeviceSt *dev,
 	buf->serial = serial;
 	buf->page_id = page_id;
 
-	if (UFFS_FLASH_HAVE_ERR(uffs_FlashReadPage(dev, block, page, buf, oflag & UO_NOECC ? U_TRUE : U_FALSE))) {
-		uffs_Perror(UFFS_MSG_SERIOUS, "can't load page from flash !");
+	ret = uffs_FlashReadPage(dev, block, page, buf, oflag & UO_NOECC ? U_TRUE : U_FALSE);
+
+    pending_type = uffs_BadBlockAddByFlashResult(dev, block, ret);
+
+    // Can't load buffer if:
+    //  1. it's a non-recoverable bad block, or
+    //  2. I/O error or other unknown errors.
+	if (pending_type == UFFS_PENDING_BLK_MARKBAD) {
+		uffs_Perror(UFFS_MSG_SERIOUS, "can't load page from flash, non-recoverable bad block %d !", block);
+		return NULL;
+    }
+    if (pending_type == UFFS_PENDING_BLK_NONE && UFFS_FLASH_HAVE_ERR(ret)) {
+		uffs_Perror(UFFS_MSG_SERIOUS, "can't load page from flash, I/O error ?");
 		return NULL;
 	}
 
@@ -1557,7 +1562,6 @@ URET uffs_BufPut(uffs_Device *dev, uffs_Buf *buf)
 {
 	URET ret = U_FAIL;
 
-	dev = dev;
 	if (buf == NULL) {
 		uffs_Perror(UFFS_MSG_NORMAL,  "Can't put an NULL buffer!");
 	}
@@ -1593,15 +1597,13 @@ uffs_Buf * uffs_BufClone(uffs_Device *dev, uffs_Buf *buf)
 {
 	uffs_Buf *p;
 
-	p = _FindFreeBufEx(dev, 1);
+	p = _GetFreeCloneBuf(dev);
 	if (p == NULL) {
 		uffs_Perror(UFFS_MSG_SERIOUS,
 					"no enough free pages for clone! " \
 					"Please increase Clone Buffer Count threshold.");
 	}
 	else {
-		_BreakFromBufList(dev, p);
-
 		if (buf) {
 			p->parent = buf->parent;
 			p->type = buf->type;
@@ -1629,7 +1631,6 @@ uffs_Buf * uffs_BufClone(uffs_Device *dev, uffs_Buf *buf)
  */
 URET uffs_BufFreeClone(uffs_Device *dev, uffs_Buf *buf)
 {
-	dev = dev; //make compiler happy
 	if (!buf)
 		return U_FAIL;
 
@@ -1642,7 +1643,7 @@ URET uffs_BufFreeClone(uffs_Device *dev, uffs_Buf *buf)
 
 	buf->ref_count = 0;
 	buf->mark = UFFS_BUF_EMPTY;
-	_LinkToBufListTail(dev, buf);
+	_InsertToCloneBufList(dev, buf);
 
 	return U_SUCC;
 }

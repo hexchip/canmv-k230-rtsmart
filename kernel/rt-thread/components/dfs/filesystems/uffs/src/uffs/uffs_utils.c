@@ -193,8 +193,9 @@ static void _ForceFormatAndCheckBlock(uffs_Device *dev, int block)
 	bad = U_FALSE;
 
 bad_out:
-	if (bad == U_TRUE)
+	if (bad == U_TRUE) {
 		uffs_FlashMarkBadBlock(dev, block);
+	}
 ext:
 	if (buf)
 		uffs_BufFreeClone(dev, buf);
@@ -208,7 +209,7 @@ ext:
 
 
 
-URET uffs_FormatDevice(uffs_Device *dev, UBOOL force)
+URET uffs_FormatDeviceEx(uffs_Device *dev, UBOOL force, UBOOL lock)
 {
 	u16 i, slot;
 	URET ret = U_SUCC;
@@ -219,7 +220,9 @@ URET uffs_FormatDevice(uffs_Device *dev, UBOOL force)
 	if (dev->ops == NULL) 
 		return U_FAIL;
 
-	uffs_GlobalFsLockLock();
+	if (lock) {
+		uffs_GlobalFsLockLock();
+	}
 
 	ret = uffs_BufFlushAll(dev);
 
@@ -270,7 +273,7 @@ URET uffs_FormatDevice(uffs_Device *dev, UBOOL force)
 		if (uffs_FlashIsBadBlock(dev, i) == U_FALSE) {
 			uffs_FlashEraseBlock(dev, i);
 			if (HAVE_BADBLOCK(dev))
-				uffs_BadBlockProcess(dev, NULL);
+				uffs_BadBlockProcessNode(dev, NULL);
 		}
 		else {
 #ifdef CONFIG_ENABLE_BAD_BLOCK_VERIFY
@@ -291,9 +294,16 @@ URET uffs_FormatDevice(uffs_Device *dev, UBOOL force)
 		ret = U_FAIL;
 	}
 
-	uffs_GlobalFsLockUnlock();
+	if (lock) {
+		uffs_GlobalFsLockUnlock();
+	}
 
 	return ret;
+}
+
+URET uffs_FormatDevice(uffs_Device *dev, UBOOL force)
+{
+	return uffs_FormatDeviceEx(dev, force, U_TRUE);
 }
 
 static const char * GetTagName(struct uffs_TagStoreSt *s)

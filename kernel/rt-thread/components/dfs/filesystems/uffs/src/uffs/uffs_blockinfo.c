@@ -40,6 +40,7 @@
 #include "uffs/uffs_blockinfo.h"
 #include "uffs/uffs_public.h"
 #include "uffs/uffs_os.h"
+#include "uffs/uffs_badblock.h"
 
 #include <string.h>
 
@@ -215,26 +216,34 @@ static void _MoveBcToTail(uffs_Device *dev, uffs_BlockInfo *bc)
  */
 URET uffs_BlockInfoLoad(uffs_Device *dev, uffs_BlockInfo *work, int page)
 {
-	int i, ret;
+	int i, ret, nfailed;
 	uffs_PageSpare *spare;
 
 	if (page == UFFS_ALL_PAGES) {
+		nfailed = 0;
 		for (i = 0; i < dev->attr->pages_per_block; i++) {
 			spare = &(work->spares[i]);
 			if (spare->expired == 0)
 				continue;
-			
+
 			ret = uffs_FlashReadPageTag(dev, work->block, i,
 											&(spare->tag));
+
+			uffs_BadBlockAddByFlashResult(dev, work->block, ret);
+
 			if (UFFS_FLASH_HAVE_ERR(ret)) {
 				uffs_Perror(UFFS_MSG_SERIOUS,
 							"load block %d page %d spare fail.",
 							work->block, i);
-				return U_FAIL;
+				TAG_VALID_BIT(&(spare->tag)) = TAG_INVALID;	
+				nfailed++;	
 			}
+
 			spare->expired = 0;
 			work->expired_count--;
 		}
+		if (nfailed > 0)
+			return U_FAIL;
 	}
 	else {
 		if (page < 0 || page >= dev->attr->pages_per_block) {
@@ -242,9 +251,12 @@ URET uffs_BlockInfoLoad(uffs_Device *dev, uffs_BlockInfo *work, int page)
 			return U_FAIL;
 		}
 		spare = &(work->spares[page]);
-		if (spare->expired != 0) {
+		if (spare->expired) {
 			ret = uffs_FlashReadPageTag(dev, work->block, page,
 											&(spare->tag));
+
+            uffs_BadBlockAddByFlashResult(dev, work->block, ret);
+
 			if (UFFS_FLASH_HAVE_ERR(ret)) {
 				uffs_Perror(UFFS_MSG_SERIOUS,
 							"load block %d page %d spare fail.",
@@ -337,7 +349,6 @@ uffs_BlockInfo * uffs_BlockInfoGet(uffs_Device *dev, int block)
  */
 void uffs_BlockInfoPut(uffs_Device *dev, uffs_BlockInfo *p)
 {
-	dev = dev;
 	if (p)
 	{
 		if (p->ref_count == 0) {
@@ -411,3 +422,18 @@ void uffs_BlockInfoExpireAll(uffs_Device *dev)
 	}
 	return;
 }
+
+/** This will init block info cache for an erased block - all '0xFF' */
+void uffs_BlockInfoInitErased(uffs_Device *dev, uffs_BlockInfo *p)
+{
+	uffs_PageSpare *spare;
+	int i;
+
+	for (i = 0; i < dev->attr->pages_per_block; i++) {
+		spare = &(p->spares[i]);
+		spare->expired = 0;
+		memset(&(spare->tag), 0xFF, sizeof(struct uffs_TagsSt));
+	}
+	p->expired_count = 0;
+}
+

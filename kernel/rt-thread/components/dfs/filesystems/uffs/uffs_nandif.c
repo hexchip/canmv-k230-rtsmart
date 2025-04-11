@@ -6,10 +6,14 @@
 #include <rtdevice.h>
 #include "dfs_uffs.h"
 
-#if 0
+#if  RT_CONFIG_UFFS_ECC_MODE != UFFS_ECC_HW_AUTO
+    #error "UFFS Only support ecc_hw_auto"
+#endif
+
 static void inline dump_buffer(const char *tag, const uint8_t *buffer, size_t size)
 {
-    rt_kprintf("%s->%d\n", tag, size);
+#if 0
+rt_kprintf("%s->%d\n", tag, size);
     for(size_t i = 0; i < size; i++) {
         rt_kprintf("%02X ", buffer[i]);
         if(15 == (i % 16)) {
@@ -17,8 +21,8 @@ static void inline dump_buffer(const char *tag, const uint8_t *buffer, size_t si
         }
     }
     rt_kprintf("\n");
-}
 #endif
+}
 
 static int nand_init_flash(uffs_Device *dev)
 {
@@ -29,6 +33,7 @@ static int nand_release_flash(uffs_Device *dev)
 {
     return UFFS_FLASH_NO_ERR;
 }
+
 static int nand_erase_block(uffs_Device *dev, unsigned block)
 {
     int res;
@@ -58,124 +63,6 @@ static int nand_mark_badblock(uffs_Device *dev, unsigned block)
 }
 #endif
 
-#if (RT_CONFIG_UFFS_ECC_MODE == UFFS_ECC_NONE) || (RT_CONFIG_UFFS_ECC_MODE == UFFS_ECC_SOFT)
-static int nand_read_page(uffs_Device *dev,
-                          u32          block,
-                          u32          page,
-                          u8          *data,
-                          int          data_len,
-                          u8          *ecc,
-                          rt_uint8_t  *spare,
-                          int          spare_len)
-{
-    int res;
-
-    page = block * dev->attr->pages_per_block + page;
-    if (data == NULL && spare == NULL)
-    {
-#if defined(RT_UFFS_USE_CHECK_MARK_FUNCITON)
-        RT_ASSERT(0); //should not be here
-#else
-        /* check block status: bad or good */
-        rt_uint8_t spare[UFFS_MAX_SPARE_SIZE];
-
-        rt_memset(spare, 0, UFFS_MAX_SPARE_SIZE);
-
-        rt_mtd_nand_read(RT_MTD_NAND_DEVICE(dev->_private),
-                         page, RT_NULL, 0,
-                         spare, dev->attr->spare_size);//dev->mem.spare_data_size
-
-        res = spare[dev->attr->block_status_offs] == 0xFF ?
-                               UFFS_FLASH_NO_ERR : UFFS_FLASH_BAD_BLK;
-
-        return res;
-#endif
-    }
-
-    rt_mtd_nand_read(RT_MTD_NAND_DEVICE(dev->_private),
-                     page, data, data_len, spare, spare_len);
-
-    return UFFS_FLASH_NO_ERR;
-}
-
-static int nand_write_page(uffs_Device *dev,
-                           u32          block,
-                           u32          page,
-                           const u8    *data,
-                           int          data_len,
-                           const u8    *spare,
-                           int          spare_len)
-{
-    int res;
-
-    RT_ASSERT(UFFS_MAX_SPARE_SIZE >= dev->attr->spare_size);
-
-    page = block * dev->attr->pages_per_block + page;
-
-    if (data == NULL && spare == NULL)
-    {
-#if defined(RT_UFFS_USE_CHECK_MARK_FUNCITON)
-        RT_ASSERT(0); //should not be here
-#else
-        /* mark bad block  */
-        rt_uint8_t spare[UFFS_MAX_SPARE_SIZE];
-
-        rt_memset(spare, 0xFF, UFFS_MAX_SPARE_SIZE);
-        spare[dev->attr->block_status_offs] =  0x00;
-
-        res = rt_mtd_nand_write(RT_MTD_NAND_DEVICE(dev->_private),
-                                page, RT_NULL, 0,
-                                spare, dev->attr->spare_size);//dev->mem.spare_data_size
-        if (res != RT_EOK)
-            goto __error;
-#endif
-    }
-
-    res = rt_mtd_nand_write(RT_MTD_NAND_DEVICE(dev->_private),
-                           page,  data, data_len, spare, spare_len);
-    if (res != RT_EOK)
-        goto __error;
-
-    return UFFS_FLASH_NO_ERR;
-
-__error:
-    return UFFS_FLASH_IO_ERR;
-}
-
-const uffs_FlashOps nand_ops =
-{
-    nand_init_flash,    /* InitFlash() */
-    nand_release_flash, /* ReleaseFlash() */
-    nand_read_page,     /* ReadPage() */
-    NULL,               /* ReadPageWithLayout */
-    nand_write_page,    /* WritePage() */
-    NULL,               /* WritePageWithLayout */
-#if defined(RT_UFFS_USE_CHECK_MARK_FUNCITON)
-    nand_check_block,
-    nand_mark_badblock,
-#else
-    NULL,               /* IsBadBlock(), let UFFS take care of it. */
-    NULL,               /* MarkBadBlock(), let UFFS take care of it. */
-#endif
-    nand_erase_block,   /* EraseBlock() */
-};
-
-void uffs_setup_storage(struct uffs_StorageAttrSt *attr,
-                        struct rt_mtd_nand_device *nand)
-{
-    rt_memset(attr, 0, sizeof(struct uffs_StorageAttrSt));
-
-//  attr->total_blocks = nand->end_block - nand->start_block + 1;/* no use */
-    attr->page_data_size = nand->page_size;                /* page data size */
-    attr->pages_per_block = nand->pages_per_block;         /* pages per block */
-    attr->spare_size = nand->oob_size;                     /* page spare size */
-    attr->ecc_opt = RT_CONFIG_UFFS_ECC_MODE;               /* ecc option */
-    attr->ecc_size = 0;                                    /* ecc size is 0 , the uffs will calculate the ecc size*/
-    attr->block_status_offs = attr->ecc_size;              /* indicate block bad or good, offset in spare */
-    attr->layout_opt = RT_CONFIG_UFFS_LAYOUT;              /* let UFFS do the spare layout */
-}
-
-#elif  RT_CONFIG_UFFS_ECC_MODE == UFFS_ECC_HW_AUTO
 static int WritePageWithLayout(uffs_Device         *dev,
                                u32                  block,
                                u32                  page,
@@ -186,64 +73,42 @@ static int WritePageWithLayout(uffs_Device         *dev,
 {
     int res;
     int spare_len, oob_size;
-    rt_uint8_t spare[UFFS_MAX_SPARE_SIZE];
-    rt_uint8_t spare_temp[UFFS_MAX_SPARE_SIZE];
+    rt_uint8_t spare[2][UFFS_MAX_SPARE_SIZE];
 
     // RT_ASSERT(UFFS_MAX_SPARE_SIZE >= dev->attr->spare_size);
 
-    page = block * dev->attr->pages_per_block + page;
+    if (data == NULL && ts == NULL) {
+        RT_ASSERT(0); //should not be here
+    }
+
     spare_len = dev->mem.spare_data_size;
+    page = block * dev->attr->pages_per_block + page;
 
     oob_size = RT_MTD_NAND_DEVICE(dev->_private)->oob_size;
     if(oob_size > UFFS_MAX_SPARE_SIZE) {
         oob_size = UFFS_MAX_SPARE_SIZE;
     }
 
-    if (data == NULL && ts == NULL)
-    {
-#if defined(RT_UFFS_USE_CHECK_MARK_FUNCITON)
-        RT_ASSERT(0); //should not be here
-#else
-        /* mark bad block  */
-        rt_memset(spare, 0xFF, UFFS_MAX_SPARE_SIZE);
-        spare[dev->attr->block_status_offs] =  0x00;
-
-        res = rt_mtd_nand_write(RT_MTD_NAND_DEVICE(dev->_private),
-                                page, RT_NULL, 0,
-                                spare, sizeof(spare));
-        if (res != RT_EOK)
-            goto __error;
-
-        dev->st.io_write++;
-        return UFFS_FLASH_NO_ERR;
-#endif
-    }
-
-    if (data != NULL && data_len != 0)
-    {
+    if (data != NULL && data_len != 0) {
         RT_ASSERT(data_len == dev->attr->page_data_size);
 
         dev->st.page_write_count++;
         dev->st.io_write += data_len;
     }
 
-    if (ts != RT_NULL)
-    {
-        uffs_FlashMakeSpare(dev, ts, RT_NULL, (u8 *)spare);
+    rt_memset(spare, 0xFF, sizeof(spare));
+
+    if (ts != RT_NULL) {
+        uffs_FlashMakeSpare(dev, ts, RT_NULL, (u8 *)&spare[0]);
         dev->st.spare_write_count++;
         dev->st.io_write += spare_len;
 
-        spare[2] = spare[spare_len - 1];
-        spare[spare_len - 1] = 0xff;
-
-        rt_memcpy(spare_temp, spare, spare_len);
-        rt_mtd_nand_map_user(RT_MTD_NAND_DEVICE(dev->_private), spare, spare_temp, 0, spare_len);
+        rt_mtd_nand_map_user(RT_MTD_NAND_DEVICE(dev->_private), (rt_uint8_t *)&spare[1], (rt_uint8_t *)&spare[0], 0, 16);
     }
 
     res = rt_mtd_nand_write(RT_MTD_NAND_DEVICE(dev->_private),
-                            page, data, data_len, spare, spare_len);
-    if (res != RT_EOK)
-    {
+                            page, data, data_len, (const rt_uint8_t *)&spare[1], oob_size);
+    if (res != RT_EOK) {
         goto __error;
     }
 
@@ -264,71 +129,48 @@ static URET ReadPageWithLayout(uffs_Device   *dev,
 {
     int res = UFFS_FLASH_NO_ERR;
     int spare_len, oob_size;
-    rt_uint8_t spare[UFFS_MAX_SPARE_SIZE];
-    rt_uint8_t spare_temp[UFFS_MAX_SPARE_SIZE];
+    rt_uint8_t spare[2][UFFS_MAX_SPARE_SIZE];
 
     // RT_ASSERT(UFFS_MAX_SPARE_SIZE >= dev->attr->spare_size);
 
-    page = block * dev->attr->pages_per_block + page;
+    if (data == RT_NULL && ts == RT_NULL) {
+        RT_ASSERT(0); //should not be here
+    }
+
     spare_len = dev->mem.spare_data_size;
+    page = block * dev->attr->pages_per_block + page;
 
     oob_size = RT_MTD_NAND_DEVICE(dev->_private)->oob_size;
     if(oob_size > UFFS_MAX_SPARE_SIZE) {
         oob_size = UFFS_MAX_SPARE_SIZE;
     }
 
-    if (data == RT_NULL && ts == RT_NULL)
-    {
-#if defined(RT_UFFS_USE_CHECK_MARK_FUNCITON)
-        RT_ASSERT(0); //should not be here
-#else
-        /* check block good or bad */
-
-        rt_mtd_nand_read(RT_MTD_NAND_DEVICE(dev->_private),
-                         page, RT_NULL, 0,
-                         spare, sizeof(spare));
-
-        dev->st.io_read++;
-
-        res = spare[dev->attr->block_status_offs] == 0xFF ?
-                               UFFS_FLASH_NO_ERR : UFFS_FLASH_BAD_BLK;
-        return res;
-#endif
-    }
-
-    if (data != RT_NULL)
-    {
+    if (data != RT_NULL) {
         dev->st.io_read += data_len;
         dev->st.page_read_count++;
     }
 
+    rt_memset(spare, 0xFF, sizeof(spare));
+
     res = rt_mtd_nand_read(RT_MTD_NAND_DEVICE(dev->_private),
-                           page, data, data_len, ts ? spare : NULL,
+                           page, data, data_len, ts ? (rt_uint8_t *)&spare[0] : NULL,
                            ts ? oob_size : 0);
-    if (res == 0)
-    {
+    if (res == 0) {
         res = UFFS_FLASH_NO_ERR;
-    }
-    else if (res == -1)
-    {
+    } else if (res == -1) {
         //TODO ecc correct, add code to use hardware do ecc correct
         res = UFFS_FLASH_ECC_OK;
-    }
-    else
-    {
+    } else {
         res = UFFS_FLASH_ECC_FAIL;
     }
 
-    if (ts != RT_NULL)
-    {
-        rt_memcpy(spare_temp, spare, oob_size);
-        rt_mtd_nand_unmap_user(RT_MTD_NAND_DEVICE(dev->_private), spare, spare_temp, 0, 16);
+    if (ts != RT_NULL) {
+        rt_mtd_nand_unmap_user(RT_MTD_NAND_DEVICE(dev->_private), (rt_uint8_t *)&spare[1], (rt_uint8_t *)&spare[0], 0, 16);
 
         // unload ts and ecc from spare, you can modify it if you like
-        uffs_FlashUnloadSpare(dev, (const u8 *)spare, ts, RT_NULL);
+        uffs_FlashUnloadSpare(dev, (const rt_uint8_t *)&spare[1], ts, RT_NULL);
 
-        if ((spare[spare_len - 1] == 0xFF) && (res == UFFS_FLASH_NO_ERR))
-        {
+        if ((spare[1][spare_len - 1] == 0xFF) && (res == UFFS_FLASH_NO_ERR)) {
             res = UFFS_FLASH_NOT_SEALED;
         }
 
@@ -356,6 +198,7 @@ const uffs_FlashOps nand_ops =
     NULL,               /* MarkBadBlock(), let UFFS take care of it. */
 #endif
     nand_erase_block,   /* EraseBlock() */
+    NULL,               /* CheckErasedBlock() */
 };
 
 static rt_uint8_t hw_flash_ecc_layout[UFFS_SPARE_LAYOUT_SIZE] = {0xFF, 0x00};
@@ -382,4 +225,3 @@ void uffs_setup_storage(struct uffs_StorageAttrSt *attr,
     attr->data_layout = attr->_uffs_data_layout;
     attr->ecc_layout = attr->_uffs_ecc_layout;
 }
-#endif

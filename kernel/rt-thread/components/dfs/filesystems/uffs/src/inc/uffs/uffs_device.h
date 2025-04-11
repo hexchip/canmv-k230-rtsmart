@@ -39,6 +39,7 @@
 #ifndef UFFS_DEVICE_H
 #define UFFS_DEVICE_H
 
+#include "uffs_config.h"
 #include "uffs/uffs_types.h"
 #include "uffs/uffs_buf.h"
 #include "uffs/uffs_blockinfo.h"
@@ -102,8 +103,9 @@ struct uffs_DirtyGroupSt {
  * \brief uffs page buffers descriptor
  */
 struct uffs_PageBufDescSt {
-	uffs_Buf *head;			//!< head of buffers
-	uffs_Buf *tail;			//!< tail of buffers
+	uffs_Buf *head;			//!< head of buffers (double linked list)
+	uffs_Buf *tail;			//!< tail of buffers (double linked list)
+	uffs_Buf *clone;		//!< head of clone buffers (single linked list)
 	struct uffs_DirtyGroupSt dirtyGroup[MAX_DIRTY_BUF_GROUPS];	//!< dirty buffer groups
 	int buf_max;			//!< maximum buffers
 	int dirty_buf_max;		//!< maximum dirty buffer allowed
@@ -121,14 +123,6 @@ struct uffs_PageCommInfoSt {
 	u16 pg_data_size;			//!< page data size
 	u16 header_size;			//!< header size
 	u16 pg_size;				//!< page size
-};
-
-/** 
- * \struct uffs_NewBadBlockSt
- * \brief holding new discovered bad block
- */
-struct uffs_NewBadBlockSt {
-	u16 block;				//!< bad block, FIX ME to process more than one bad block
 };
 
 /**
@@ -162,6 +156,34 @@ typedef struct uffs_ConfigSt {
 } uffs_Config;
 
 
+/** pending block mark definitions */
+#define UFFS_PENDING_BLK_NONE      -1      /* not a valid pending type, for function return value purpose */
+#define UFFS_PENDING_BLK_REFRESH	0		/* require refresh the block - recover and erase */
+#define UFFS_PENDING_BLK_RECOVER	1		/* require block recovery and mark bad block */
+#define UFFS_PENDING_BLK_CLEANUP	2		/* require block cleanup (e.g. due to interrupted write),
+                                              should not try to recover the data, erase immediately */
+#define UFFS_PENDING_BLK_MARKBAD   3       /* require bad block marking, should not try to recover the data */
+
+/**
+ * \struct uffs_PendingBlockSt
+ * \typedef uffs_PendingBlock
+ * \brief Pending block descriptor
+ */
+typedef struct uffs_PendingBlockSt {
+	u16 block;			//!< pending block number
+	u8 mark;			//!< pending block mark
+} uffs_PendingBlock;
+
+/**
+ * \struct uffs_PendingListSt
+ * \brief Pending block list
+ */
+struct uffs_PendingListSt {
+	int count;											//!< pending block counter
+	uffs_PendingBlock list[CONFIG_MAX_PENDING_BLOCKS];	//!< pending block list
+	u16 block_in_recovery;                              //!< pending block being recovered
+};
+
 /** 
  * \struct uffs_DeviceSt
  * \brief The core data structure of UFFS, all information needed by manipulate UFFS object
@@ -180,7 +202,7 @@ struct uffs_DeviceSt {
 	struct uffs_PageBufDescSt		buf;		//!< page buffers
 	struct uffs_PageCommInfoSt		com;		//!< common information
 	struct uffs_TreeSt				tree;		//!< tree list of block
-	struct uffs_NewBadBlockSt		bad;		//!< new discovered bad block
+	struct uffs_PendingListSt		pending;	//!< pending block list, to be recover/mark 'bad'/refresh
 	struct uffs_FlashStatSt			st;			//!< statistic (counters)
 	struct uffs_memAllocatorSt		mem;		//!< uffs memory allocator
 	struct uffs_ConfigSt			cfg;		//!< uffs config

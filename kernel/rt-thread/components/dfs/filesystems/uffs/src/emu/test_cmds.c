@@ -46,6 +46,7 @@
 #include "uffs/uffs_mtb.h"
 #include "uffs/uffs_find.h"
 #include "uffs/uffs_badblock.h"
+#include "uffs/uffs_tree.h"
 #include "cmdline.h"
 #include "api_test.h"
 
@@ -458,6 +459,172 @@ fail:
 	return -1;
 }
 
+/*
+ * This verify the bug fixed by commit dede97b1.
+ * The bug caused a clone buf failure and UFFS complain something like "no enough free pages for clone!".
+ */
+static int cmd_t_dede97b1(int argc, char *argv[])
+{
+	// assume:
+	//	total page buf: 40
+	//	page size: 512
+	//  pages per block: 32
+	//  spare size: 16
+	
+#define LEN_A (508 * 30) // 30 pages
+#define LEN_B (508 * 10) // 10 pages
+
+	int fd = -1;
+	URET ret = -1;
+	const int START_A = 508 * 31;			// the second block
+	const int START_B = START_A + 508 * 32; // the third block
+	const char *name;
+	char buf_a[LEN_A];
+	char buf_b[LEN_B];
+
+	uffs_Device *dev;
+	const char *mount = "/";
+
+	if (argc < 2) {
+		return CLI_INVALID_ARG;
+	}
+
+	name = argv[1];
+
+	fd = uffs_open(name, UO_RDWR);
+	if (fd < 0) {
+		MSGLN("Can't open %s", name);
+		goto ext;
+	}
+
+	///
+	/// READ A
+	///
+
+	ret = uffs_seek(fd, START_A, USEEK_SET);
+	if (ret != START_A) {
+		MSGLN("lseek return %d\n", ret);
+		goto ext;
+	}
+
+	sprintf(buf_a, "start test, read %d bytes...", LEN_A);
+	ret = uffs_read(fd, buf_a, LEN_A);
+	if (ret != LEN_A) {
+		MSGLN("read file failed, ret = %d", ret);
+		ret = -1;
+		goto ext;
+	}
+	else {
+		MSGLN("read %d bytes succ.", ret);
+	}
+
+	MSGLN("now print buf status:");
+	dev = uffs_GetDeviceFromMountPoint(mount);
+	if (dev == NULL) {
+		MSGLN("Can't get device from mount point %s", mount);
+		ret = -1;
+		goto ext;
+	}
+	uffs_BufInspect(dev);
+	uffs_PutDevice(dev);
+
+	///
+	/// READ B
+	///
+
+	ret = uffs_seek(fd, START_B, USEEK_SET);
+	if (ret != START_B) {
+		MSGLN("lseek return %d\n", ret);
+		goto ext;
+	}
+
+	sprintf(buf_b, "start test, read %d bytes...", LEN_B);
+	ret = uffs_read(fd, buf_b, LEN_B);
+	if (ret != LEN_B) {
+		MSGLN("read file failed, ret = %d", ret);
+		ret = -1;
+		goto ext;
+	}
+	else {
+		MSGLN("read %d bytes succ.", ret);
+	}
+
+	MSGLN("now print buf status:");
+	dev = uffs_GetDeviceFromMountPoint(mount);
+	if (dev == NULL) {
+		MSGLN("Can't get device from mount point %s", mount);
+		ret = -1;
+		goto ext;
+	}
+	uffs_BufInspect(dev);
+	uffs_PutDevice(dev);
+
+
+	///
+	/// WRITE A
+	///
+
+	ret = uffs_seek(fd, START_A, USEEK_SET);
+	if (ret != START_A) {
+		MSGLN("lseek return %d\n", ret);
+		goto ext;
+	}
+
+	MSGLN("now try write %d bytes...", LEN_A);
+	ret = uffs_write(fd, buf_a, LEN_A);
+	if (ret != LEN_A) {
+		MSGLN("write %d bytes failed, return %d\n", LEN_A, ret);
+		ret = -1;
+		goto ext;
+	}
+
+	MSGLN("now print buf status again:");
+	dev = uffs_GetDeviceFromMountPoint(mount);
+	if (dev == NULL) {
+		MSGLN("Can't get device from mount point %s", mount);
+		ret = -1;
+		goto ext;
+	}
+	uffs_BufInspect(dev);
+	uffs_PutDevice(dev);
+
+	///
+	/// WRITE B
+	///
+
+	ret = uffs_seek(fd, START_B, USEEK_SET);
+	if (ret != START_B) {
+		MSGLN("lseek return %d\n", ret);
+		goto ext;
+	}
+
+	MSGLN("now try write %d bytes...", LEN_B);
+	ret = uffs_write(fd, buf_b, LEN_B);
+	if (ret != LEN_B) {
+		MSGLN("write %d bytes failed, return %d\n", LEN_B, ret);
+		ret = -1;
+		goto ext;
+	}
+
+	MSGLN("now print buf status again:");
+	dev = uffs_GetDeviceFromMountPoint(mount);
+	if (dev == NULL) {
+		MSGLN("Can't get device from mount point %s", mount);
+		ret = -1;
+		goto ext;
+	}
+	uffs_BufInspect(dev);
+	uffs_PutDevice(dev);
+
+	ret = 0;
+	MSGLN("test completed.");
+
+ext:
+	if (fd >= 0)
+		uffs_close(fd);
+
+	return ret;
+}
 
 /* usage: t_pgrw
  *
@@ -565,11 +732,8 @@ static int cmd_TestPageReadWrite(int argc, char *argv[])
 
 ext:
 	if (node) {
-		uffs_FlashEraseBlock(dev, node->u.list.block);
-		if (HAVE_BADBLOCK(dev))
-			uffs_BadBlockProcess(dev, node);
-		else
-			uffs_TreeInsertToErasedListTail(dev, node);
+		uffs_TreeEraseNode(dev, node);
+		uffs_TreeInsertToErasedListTail(dev, node);
 	}
 
 	if (dev)
@@ -646,8 +810,8 @@ static int cmd_TestPopulateFiles(int argc, char *argv[])
 	const char *start = "/";
 	int count = 80;
 	int i, fd, num;
-	char name[128];
-	char buf[128];
+	char name[512 + 1];
+	char buf[512 + 1];
 	uffs_DIR *dirp;
 	struct uffs_dirent *ent;
 	unsigned long bitmap[50] = {0};	// one bit per file, maximu 32*50 = 1600 files
@@ -962,7 +1126,26 @@ static int cmd_tcheck_seq(int argc, char *argv[])
 	return ret;
 }
 
+static int cmd_truncate(int argc, char *argv[])
+{
+	int fd;
+	int ret = 0;
+	long remain;
 
+	CHK_ARGC(3, 3);
+
+	if (sscanf(argv[1], "%d", &fd) != 1) {
+		return -1;
+	}
+
+	if (sscanf(argv[2], "%ld", &remain) != 1) {
+		return -1;
+	}
+
+	ret = uffs_ftruncate(fd, remain);
+
+	return (ret < 0 ? -1 : 0);
+}
 
 /**
  * write random seq to file
@@ -1166,9 +1349,12 @@ static const struct cli_command test_cmds[] =
 	{ cmd_twrite_seq,			"t_write_seq",	"<fd> <size>",	"write seq file <fd>", },
 	{ cmd_tseek,				"t_seek",		"<fd> <offset> [<origin>]",	"seek <fd> file pointer to <offset> from <origin>", },
 	{ cmd_tclose,				"t_close",		"<fd>",				"close <fd>", },
+	{ cmd_truncate,				"t_truncate",	"<fd> <remain>",	"change <fd> size to <remain>", },
 	{ cmd_dump,					"dump",			"<mount>",			"dump <mount>", },
 
 	{ cmd_apisrv,				"apisrv",		NULL,				"start API test server", },
+
+	{ cmd_t_dede97b1,           "t_dede97b1",	NULL,				"verify bug fixed by commit dede97b1", },
 
     { NULL, NULL, NULL, NULL }
 };

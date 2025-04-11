@@ -30,7 +30,7 @@ src/uffs/uffs_version.c
 ''')
 
 src = src + uffs
- 
+
 CPPPATH = [cwd, cwd + '/src/inc']
 
 group = DefineGroup('Filesystem', src , depend = ['RT_USING_DFS', 'RT_USING_DFS_UFFS'], CPPPATH = CPPPATH)

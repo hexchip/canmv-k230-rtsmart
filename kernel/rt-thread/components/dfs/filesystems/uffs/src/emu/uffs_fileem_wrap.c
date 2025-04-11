@@ -61,6 +61,15 @@ struct uffs_FileEmuBitFlip {
 	u8 mask;
 };
 
+/* power cut simulation controlled by OS environment variable 'POWER_CUT':
+ *  '0' - no power cut simulation
+ *  '1' - simulate power cut before writing the seal byte
+ *  '2' - simulate power cut before writting the spare area
+ *  '3' - simulate power cut when writting the page data
+ *  '4' - simulate power cut when writting the mini header
+ */
+#define FILEEMU_POWER_CUT { 50, 4 }  // Power cut when writing block #50, page #4.
+
 /* simulate bad blocks */
 #define FILEEMU_STOCK_BAD_BLOCKS	{5, 180}	// bad block come from manufacture
 #define FILEEMU_ERASE_BAD_BLOCKS	{100, 150}	// new bad block discovered when erasing
@@ -68,12 +77,13 @@ struct uffs_FileEmuBitFlip {
 /* simulating bit flip */
 #define FILEEMU_WRITE_BIT_FLIP \
 	{ \
-		{20, 2, 10, 1 << 4},	/* block 20, page 2, offset 10, bit 4 */	\
-		{24, 4, -3, 1 << 2},	/* block 24, page 4, spare offset 3, bit 2*/ \
-		{60, 1, 5, 1 << 3},		/* block 60, page 1, offset 5, bit 3 */ \
-		{66, 1, 15, 1 << 7},	/* block 66, page 1, offset 300, bit 7 */ \
-		{80, 2, 2, 1 << 1},		/* block 80, page 2, offset 2, bit 1 */ \
-		{88, 2, 100, 1 << 5},	/* block 88, page 2, offset 100, bit 5 */ \
+		{20, 2, 10, 1 << 4},		/* block 20, page 2, offset 10, bit 4 */	\
+		{24, 4, -3, 1 << 2},		/* block 24, page 4, spare offset 3, bit 2 */ \
+		{60, 1, 5, 1 << 3 | 1 << 5 },/* block 60, page 1, offset 5, bit 3,5 */ \
+		{66, 1, 15, 1 << 7},		/* block 66, page 1, offset 300, bit 7 */ \
+		{70, 3, -4, 1 << 2 | 1 << 6 },/* block 70, page 3, spare offset 4, bit 2,6 */ \
+		{80, 2, 2, 1 << 1 | 1 << 7 },/* block 80, page 2, offset 2, bit 1,7 */ \
+		{88, 2, 100, 1 << 5},		/* block 88, page 2, offset 100, bit 5 */ \
 	}
 
 
@@ -205,30 +215,71 @@ static void InjectBitFlip(uffs_Device *dev, u32 block, u32 page)
 	int i;
 	u8 *p;
 
+    int power_cut_config[] = FILEEMU_POWER_CUT;
+    int power_cut_enable = 0;
+    char *env;
+
 	fseek(emu->fp, page_offset, SEEK_SET);
 	fread(buf, 1, full_page_size, emu->fp);
 
 	p = NULL;
-	for (i = 0; i < ARRAY_SIZE(flips); i++) {
-		x = &flips[i];
-		if (x->block == block && x->page == page) {
-			if (x->offset >= 0) {
-				printf(" --- Inject data bit flip at block%d, page%d, offset%d, mask%d --- \n", block, page, x->offset, x->mask);
-				p = (u8 *)(data + x->offset);
-			}
-			else {
-				printf(" --- Inject spare bit flip at block%d, page%d, offset%d, mask%d --- \n", block, page, -x->offset, x->mask);
-				p = (u8 *)(spare - x->offset);
-			}
-			*p = (*p & ~x->mask) | (~(*p & x->mask) & x->mask);
-		}
-	}
+    if (block == power_cut_config[0] && page == power_cut_config[1] && spare) {
+        env = getenv("POWER_CUT");
+        if (env && *env != '0') {
+            power_cut_enable = *env - '0';
+            switch(*env) {
+                case '1':
+                    // simulate power cut before writing the seal byte
+                    p = spare + dev->mem.spare_data_size - 1;
+                    *p = 0;
+                    break;
+                case '2':
+                    // simulate power cut before writting the spare area
+                    p = spare;
+                    memset(p, 0xFF, dev->mem.spare_data_size);
+                case '3':
+                    // simulate power cut when writting the page data (10 bytes written)
+                    p = data;
+                    memset(p + 10, 0xFF, sizeof(buf) - 10);
+                    break;
+                case '4':
+                    // simulate power cut when writting the mini header (1 byte written)
+                    p = data;
+                    memset(p + 1, 0xFF, sizeof(buf) - 1);
+                    break;
+            }
+        }
+    }
+
+    if (!power_cut_enable) {
+        for (i = 0; i < ARRAY_SIZE(flips); i++) {
+            x = &flips[i];
+            if (x->block == block && x->page == page) {
+                if (x->offset >= 0) {
+                    printf(" --- Inject data bit flip at block%d, page%d, offset%d, mask%d --- \n", block, page, x->offset, x->mask);
+                    p = (u8 *)(data + x->offset);
+                }
+                else {
+                    printf(" --- Inject spare bit flip at block%d, page%d, offset%d, mask%d --- \n", block, page, -x->offset, x->mask);
+                    p = (u8 *)(spare - x->offset);
+                }
+                *p ^= x->mask;
+            }
+        }
+    }
 
 	if (p) {
 		fseek(emu->fp, page_offset, SEEK_SET);
 		fwrite(buf, 1, full_page_size, emu->fp);
 	}
-#endif	
+
+    if (power_cut_enable) {
+        printf(" ---- inject power cut failure method %d at block %d page %d ---\n", power_cut_enable, block, page);
+        fflush(emu->fp);
+        exit(0);
+    }
+#endif
+
 }
 
 static int femu_WritePage_wrap(uffs_Device *dev, u32 block, u32 page,

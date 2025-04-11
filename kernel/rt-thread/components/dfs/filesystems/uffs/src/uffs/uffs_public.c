@@ -95,6 +95,7 @@ u16 uffs_FindBestPageInBlock(uffs_Device *dev, uffs_BlockInfo *bc, u16 page)
 {
 	int i;
 	uffs_Tags *tag, *tag_old;
+	u16 lastPage = dev->attr->pages_per_block - 1;
 
 	if (!uffs_Assert(page != UFFS_INVALID_PAGE, "invalid param !"))
 		return page;	// just in case ...
@@ -105,10 +106,21 @@ u16 uffs_FindBestPageInBlock(uffs_Device *dev, uffs_BlockInfo *bc, u16 page)
 	if (!uffs_Assert(TAG_IS_GOOD(tag_old), "try to find a invalid page ?"))
 		return UFFS_INVALID_PAGE;
 
-	if (page == dev->attr->pages_per_block - 1)	// already the last page ?
+	if (page == lastPage)	// already the last page ?
 		return page;
 
-	for (i = dev->attr->pages_per_block - 1; i > page; i--) {
+	// check for fully loaded block, in which case the given
+	// page id is the best page id
+
+	uffs_BlockInfoLoad(dev, bc, lastPage);
+	tag = GET_TAG(bc, lastPage);
+
+	if (TAG_IS_GOOD(tag) && TAG_PAGE_ID(tag) == lastPage)
+		return page;
+
+	// block not fully loaded, search from bottom to top
+
+	for (i = lastPage; i > page; i--) {
 		uffs_BlockInfoLoad(dev, bc, i);
 		tag = GET_TAG(bc, i);
 		if (TAG_IS_GOOD(tag) &&
@@ -297,20 +309,16 @@ int uffs_GetBlockFileDataLength(uffs_Device *dev, uffs_BlockInfo *bc, u8 type)
 	uffs_BlockInfoLoad(dev, bc, lastPage);
 	tag = GET_TAG(bc, lastPage);
 
-	if (TAG_IS_GOOD(tag)) {
+	if (TAG_IS_GOOD(tag) && TAG_PAGE_ID(tag) == lastPage) {
 		// First try the last page.
 		// if it's the full loaded file/data block, then we have a quick path.
 		if (type == UFFS_TYPE_FILE) {
-			if (TAG_PAGE_ID(tag) == (lastPage - 1)) {
-				size = dev->com.pg_data_size * (dev->attr->pages_per_block - 2) + TAG_DATA_LEN(tag);
-				return size;
-			}
+			size = dev->com.pg_data_size * (dev->attr->pages_per_block - 2) + TAG_DATA_LEN(tag);
+			return size;
 		}
 		if (type == UFFS_TYPE_DATA) {
-			if (TAG_PAGE_ID(tag) == lastPage) {
-				size = dev->com.pg_data_size * (dev->attr->pages_per_block - 1) + TAG_DATA_LEN(tag);
-				return size;
-			}
+			size = dev->com.pg_data_size * (dev->attr->pages_per_block - 1) + TAG_DATA_LEN(tag);
+			return size;
 		}
 	}
 
@@ -379,16 +387,17 @@ int uffs_GetFreePagesCount(uffs_Device *dev, uffs_BlockInfo *bc)
 UBOOL uffs_IsPageErased(uffs_Device *dev, uffs_BlockInfo *bc, u16 page)
 {
 	uffs_Tags *tag;
+	URET ret;
 
-	uffs_BlockInfoLoad(dev, bc, page);
-	tag = GET_TAG(bc, page);
-
-	if (!TAG_IS_SEALED(tag) &&
-		!TAG_IS_DIRTY(tag) &&
-		!TAG_IS_VALID(tag)) {
-		return U_TRUE;
+	ret = uffs_BlockInfoLoad(dev, bc, page);
+	if (ret == U_SUCC) {
+		tag = GET_TAG(bc, page);
+		if (!TAG_IS_SEALED(tag) &&
+			!TAG_IS_DIRTY(tag) &&
+			!TAG_IS_VALID(tag)) {
+			return U_TRUE;
+		}
 	}
-
 	return U_FALSE;
 }
 

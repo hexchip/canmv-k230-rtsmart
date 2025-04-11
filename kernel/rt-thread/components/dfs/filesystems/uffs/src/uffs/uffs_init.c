@@ -49,8 +49,8 @@
 
 static URET uffs_InitDeviceConfig(uffs_Device *dev)
 {
-    if (dev->cfg.dirty_groups == 0)
-        dev->cfg.dirty_groups = MAX_DIRTY_BUF_GROUPS;
+	if (dev->cfg.dirty_groups == 0)
+		dev->cfg.dirty_groups = MAX_DIRTY_BUF_GROUPS;
 
 	if (!uffs_Assert(dev->cfg.dirty_groups >= 1 && dev->cfg.dirty_groups <= MAX_DIRTY_BUF_GROUPS,
 						"invalid config: dirty_groups = %d\n", dev->cfg.dirty_groups))
@@ -81,6 +81,12 @@ static URET uffs_InitDeviceConfig(uffs_Device *dev)
 URET uffs_InitDevice(uffs_Device *dev)
 {
 	URET ret;
+
+    // check pages_per_block is within valid range
+    if (dev->attr->pages_per_block > UFFS_MAX_PAGES_PER_BLOCK) {
+        uffs_Perror(UFFS_MSG_DEAD, "page_per_block should not exceed %d !", UFFS_MAX_PAGES_PER_BLOCK);
+        return U_FAIL;
+    }
 
 	ret = uffs_InitDeviceConfig(dev);
 	if (ret != U_SUCC)
