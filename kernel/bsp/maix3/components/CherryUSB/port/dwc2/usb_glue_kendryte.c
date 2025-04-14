@@ -9,6 +9,8 @@
 #include "usb_log.h"
 #include <riscv_io.h>
 
+#include "sysctl_rst.h"
+
 #ifdef ENABLE_CHERRY_USB
 #define DEFAULT_USB_HCLK_FREQ_MHZ 200
 
@@ -22,32 +24,32 @@ uintptr_t g_usb_otg1_base = (uintptr_t)0x91540000UL;
 #define SYSCTL_USB_RESET_SHIFT (0)
 #define SYSCTL_USB_RESET_MASK (0x3 << SYSCTL_USB_RESET_SHIFT)
 
-static void sysctl_reset_hw_done(volatile uint32_t *reset_reg, uint8_t reset_bit, uint8_t done_bit)
-{
-    uint32_t val;
-    rt_base_t level;
-    uint32_t done = ((1 << done_bit) | (1 << (done_bit + 2)));
-    uint32_t reset = (1 << reset_bit);
+// static void sysctl_reset_hw_done(volatile uint32_t *reset_reg, uint8_t reset_bit, uint8_t done_bit)
+// {
+//     uint32_t val;
+//     rt_base_t level;
+//     uint32_t done = ((1 << done_bit) | (1 << (done_bit + 2)));
+//     uint32_t reset = (1 << reset_bit);
 
-    level = rt_hw_interrupt_disable();
+//     level = rt_hw_interrupt_disable();
 
-    /* clear done bit */
-    val = readl(reset_reg);
-    val &= ~(SYSCTL_USB_DONE_MASK | SYSCTL_USB_RESET_MASK);
-    val |= done;
-    writel(val, reset_reg);
+//     /* clear done bit */
+//     val = readl(reset_reg);
+//     val &= ~(SYSCTL_USB_DONE_MASK | SYSCTL_USB_RESET_MASK);
+//     val |= done;
+//     writel(val, reset_reg);
 
-    /* set reset bit */
-    val = readl(reset_reg);
-    val &= ~(SYSCTL_USB_DONE_MASK | SYSCTL_USB_RESET_MASK);
-    val |= reset;
-    writel(val, reset_reg);
+//     /* set reset bit */
+//     val = readl(reset_reg);
+//     val &= ~(SYSCTL_USB_DONE_MASK | SYSCTL_USB_RESET_MASK);
+//     val |= reset;
+//     writel(val, reset_reg);
 
-    rt_hw_interrupt_enable(level);
+//     rt_hw_interrupt_enable(level);
 
-    /* wait done bit */
-    while ((readl(reset_reg) & done) != done);
-}
+//     /* wait done bit */
+//    while ((readl(reset_reg) & done) != done);
+// }
 
 #define USB_IDPULLUP0 		(1<<4)
 #define USB_DMPULLDOWN0 	(1<<8)
@@ -68,13 +70,14 @@ uint32_t usbh_get_dwc2_gccfg_conf(uint32_t reg_base)
 #if defined (CHERRY_USB_HOST_USING_DEV0)
 void usb_hc_low_level_init(void)
 {
-    sysctl_reset_hw_done((volatile uint32_t *)0x9110103c, 0, 28);
+    // sysctl_reset_hw_done((volatile uint32_t *)0x9110103c, 0, 28);
+    sysctl_reset(SYSCTL_RESET_USB0);
 
     uint32_t *hs_reg = (uint32_t *)rt_ioremap((void *)(0x91585000 + 0x7C), 0x1000);
     uint32_t usb_ctl3 = *hs_reg | USB_IDPULLUP0;
 
     *hs_reg = usb_ctl3 | (USB_DMPULLDOWN0 | USB_DPPULLDOWN0);
-    
+
     rt_iounmap(hs_reg);
 
     rt_hw_interrupt_install(173, usb_hc_interrupt_cb, NULL, "usbh");
@@ -88,7 +91,8 @@ void usb_hc_low_level_deinit(void)
 #elif defined (CHERRY_USB_HOST_USING_DEV1)
 void usb_hc_low_level_init(void)
 {
-    sysctl_reset_hw_done((volatile uint32_t *)0x9110103c, 1, 29);
+    // sysctl_reset_hw_done((volatile uint32_t *)0x9110103c, 1, 29);
+    sysctl_reset(SYSCTL_RESET_USB1);
 
     uint32_t *hs_reg = (uint32_t *)rt_ioremap((void *)(0x91585000 + 0x9C), 0x1000);
     uint32_t usb_ctl3 = *hs_reg | USB_IDPULLUP0;
@@ -125,7 +129,9 @@ uint32_t usbd_get_dwc2_gccfg_conf(uint32_t reg_base)
 #if defined (CHERRY_USB_DEVICE_USING_DEV0)
 void usb_dc_low_level_init(void)
 {
-    sysctl_reset_hw_done((volatile uint32_t *)0x9110103c, 0, 28);
+    // sysctl_reset_hw_done((volatile uint32_t *)0x9110103c, 0, 28);
+    sysctl_reset(SYSCTL_RESET_USB0);
+
     uint32_t *hs_reg = (uint32_t *)rt_ioremap((void *)(0x91585000 + 0x7C), 0x1000);
     *hs_reg = 0x37;
     rt_iounmap(hs_reg);
@@ -141,7 +147,9 @@ void usb_dc_low_level_deinit(void)
 #elif defined(CHERRY_USB_DEVICE_USING_DEV1)
 void usb_dc_low_level_init(void)
 {
-    sysctl_reset_hw_done((volatile uint32_t *)0x9110103c, 1, 29);
+    // sysctl_reset_hw_done((volatile uint32_t *)0x9110103c, 1, 29);
+    sysctl_reset(SYSCTL_RESET_USB1);
+
     uint32_t *hs_reg = (uint32_t *)rt_ioremap((void *)(0x91585000 + 0x9C), 0x1000);
     *hs_reg = 0x37;
     rt_iounmap(hs_reg);

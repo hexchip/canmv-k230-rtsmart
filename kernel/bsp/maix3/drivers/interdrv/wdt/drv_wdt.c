@@ -29,6 +29,7 @@
 #include "board.h"
 #include "ioremap.h"
 #include "sysctl_clk.h"
+#include "sysctl_rst.h"
 #include "drv_wdt.h"
 #include <rtdbg.h>
 static rt_watchdog_t kd_watchdog;
@@ -173,6 +174,16 @@ static rt_err_t kd_wdt_init(rt_watchdog_t *wdt)
     return RT_EOK;
 }
 
+static rt_err_t kd_wdt_reset(rt_watchdog_t *wdt)
+{
+    (void)wdt;
+
+    sysctl_reset(SYSCTL_RESET_WDT1);
+    sysctl_reset(SYSCTL_RESET_WDT1_APB);
+
+    return RT_EOK;
+}
+
 static rt_err_t kd_wdt_control(rt_watchdog_t *wdt, int cmd, void *args)
 {
     RT_ASSERT(wdt != NULL);
@@ -195,6 +206,9 @@ static rt_err_t kd_wdt_control(rt_watchdog_t *wdt, int cmd, void *args)
         case RT_DEVICE_CTRL_WDT_STOP:
         case KD_DEVICE_CTRL_WDT_STOP:
             kd_wdt_disable(wdt);
+        break;
+        case KD_DEVICE_CTRL_WDT_RESET:
+            kd_wdt_reset(wdt);
         break;
         default:
             return -RT_EINVAL;

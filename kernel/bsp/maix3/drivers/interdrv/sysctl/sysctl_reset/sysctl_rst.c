@@ -30,6 +30,8 @@
 #include "board.h"
 #include <rthw.h>
 
+#include <riscv_io.h>
+
 /* created by yangfan */
 typedef enum
 {
@@ -144,6 +146,8 @@ bool sysctl_reset(sysctl_reset_e reset)
     uint32_t mask_rw = k230_reset[reset].mask_rw;
     uint32_t data = 0;
 
+    volatile uint32_t delay = __UINT16_MAX__;
+
     rt_base_t level;
 
     volatile uint32_t *reset_reg = (volatile uint32_t *)sysctl_rst + reg_offset/4;
@@ -197,22 +201,30 @@ bool sysctl_reset(sysctl_reset_e reset)
         *reset_reg = data;
         rt_hw_interrupt_enable(level);
     }
-    
+
     /* check done bit */
     if(type & W1C)
     {
-        if(*reset_reg & (1 << done_bit))
+        while((0x00 == (readl(reset_reg) & (1 << done_bit))) && (--delay));
+
+        if(readl(reset_reg) & (1 << done_bit)) {
             return true;
+        }
 
         return false;
     }
+
     if(type & RWSC)
     {
-        if((*reset_reg & (1 << done_bit)) == 0)
+        while((0x00 != (readl(reset_reg) & (1 << done_bit))) && (--delay));
+
+        if((readl(reset_reg) & (1 << done_bit)) == 0) {
             return true;
+        }
 
         return false;
     }
+
     return true;
 }
 

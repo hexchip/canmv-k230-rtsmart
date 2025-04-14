@@ -1157,14 +1157,18 @@ int netdev_cmd_ping(char* target_name, rt_uint32_t times, rt_size_t size)
 
 int netdev_ping(int argc, char **argv)
 {
-    if (argc != 3)
-    {
-        rt_kprintf("Please input: ping <host address> <count>\n");
+    int count = 4;
+
+    if (2 > argc) {
+        rt_kprintf("Please input: ping <host address> [count]\n");
+        return 0;
     }
-    else
-    {
-        netdev_cmd_ping(argv[1], atoi(argv[2]), 0);
+
+    if (3 <= argc) {
+        count = atoi(argv[2]);
     }
+
+    netdev_cmd_ping(argv[1], count, 0);
 
     return 0;
 }
