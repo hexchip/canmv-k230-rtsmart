@@ -9,6 +9,7 @@
 #undef USB_DBG_TAG
 #define USB_DBG_TAG "rtl8152"
 #include "usb_log.h"
+#include "ipc/workqueue.h"
 
 #define DEV_FORMAT "/dev/rtl8152"
 
@@ -1985,6 +1986,7 @@ static int usbh_rtl8152_connect(struct usbh_hubport *hport, uint8_t intf)
 
     rtl8152_class->hport = hport;
     rtl8152_class->intf = intf;
+    rtl8152_class->plug = true;
 
     hport->config.intf[intf].priv = rtl8152_class;
 
@@ -2105,6 +2107,7 @@ static int usbh_rtl8152_disconnect(struct usbh_hubport *hport, uint8_t intf)
     struct usbh_rtl8152 *rtl8152_class = (struct usbh_rtl8152 *)hport->config.intf[intf].priv;
 
     if (rtl8152_class) {
+        rtl8152_class->plug = false;
         if (rtl8152_class->bulkin) {
             usbh_kill_urb(&rtl8152_class->bulkin_urb);
         }
@@ -2128,6 +2131,42 @@ static int usbh_rtl8152_disconnect(struct usbh_hubport *hport, uint8_t intf)
     return ret;
 }
 
+#define CHECK_LINK_DEBOUNCE_CNT (5)
+static struct rt_delayed_work link_check;
+
+static void rtl8152_link_check(struct rt_work *work, void *work_data)
+{
+    struct netif *netif = (struct netif *)work_data;
+
+    if (g_rtl8152_class.plug) {
+        int ret;
+
+        ret = usbh_rtl8152_get_connect_status(&g_rtl8152_class);
+
+        if ((ret >= 0) && (g_rtl8152_class.connect_status == false)) {
+            /* In general, unplug will never in so don't need lock */
+            USB_LOG_ERR("link down then kill urb\n");
+
+            usbh_rtl8152_link_changed(&g_rtl8152_class, 0);
+
+            if (g_rtl8152_class.rtl_ops.disable) {
+                g_rtl8152_class.rtl_ops.disable(&g_rtl8152_class);
+            }
+
+            usbh_kill_urb(&g_rtl8152_class.bulkin_urb);
+            usbh_kill_urb(&g_rtl8152_class.bulkout_urb);
+            return ;
+        }
+
+        if (g_rtl8152_class.submit_work) {
+            ret = rt_work_submit(&link_check.work, rt_tick_from_millisecond(500));
+            if (ret != RT_EOK) {
+                USB_LOG_ERR("submit a work fail = %d\n", ret);
+            }
+        }
+    }
+}
+
 void usbh_rtl8152_rx_thread(void *argument)
 {
     uint32_t g_rtl8152_rx_length;
@@ -2140,11 +2179,12 @@ void usbh_rtl8152_rx_thread(void *argument)
     // uint32_t curr_time_stamp, last_check_link_state_time_stamp;
 
     USB_LOG_INFO("Create rtl8152 rx thread\r\n");
+    rt_delayed_work_init(&link_check, rtl8152_link_check, argument);
     // clang-format off
 find_class:
     // clang-format on
     g_rtl8152_class.connect_status = false;
-    if (usbh_find_class_instance("/dev/rtl8152") == NULL) {
+    if ((!g_rtl8152_class.plug) || (usbh_find_class_instance("/dev/rtl8152") == NULL)) {
         goto delete;
     }
 
@@ -2156,6 +2196,7 @@ find_class:
         }
         usb_osal_msleep(128);
     }
+
     usbh_rtl8152_link_changed(&g_rtl8152_class, 1);
 
     if (g_rtl8152_class.rtl_ops.enable) {
@@ -2167,11 +2208,19 @@ find_class:
     rtl8152_set_rx_mode(&g_rtl8152_class);
     rtl8152_set_speed(&g_rtl8152_class, AUTONEG_ENABLE, g_rtl8152_class.supports_gmii ? SPEED_1000 : SPEED_100, DUPLEX_FULL);
 
+    g_rtl8152_class.submit_work = true;
+    ret = rt_work_submit(&link_check.work, rt_tick_from_millisecond(1000) * CHECK_LINK_DEBOUNCE_CNT);
+    if (ret != RT_EOK) {
+        USB_LOG_ERR("submit work fail = %d\n", ret);
+    }
+
     g_rtl8152_rx_length = 0;
-    while (1) {
+    while (g_rtl8152_class.plug) {
         usbh_bulk_urb_fill(&g_rtl8152_class.bulkin_urb, g_rtl8152_class.hport, g_rtl8152_class.bulkin, &g_rtl8152_rx_buffer[g_rtl8152_rx_length], USB_GET_MAXPACKETSIZE(g_rtl8152_class.bulkin->wMaxPacketSize), USB_OSAL_WAITING_FOREVER, NULL, NULL);
         ret = usbh_submit_urb(&g_rtl8152_class.bulkin_urb);
         if (ret < 0) {
+            g_rtl8152_class.submit_work = false;
+            rt_work_cancel_sync(&link_check.work);
             goto find_class;
         }
 
@@ -2227,6 +2276,9 @@ find_class:
     // clang-format off
 delete:
     USB_LOG_INFO("Delete rtl8152 rx thread\r\n");
+    if (g_rtl8152_class.submit_work) {
+        rt_work_cancel_sync(&link_check.work);
+    }
     usb_osal_thread_delete(NULL);
     // clang-format on
 }

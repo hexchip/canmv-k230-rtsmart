@@ -88,6 +88,7 @@ void rt_delayed_work_init(struct rt_delayed_work *work, void (*work_func)(struct
 rt_err_t rt_work_submit(struct rt_work *work, rt_tick_t ticks);
 rt_err_t rt_work_urgent(struct rt_work *work);
 rt_err_t rt_work_cancel(struct rt_work *work);
+rt_err_t rt_work_cancel_sync(struct rt_work *work);
 #endif /* RT_USING_SYSTEM_WORKQUEUE */
 
 #ifdef __cplusplus

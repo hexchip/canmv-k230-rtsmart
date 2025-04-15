@@ -3408,7 +3408,7 @@ int usbh_submit_urb(struct usbh_urb *urb)
         urb->timeout = 0;
 #endif
         if (ret < 0) {
-            USB_LOG_ERR("urb timeout = %d\n", timeout);
+            USB_LOG_ERR("urb timeout = %d, urb->hcpriv = %p\n", timeout, urb->hcpriv);
             usbh_kill_urb(urb);
             goto out_1;
         }
