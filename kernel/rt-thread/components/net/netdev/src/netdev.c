@@ -47,6 +47,7 @@ int netdev_register(struct netdev *netdev, const char *name, void *user_data)
     rt_base_t level;
     uint16_t flags_mask;
     int index;
+    rt_ubase_t len;
 
     RT_ASSERT(netdev);
     RT_ASSERT(name);
@@ -78,7 +79,8 @@ int netdev_register(struct netdev *netdev, const char *name, void *user_data)
     netdev->addr_callback = RT_NULL;
 
     /* fill network interface device */
-    rt_strncpy(netdev->name, name, rt_strlen(name));
+    len = (rt_strlen(name) >= RT_NAME_MAX) ? RT_NAME_MAX: rt_strlen(name);
+    rt_strncpy(netdev->name, name, len);
     netdev->user_data = user_data;
 
     /* initialize current network interface device single list */
@@ -89,12 +91,16 @@ int netdev_register(struct netdev *netdev, const char *name, void *user_data)
     if (netdev_list == RT_NULL)
     {
         netdev_list = netdev;
-        netdev_default = netdev;
     }
     else
     {
         /* tail insertion */
         rt_slist_append(&(netdev_list->list), &(netdev->list));
+    }
+
+    if (netdev_default == RT_NULL)
+    {
+        netdev_default = netdev_list;
     }
 
     rt_hw_interrupt_enable(level);
@@ -132,9 +138,17 @@ int netdev_unregister(struct netdev *netdev)
         if (cur_netdev == netdev)
         {
             /* find this network interface device in network interface device list */
-            if (netdev_list == netdev && rt_slist_next(&netdev_list->list) == RT_NULL)
+            if (netdev_list == netdev)
             {
-                netdev_list = RT_NULL;
+                rt_slist_t *next = rt_slist_next(node);
+                if (next)
+                {
+                    netdev_list = rt_slist_entry(next, struct netdev, list);
+                }
+                else
+                {
+                    netdev_list = RT_NULL;
+                }
             }
             else
             {
@@ -142,12 +156,17 @@ int netdev_unregister(struct netdev *netdev)
             }
             if (netdev_default == netdev)
             {
-                netdev_default = netdev_list;
+                netdev_default = RT_NULL;
             }
             break;
         }
     }
     rt_hw_interrupt_enable(level);
+
+    if (netdev_default == RT_NULL)
+    {
+        netdev_default = netdev_list;
+    }
 
     if (cur_netdev == netdev)
     {

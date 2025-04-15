@@ -194,9 +194,18 @@ static void check_netdev_internet_up_work(struct rt_work *work, void *work_data)
     }
 
 #ifdef RT_USING_SAL
+    rt_bool_t is_gone = RT_FALSE;
+
+    if (netdev->is_gone) {
+        is_gone = RT_TRUE;
+    }
     update_work_count(netdev, -1);
     if (get_work_count(netdev) == 0) {
         rt_wqueue_wakeup(&netdev->wait_work, 0);
+    }
+
+    if (is_gone) {
+        return;
     }
 #endif
 

@@ -459,6 +459,18 @@ rt_err_t rt_work_cancel(struct rt_work *work)
     return rt_workqueue_cancel_work(sys_workq, work);
 }
 
+/**
+ * @brief Cancel a work item in the sys_workq. If the work item is executing, this function will block until it is done.
+ *
+ * @param work is a pointer to the work item object.
+ *
+ * @return RT_EOK       Success.
+ */
+rt_err_t rt_work_cancel_sync(struct rt_work *work)
+{
+    return rt_workqueue_cancel_work_sync(sys_workq, work);
+}
+
 static int rt_work_sys_workqueue_init(void)
 {
     if (sys_workq != RT_NULL)

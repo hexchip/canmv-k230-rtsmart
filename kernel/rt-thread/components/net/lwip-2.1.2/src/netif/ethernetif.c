@@ -346,6 +346,7 @@ static int netdev_add(struct netif *lwip_netif)
     netdev->netmask = lwip_netif->netmask;
 #ifdef RT_USING_SAL
     rt_wqueue_init(&netdev->wait_work);
+    netdev->is_gone = RT_FALSE;
 #endif
 
 #ifdef RT_LWIP_DHCP
@@ -370,6 +371,7 @@ static void netdev_del(struct netif *lwip_netif)
     netdev = netdev_get_by_name(name);
 #ifdef RT_USING_SAL
     if (netdev != RT_NULL) {
+        netdev->is_gone = RT_TRUE;
         if (get_work_count(netdev)) {
             do {
                 int ret;
