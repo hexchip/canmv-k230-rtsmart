@@ -39,6 +39,7 @@
 #include <posix_termios.h>
 #endif
 #include <rtdbg.h>
+#include "drv_fpioa.h"
 
 #define DBG_TAG  "GPIO"
 #ifdef RT_DEBUG
@@ -95,17 +96,26 @@ static int check_pin_valid(rt_base_t pin)
 static int kd_set_drive_mode(rt_base_t pin, rt_base_t mode)
 {
     uint32_t dir;
+    struct st_iomux_reg_t reg;
     switch (mode)
     {
         case GPIO_DM_INPUT:
             dir = 0;
             break;
-        case GPIO_DM_INPUT_PULL_DOWN:
+        case GPIO_DM_INPUT_PULL_DOWN: {
+            reg.u.value = fpioa_get_pin_cfg(pin);
+            reg.u.bit.pd = 1;
+            fpioa_set_pin_cfg(pin, reg.u.value);
             dir = 0;
             break;
-        case GPIO_DM_INPUT_PULL_UP:
+        }
+        case GPIO_DM_INPUT_PULL_UP: {
+            reg.u.value = fpioa_get_pin_cfg(pin);
+            reg.u.bit.pu = 1;
+            fpioa_set_pin_cfg(pin, reg.u.value);
             dir = 0;
             break;
+        }
         case GPIO_DM_OUTPUT:
             dir = 1;
             break;
@@ -433,6 +443,7 @@ int rt_hw_gpio_init(void)
     rt_err_t ret = RT_EOK;
     rt_device_t gpio_device = &g_gpio_device;
 
+    kd_fioa_init();
     kd_gpio[0] = rt_ioremap((void *)GPIO0_BASE_ADDR, GPIO0_IO_SIZE);
     kd_gpio[1] = rt_ioremap((void *)GPIO1_BASE_ADDR, GPIO1_IO_SIZE);
 
