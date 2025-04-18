@@ -1332,7 +1332,11 @@ release:
             dq_buf->v_stream.phy_addr = uvc_buf->phys_addr;
             /* todo */
             dq_buf->v_stream.end_of_stream = 0;
-            dq_buf->v_stream.pts = 0;
+
+            volatile uint64_t time_elapsed = 0;
+            __asm__ __volatile__("rdtime %0" : "=r"(time_elapsed));
+
+            dq_buf->v_stream.pts = time_elapsed / 27;
         } else {
             USB_LOG_ERR("Unsupport format %s %d\n", __func__, __LINE__);
         }
