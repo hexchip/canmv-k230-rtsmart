@@ -25,6 +25,7 @@
 
 #ifndef DRV_TIMER_H__
 #define DRV_TIMER_H__
+
 #include <stdint.h>
 
 #define MHz         1000000
@@ -74,5 +75,14 @@ typedef struct _kendryte_timer
     /* TIMER_N Load Count2 Register             (0xb0-0xbc) */
     volatile uint32_t load_count2[4];
 } __attribute__((packed, aligned(4))) kendryte_timer_t;
+
+#define HWTIMER_CTRL_IRQ_SET    0x10
+#define HWTIMER_CTRL_GET_FREQ   0x11
+
+typedef struct {
+    uint8_t enable;
+    uint8_t signo;
+    void *sigval;
+} hwtimer_irqcfg_t;
 
 #endif

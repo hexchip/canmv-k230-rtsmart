@@ -333,9 +333,14 @@ RTM_EXPORT(nanosleep);
 static void rtthread_timer_wrapper(void *timerobj)
 {
     struct timer_obj *timer;
+    siginfo_t info;
 
     timer = (struct timer_obj *)timerobj;
-    sys_kill(timer->pid, timer->sigev_signo);
+
+    rt_memset(&info, 0, sizeof(info));
+    info.si_code = SI_TIMER;
+    info.si_ptr = timer->val.sival_ptr;
+    lwp_kill_ext(timer->pid, timer->sigev_signo, &info);
 
     if (timer->reload == 0U)
     {

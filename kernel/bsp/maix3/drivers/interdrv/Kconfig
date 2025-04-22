@@ -14,8 +14,8 @@ menu "InterDriver"
             config RT_USING_HASH
                 bool "Use HW SHA256 accelerator"
                 default n
-            config RT_USING_SM4
-                bool "Use HW SM4 accelerator"
+            config RT_USING_PUFS
+                bool "Use HW PUFS accelerator"
                 default n
         endif
 

@@ -3,7 +3,7 @@
 from building import *
 
 cwd     = GetCurrentDir()
-src     = Glob('*.c') + Glob('*.S')
+src     = Glob('drv_hardlock_dummy.c')
 CPPPATH = [cwd]
 
 group = DefineGroup('HARDLOCK', src, depend = ['RT_USING_HARDLOCK'], CPPPATH = CPPPATH)
