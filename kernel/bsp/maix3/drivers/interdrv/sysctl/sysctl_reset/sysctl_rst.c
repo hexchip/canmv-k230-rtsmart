@@ -146,7 +146,8 @@ bool sysctl_reset(sysctl_reset_e reset)
     uint32_t mask_rw = k230_reset[reset].mask_rw;
     uint32_t data = 0;
 
-    volatile uint32_t delay = __UINT16_MAX__;
+    /* loop __UINT16_MAX__ take 369 us in k230 */
+    volatile uint32_t delay = ((__UINT16_MAX__ << 1) + __UINT16_MAX__);
 
     rt_base_t level;
 
@@ -158,7 +159,11 @@ bool sysctl_reset(sysctl_reset_e reset)
     {
         data = *reset_reg & mask_rw;
 
-        data |= (1 << done_bit);
+        if((reset == SYSCTL_RESET_USB0) || (reset == SYSCTL_RESET_USB1)) {
+            data |= ((1 << done_bit) | (1 << (done_bit + 2)));
+        } else {
+            data |= (1 << done_bit);
+        }
         if(type & WE)
         {
             data |= (1 << (done_bit + 16));  /* write enable */
@@ -205,13 +210,26 @@ bool sysctl_reset(sysctl_reset_e reset)
     /* check done bit */
     if(type & W1C)
     {
-        while((0x00 == (readl(reset_reg) & (1 << done_bit))) && (--delay));
+        if((reset == SYSCTL_RESET_USB0) || (reset == SYSCTL_RESET_USB1)) {
+            uint32_t done;
 
-        if(readl(reset_reg) & (1 << done_bit)) {
-            return true;
+            done = (1 << done_bit) | (1 << (done_bit + 2));
+            while((done != (readl(reset_reg) & done)) && (--delay));
+
+            if((readl(reset_reg) & done) == done) {
+                return true;
+            }
+
+            return false;
+        } else {
+            while((0x00 == (readl(reset_reg) & (1 << done_bit))) && (--delay));
+
+            if(readl(reset_reg) & (1 << done_bit)) {
+                return true;
+            }
+
+            return false;
         }
-
-        return false;
     }
 
     if(type & RWSC)
