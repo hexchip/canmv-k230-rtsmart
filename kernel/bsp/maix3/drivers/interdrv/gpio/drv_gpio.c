@@ -45,6 +45,10 @@
 #define DBG_COLOR
 #include <rtdbg.h>
 
+#ifndef RT_GPIO_IRQ_METHOD_DIRECT
+#define RT_GPIO_IRQ_METHOD_WORKQUEUE
+#endif // RT_GPIO_IRQ_METHOD_DIRECT
+
 struct kd_gpio_device {
     struct rt_device dev;
     void*            base[2];
@@ -57,12 +61,16 @@ static struct {
     void*           args;
     gpio_pin_edge_t edge;
     int             debounce;
-    struct rt_work  debounce_work;
-    struct rt_work  send_sig_work;
-    int             pid;
-    int             lwp_ref_cnt;
-    int             signo;
-    void*           sigval;
+#if defined(RT_GPIO_IRQ_METHOD_WORKQUEUE)
+    struct rt_work debounce_work;
+    struct rt_work send_sig_work;
+#elif defined(RT_GPIO_IRQ_METHOD_DIRECT)
+    struct rt_timer debounce_timer;
+#endif // RT_GPIO_IRQ_METHOD_WORKQUEUE
+    int   pid;
+    int   lwp_ref_cnt;
+    int   signo;
+    void* sigval;
 } irq_table[GPIO_MAX_NUM];
 
 static void kd_gpio_reg_writel(void* reg, rt_size_t offset, rt_uint32_t value)
@@ -250,7 +258,11 @@ static int kd_set_pin_edge(rt_int32_t pin, gpio_pin_edge_t edge)
     return RT_EOK;
 }
 
+#if defined(RT_GPIO_IRQ_METHOD_WORKQUEUE)
 static void debounce_work(struct rt_work* work, void* param)
+#elif defined(RT_GPIO_IRQ_METHOD_DIRECT)
+static void debounce_timer(void* param)
+#endif
 {
     void* reg;
     int   pin = (int)(long)param;
@@ -280,7 +292,12 @@ static void pin_irq(int vector, void* param)
     case GPIO_PE_LOW:
     case GPIO_PE_HIGH:
         kd_gpio_reg_writel(reg + INT_MASK, pin_offset, 0x1);
+
+#if defined(RT_GPIO_IRQ_METHOD_WORKQUEUE)
         rt_work_submit(&irq_table[pin].debounce_work, irq_table[pin].debounce);
+#elif defined(RT_GPIO_IRQ_METHOD_DIRECT)
+        rt_timer_start(&irq_table[pin].debounce_timer);
+#endif // RT_GPIO_IRQ_METHOD_WORKQUEUE
         break;
     default:
         break;
@@ -291,25 +308,33 @@ static void pin_irq(int vector, void* param)
     }
 }
 
-static void send_sig_work(struct rt_work* work, void* param)
-{
-    siginfo_t info;
-    int       pin = (int)(long)param;
-
-    rt_memset(&info, 0, sizeof(info));
-    info.si_code = SI_SIGIO;
-    info.si_ptr  = irq_table[pin].sigval;
-    lwp_kill_ext(irq_table[pin].pid, irq_table[pin].signo, &info);
-}
-
+#if defined(RT_GPIO_IRQ_METHOD_WORKQUEUE)
 static void gpio_irq_to_user(void* args)
 {
     int pin = (int)(long)args;
 
     // rt_work_init(&irq_table[pin].send_sig_work, send_sig_work, args);
-    if (RT_EOK != rt_work_submit(&irq_table[pin].send_sig_work, 0)) {
+
+    if (RT_EOK != rt_work_submit(&irq_table[pin].send_sig_work, args)) {
         rt_kprintf("submit failed.\n");
     }
+}
+
+static void send_sig_work(struct rt_work* work, void* param)
+{
+    int pin = (int)(long)param;
+#elif defined(RT_GPIO_IRQ_METHOD_DIRECT)
+static void gpio_irq_to_user(void* args)
+{
+    int pin = (int)(long)args;
+#endif
+
+    siginfo_t info;
+
+    rt_memset(&info, 0, sizeof(info));
+    info.si_code = SI_SIGIO;
+    info.si_ptr  = irq_table[pin].sigval;
+    lwp_kill_ext(irq_table[pin].pid, irq_table[pin].signo, &info);
 }
 
 rt_err_t kd_pin_attach_irq(rt_int32_t pin, rt_uint32_t mode, void (*handler)(void* args), void* args)
@@ -337,9 +362,6 @@ rt_err_t kd_pin_attach_irq(rt_int32_t pin, rt_uint32_t mode, void (*handler)(voi
     }
     irq_table[pin].edge     = mode;
     irq_table[pin].debounce = rt_tick_from_millisecond(10);
-
-    rt_work_init(&irq_table[pin].send_sig_work, send_sig_work, (void*)(long)pin);
-    rt_work_init(&irq_table[pin].debounce_work, debounce_work, (void*)(long)pin);
 
     kd_set_pin_edge(pin, irq_table[pin].edge);
     rt_snprintf(irq_name, sizeof irq_name, "pin%d", pin);
@@ -429,7 +451,7 @@ static int gpio_fops_ioctl(struct dfs_fd* fd, int cmd, void* args)
 {
     int ret = RT_EOK;
 
-    if (cmd == KD_GPIO_SET_IRQ || cmd == KD_GPIO_GET_IRQ) {
+    if ((KD_GPIO_SET_IRQ == cmd) || (KD_GPIO_GET_IRQ == (uint32_t)cmd)) {
         gpio_irqcfg_t cfg;
         int           pin;
         lwp_get_from_user(&cfg, args, sizeof(cfg));
@@ -455,10 +477,20 @@ static int gpio_fops_ioctl(struct dfs_fd* fd, int cmd, void* args)
                 if (irq_table[pin].pid != pid) {
                     irq_table[pin].lwp_ref_cnt = 1;
                 }
-                irq_table[pin].pid      = pid;
-                irq_table[pin].signo    = cfg.signo;
-                irq_table[pin].sigval   = cfg.sigval;
+                irq_table[pin].pid    = pid;
+                irq_table[pin].signo  = cfg.signo;
+                irq_table[pin].sigval = cfg.sigval;
+
+                cfg.debounce            = cfg.debounce ? cfg.debounce : 1;
                 irq_table[pin].debounce = rt_tick_from_millisecond(cfg.debounce);
+
+#if defined(RT_GPIO_IRQ_METHOD_WORKQUEUE)
+                rt_work_init(&irq_table[pin].send_sig_work, send_sig_work, (void*)(long)pin);
+                rt_work_init(&irq_table[pin].debounce_work, debounce_work, (void*)(long)pin);
+#elif defined(RT_GPIO_IRQ_METHOD_DIRECT)
+                rt_timer_control(&irq_table[pin].debounce_timer, RT_TIMER_CTRL_SET_TIME, &irq_table[pin].debounce);
+#endif
+
                 kd_pin_irq_enable(pin, 1);
             } else {
                 kd_pin_detach_irq(pin);
@@ -554,6 +586,13 @@ int rt_hw_gpio_init(void)
     ret = rt_device_register(&gpio_dev.dev, "gpio", RT_DEVICE_FLAG_RDWR);
 
     gpio_dev.dev.fops = &gpio_fops;
+
+#if defined(RT_GPIO_IRQ_METHOD_DIRECT)
+    for (int i = 0; i < GPIO_IRQ_MAX_NUM; i++) {
+        rt_timer_init(&irq_table[i].debounce_timer, "gpio_deb_timer", debounce_timer, (void*)(long)i, 0,
+                      RT_TIMER_FLAG_ONE_SHOT | RT_TIMER_FLAG_SOFT_TIMER);
+    }
+#endif // RT_GPIO_IRQ_METHOD_DIRECT
 
     return ret;
 }

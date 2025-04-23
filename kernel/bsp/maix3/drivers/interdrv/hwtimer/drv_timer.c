@@ -52,13 +52,19 @@
 #define DBG_COLOR
 #include <rtdbg.h>
 
+#ifndef RT_TIMER_IRQ_METHOD_DIRECT
+#define RT_TIMER_IRQ_METHOD_WORKQUEUE
+#endif // RT_TIMER_IRQ_METHOD_DIRECT
+
 struct kd_timer_Type {
     kendryte_timer_t* base_addr;
     uint32_t          id;
-    struct rt_work    send_sig_work;
-    int               pid;
-    int               signo;
-    void*             sigval;
+#if defined(RT_TIMER_IRQ_METHOD_WORKQUEUE)
+    struct rt_work send_sig_work;
+#endif // RT_TIMER_IRQ_METHOD_WORKQUEUE
+    int   pid;
+    int   signo;
+    void* sigval;
 };
 
 static void kd_timer_clk_set(rt_hwtimer_t* timer)
@@ -130,17 +136,7 @@ static rt_uint32_t kd_timer_get(rt_hwtimer_t* timer)
     return reg->channel[id].current_value;
 }
 
-static void send_sig_work(struct rt_work* work, void* param)
-{
-    siginfo_t             info;
-    struct kd_timer_Type* kd_timer = param;
-
-    rt_memset(&info, 0, sizeof(info));
-    info.si_code = SI_TIMER;
-    info.si_ptr  = kd_timer->sigval;
-    lwp_kill_ext(kd_timer->pid, kd_timer->signo, &info);
-}
-
+#if defined(RT_TIMER_IRQ_METHOD_WORKQUEUE)
 static rt_err_t timer_timeout_ind(rt_device_t dev, rt_size_t size)
 {
     rt_hwtimer_t*         timer    = (rt_hwtimer_t*)dev;
@@ -149,6 +145,28 @@ static rt_err_t timer_timeout_ind(rt_device_t dev, rt_size_t size)
     rt_work_submit(&kd_timer->send_sig_work, 0);
 
     return RT_EOK;
+}
+
+static void send_sig_work(struct rt_work* work, void* param)
+{
+    struct kd_timer_Type* kd_timer = param;
+#else
+static rt_err_t timer_timeout_ind(rt_device_t dev, rt_size_t size)
+{
+    rt_hwtimer_t*         timer    = (rt_hwtimer_t*)dev;
+    struct kd_timer_Type* kd_timer = (struct kd_timer_Type*)timer->parent.user_data;
+#endif // RT_TIMER_IRQ_METHOD_WORKQUEUE
+
+    siginfo_t info;
+    rt_memset(&info, 0, sizeof(info));
+    info.si_code = SI_TIMER;
+    info.si_ptr  = kd_timer->sigval;
+
+    lwp_kill_ext(kd_timer->pid, kd_timer->signo, &info);
+
+#if !defined(RT_TIMER_IRQ_METHOD_WORKQUEUE)
+    return RT_EOK;
+#endif // RT_TIMER_IRQ_METHOD_WORKQUEUE
 }
 
 static rt_err_t kd_timer_ctrl(rt_hwtimer_t* timer, rt_uint32_t cmd, void* arg)
@@ -199,7 +217,9 @@ static int timer_fops_ioctl(struct dfs_fd* fd, int cmd, void* args)
             kd_timer->pid    = lwp_getpid();
             kd_timer->signo  = cfg.signo;
             kd_timer->sigval = cfg.sigval;
+#if defined(RT_TIMER_IRQ_METHOD_WORKQUEUE)
             rt_work_init(&kd_timer->send_sig_work, send_sig_work, kd_timer);
+#endif // RT_TIMER_IRQ_METHOD_WORKQUEUE
             rt_device_set_rx_indicate(&timer->parent, timer_timeout_ind);
         } else {
             rt_device_set_rx_indicate(&timer->parent, NULL);

@@ -231,7 +231,7 @@ int rt_dma_chan_config(int chan, pdma_transfer_cfg_t* cfg)
     list[list_num - 1].next_llt_addr = 0;
     list[list_num - 1].line_size = cfg->length - (list_num - 1) * PDMA_MAX_LINE_SIZE;
 
-    rt_hw_cpu_dcache_clean_flush((void*)list, sizeof(pdma_llt_t) * list_num);
+    rt_hw_cpu_dcache_clean((void*)list, sizeof(pdma_llt_t) * list_num);
 
     pdma_dev.reg->ch_peri_dev_sel[chan] = cfg->device;
     pdma_dev.reg->pdma_ch_reg[chan].ch_cfg = cfg->ch_cfg;
@@ -254,7 +254,7 @@ int rt_dma_chan_done(int chan, int timeout)
         if (event & PDONE_INT)
             return 0;
         if (event & PITEM_INT) {
-            LOG_D("pdma ch%d pause", chan);
+            LOG_D("pdma ch%d node init", chan);
             ret = 1;
         }
         if (event & PPAUSE_INT) {

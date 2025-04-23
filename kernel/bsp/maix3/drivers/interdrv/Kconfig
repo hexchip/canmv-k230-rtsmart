@@ -23,9 +23,20 @@ menu "InterDriver"
         bool "Enable GNNE driver for ai"
         default y
 
-    config RT_USING_GPIO
+    menuconfig RT_USING_GPIO
         bool "Enable GPIO Driver"
         default n
+
+        if RT_USING_GPIO
+            choice
+                bool "GPIO IRQ Method"
+
+                config RT_GPIO_IRQ_METHOD_WORKQUEUE
+                    bool "WorkQueue"
+                config RT_GPIO_IRQ_METHOD_DIRECT
+                    bool "Direct"
+            endchoice
+        endif
 
     config RT_USING_HARDLOCK
         bool "Enable HardLock Driver"
@@ -38,8 +49,17 @@ menu "InterDriver"
     menuconfig RT_USING_HWTIMER
         bool "Using hardware timer device drivers"
         default n
-        
+
         if RT_USING_HWTIMER
+            choice
+                bool "Timer IRQ Method"
+
+                config RT_TIMER_IRQ_METHOD_WORKQUEUE
+                    bool "WorkQueue"
+                config RT_TIMER_IRQ_METHOD_DIRECT
+                    bool "Direct"
+            endchoice
+
             config RT_USING_HW_TIMER0
                 bool "Enable HW Timer0"
                 default n
