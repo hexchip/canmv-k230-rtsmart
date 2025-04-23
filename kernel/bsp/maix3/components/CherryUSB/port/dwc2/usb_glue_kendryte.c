@@ -71,7 +71,9 @@ uint32_t usbh_get_dwc2_gccfg_conf(uint32_t reg_base)
 void usb_hc_low_level_init(void)
 {
     // sysctl_reset_hw_done((volatile uint32_t *)0x9110103c, 0, 28);
-    sysctl_reset(SYSCTL_RESET_USB0);
+    if (!sysctl_reset(SYSCTL_RESET_USB0)) {
+        USB_LOG_ERR("reset usb0 fail\n");
+    }
 
     uint32_t *hs_reg = (uint32_t *)rt_ioremap((void *)(0x91585000 + 0x7C), 0x1000);
     uint32_t usb_ctl3 = *hs_reg | USB_IDPULLUP0;
@@ -92,7 +94,9 @@ void usb_hc_low_level_deinit(void)
 void usb_hc_low_level_init(void)
 {
     // sysctl_reset_hw_done((volatile uint32_t *)0x9110103c, 1, 29);
-    sysctl_reset(SYSCTL_RESET_USB1);
+    if (!sysctl_reset(SYSCTL_RESET_USB1)) {
+        USB_LOG_ERR("reset usb1 fail\n");
+    }
 
     uint32_t *hs_reg = (uint32_t *)rt_ioremap((void *)(0x91585000 + 0x9C), 0x1000);
     uint32_t usb_ctl3 = *hs_reg | USB_IDPULLUP0;
@@ -130,7 +134,9 @@ uint32_t usbd_get_dwc2_gccfg_conf(uint32_t reg_base)
 void usb_dc_low_level_init(void)
 {
     // sysctl_reset_hw_done((volatile uint32_t *)0x9110103c, 0, 28);
-    sysctl_reset(SYSCTL_RESET_USB0);
+    if (!sysctl_reset(SYSCTL_RESET_USB0)) {
+        USB_LOG_ERR("reset usb0 fail\n");
+    }
 
     uint32_t *hs_reg = (uint32_t *)rt_ioremap((void *)(0x91585000 + 0x7C), 0x1000);
     *hs_reg = 0x37;
@@ -148,7 +154,9 @@ void usb_dc_low_level_deinit(void)
 void usb_dc_low_level_init(void)
 {
     // sysctl_reset_hw_done((volatile uint32_t *)0x9110103c, 1, 29);
-    sysctl_reset(SYSCTL_RESET_USB1);
+    if (!sysctl_reset(SYSCTL_RESET_USB1)) {
+        USB_LOG_ERR("reset usb1 fail\n");
+    }
 
     uint32_t *hs_reg = (uint32_t *)rt_ioremap((void *)(0x91585000 + 0x9C), 0x1000);
     *hs_reg = 0x37;
