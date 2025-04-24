@@ -37,8 +37,9 @@ objs = PrepareBuilding(env, RTT_ROOT, has_libcpu = True)
 # stack_lds.write('__STACKSIZE__ = %d;' % stack_size)
 # stack_lds.close()
 
-from genld import *
-genld('link.lds.in', 'link.lds')
+if not GetOption('clean'):
+    from genld import *
+    genld('link.lds.in', 'link.lds')
 
 # make a building
 DoBuilding(TARGET, objs)
