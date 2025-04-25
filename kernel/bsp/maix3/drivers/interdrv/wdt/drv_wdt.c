@@ -28,6 +28,8 @@
 #include <riscv_io.h>
 #include "board.h"
 #include "ioremap.h"
+#include <lwp_pid.h>
+#include <lwp_signal.h>
 #include "sysctl_clk.h"
 #include "sysctl_rst.h"
 #include "drv_wdt.h"

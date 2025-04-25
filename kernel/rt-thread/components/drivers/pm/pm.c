@@ -415,12 +415,12 @@ static rt_err_t _rt_pm_device_control(rt_device_t dev,
     switch (cmd)
     {
     case RT_PM_DEVICE_CTRL_REQUEST:
-        mode = (rt_uint32_t)args;
+        mode = (rt_uint32_t)(long)args;
         rt_pm_request(mode);
         break;
 
     case RT_PM_DEVICE_CTRL_RELEASE:
-        mode = (rt_uint32_t)args;
+        mode = (rt_uint32_t)(long)args;
         rt_pm_release(mode);
         break;
     }
@@ -521,6 +521,8 @@ void rt_system_pm_init(const struct rt_pm_ops *ops,
 
 #ifdef RT_USING_FINSH
 #include <finsh.h>
+
+#include <stdlib.h>
 
 static const char *_pm_sleep_str[] = PM_SLEEP_MODE_NAMES;
 static const char *_pm_run_str[] = PM_RUN_MODE_NAMES;

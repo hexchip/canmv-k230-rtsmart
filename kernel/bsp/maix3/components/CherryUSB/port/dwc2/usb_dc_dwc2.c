@@ -93,7 +93,7 @@
 #define CONFIG_USB_DWC2_TX8_FIFO_SIZE (0 / 4)
 #endif
 
-#define USBD_BASE (g_usbdev_bus[0].reg_base)
+#define USBD_BASE (long)(g_usbdev_bus[0].reg_base)
 
 #define USB_OTG_GLB      ((USB_OTG_GlobalTypeDef *)(USBD_BASE))
 #define USB_OTG_DEV      ((USB_OTG_DeviceTypeDef *)(USBD_BASE + USB_OTG_DEVICE_BASE))
@@ -858,7 +858,7 @@ int usbd_ep_start_write(uint8_t busid, const uint8_t ep, const uint8_t *data, ui
     if (ep_idx && !(USB_OTG_INEP(ep_idx)->DIEPCTL & USB_OTG_DIEPCTL_MPSIZ)) {
         return -3;
     }
-    if ((uint32_t)data & 0x03) {
+    if ((uint32_t)(long)data & 0x03) {
         return -4;
     }
 
@@ -931,7 +931,7 @@ int usbd_ep_start_read(uint8_t busid, const uint8_t ep, uint8_t *data, uint32_t 
     if (ep_idx && !(USB_OTG_OUTEP(ep_idx)->DOEPCTL & USB_OTG_DOEPCTL_MPSIZ)) {
         return -3;
     }
-    if (((uint32_t)data) & 0x03) {
+    if (((uint32_t)(long)data) & 0x03) {
         return -4;
     }
 

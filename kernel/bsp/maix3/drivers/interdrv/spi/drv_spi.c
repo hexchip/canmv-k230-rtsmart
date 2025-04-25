@@ -466,7 +466,7 @@ static rt_uint32_t drv_spi_xfer(struct rt_spi_device* device, struct rt_spi_mess
         rt_size_t length = msg->parent.length;
         rt_size_t count = length > 0x10000 ? 0x10000 : length;
         rt_size_t send_single = 0, send_length = 0, recv_single = 0, recv_length = 0, add_length = 0;
-        void *send_buf = msg->parent.send_buf;
+        void *send_buf = (void *)msg->parent.send_buf;
         void *recv_buf = msg->parent.recv_buf;
         uint8_t tmod = send_buf ? SPI_TMOD_TO : SPI_TMOD_EPROMREAD;
         tmod = recv_buf ? tmod & SPI_TMOD_RO : tmod;

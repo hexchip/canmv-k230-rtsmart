@@ -354,7 +354,7 @@ static void sdhci_send_command(struct sdhci_host* sdhci_host, struct sdhci_comma
             start_addr = (rt_ubase_t)((uint8_t*)sdhci_data->rxData + PV_OFFSET);
         else
             start_addr = (rt_ubase_t)((uint8_t*)sdhci_data->txData + PV_OFFSET);
-        rt_hw_cpu_dcache_clean((void*)start_addr, sdhci_data->blockSize * sdhci_data->blockCount);
+        rt_hw_cpu_dcache_clean((void*)(long)start_addr, sdhci_data->blockSize * sdhci_data->blockCount);
         command->flags2 |= sdhci_enable_dma_flag;
         sdhci_writel(sdhci_host, start_addr, SDHCI_DMA_ADDRESS);
 #endif

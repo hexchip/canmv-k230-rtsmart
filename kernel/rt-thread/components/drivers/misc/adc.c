@@ -50,11 +50,11 @@ static rt_err_t _adc_control(rt_device_t dev, int cmd, void *args)
     }
     if (cmd == RT_ADC_CMD_ENABLE)
     {
-        result = adc->ops->enabled(adc, (rt_uint32_t)args, RT_TRUE);
+        result = adc->ops->enabled(adc, (rt_uint32_t)(long)args, RT_TRUE);
     }
     else if (cmd == RT_ADC_CMD_DISABLE)
     {
-        result = adc->ops->enabled(adc, (rt_uint32_t)args, RT_FALSE);
+        result = adc->ops->enabled(adc, (rt_uint32_t)(long)args, RT_FALSE);
     }
 
     return result;

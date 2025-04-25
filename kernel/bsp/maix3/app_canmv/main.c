@@ -196,7 +196,7 @@ int main(void) {
 #if defined (ENABLE_CHERRY_USB_HOST) && defined (ENABLE_CANMV_USB_HOST)
   usb_base = (void *)rt_ioremap((void *)usb_dev_addr[CHERRY_USB_HOST_USING_DEV], 0x10000);
 
-  usbh_initialize(0, (uint32_t)usb_base);
+  usbh_initialize(0, (uint32_t)(long)usb_base);
 #endif // ENABLE_CHERRY_USB_HOST
 
 #if defined (ENABLE_CHERRY_USB_DEVICE) && defined (ENABLE_CANMV_USB_DEV)

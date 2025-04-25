@@ -315,7 +315,7 @@ static void gpio_irq_to_user(void* args)
 
     // rt_work_init(&irq_table[pin].send_sig_work, send_sig_work, args);
 
-    if (RT_EOK != rt_work_submit(&irq_table[pin].send_sig_work, args)) {
+    if (RT_EOK != rt_work_submit(&irq_table[pin].send_sig_work, 0)) {
         rt_kprintf("submit failed.\n");
     }
 }
