@@ -292,6 +292,19 @@ static void usbh_hubport_release(struct usbh_hubport *child)
         }
         child->config.config_desc.bNumInterfaces = 0;
         usbh_kill_urb(&child->ep0_urb);
+
+#ifdef CHERRY_USB_HC_DRV_DWC2
+extern int dwc2_hcd_endpoint_disable(struct usbh_hcd *hcd, struct usb_host_endpoint *ep, int retry);
+
+        if (child->bus != NULL) {
+            struct usbh_hcd *hcd = &child->bus->hcd;
+            for (int i = 0; i < 16; i++) {
+                dwc2_hcd_endpoint_disable(hcd, &child->hep_in[i], 250);
+                dwc2_hcd_endpoint_disable(hcd, &child->hep_out[i], 250);
+            }
+        }
+#endif
+
         usb_osal_mutex_delete(child->mutex);
     }
 }

@@ -3862,8 +3862,9 @@ static int dwc2_hcd_urb_dequeue(struct dwc2_hsotg *hsotg, struct dwc2_hcd_urb *u
 }
 
 /* Must NOT be called with interrupt disabled or spinlock held */
-static int dwc2_hcd_endpoint_disable(struct dwc2_hsotg *hsotg, struct usb_host_endpoint *ep, int retry)
+int dwc2_hcd_endpoint_disable(struct usb_hcd *hcd, struct usb_host_endpoint *ep, int retry)
 {
+    struct dwc2_hsotg *hsotg = dwc2_hcd_to_hsotg(hcd);
     struct dwc2_qtd *qtd, *qtd_tmp;
     struct dwc2_qh *qh;
     rt_base_t level;
@@ -3942,7 +3943,7 @@ static int _dwc2_hcd_urb_dequeue(struct urb *urb, int status)
         urb->errorcode = status;
         dev_dbg(urb, "%s urb->hcpriv is NULL(%p,%p)\n", __func__, urb, urb->hport);
         rc = -USB_ERR_INVAL;
-        goto disable_ep;
+        goto wail_kill;
     }
 
     rc = dwc2_hcd_urb_dequeue(hsotg, urb->hcpriv);
@@ -3966,10 +3967,8 @@ static int _dwc2_hcd_urb_dequeue(struct urb *urb, int status)
     dev_dbg(hsotg->dev, "Called usb_hcd_giveback_urb()\n");
     dev_dbg(hsotg->dev, "  urb->status = %d\n", urb->errorcode);
 
-disable_ep:
+wail_kill:
     rt_spin_unlock_irqrestore(&hsotg->lock, level);
-
-    dwc2_hcd_endpoint_disable(hsotg, urb->hep, 250);
 
     do {
         int ret;
