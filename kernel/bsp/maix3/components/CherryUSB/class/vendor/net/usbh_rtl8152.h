@@ -23,7 +23,9 @@ struct usbh_rtl8152 {
     uint8_t mac[6];
     bool connect_status;
     bool plug;
+#ifdef CHERRY_USB_RTL8152_LINKCHECK
     bool submit_work;
+#endif
     uint32_t speed[2];
 
     ip_addr_t ipaddr;
