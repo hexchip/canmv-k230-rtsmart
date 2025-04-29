@@ -964,9 +964,12 @@ void lwp_request_thread_exit(rt_thread_t thread_to_exit)
         }
         if ((thread->stat & RT_THREAD_SUSPEND_MASK) == RT_THREAD_SUSPEND_MASK)
         {
-            thread->error = -RT_EINTR;
-            rt_hw_dsb();
-            rt_thread_wakeup(thread);
+            if (thread->stat != RT_THREAD_SUSPEND_UNINTERRUPTIBLE)
+            {
+                thread->error = -RT_EINTR;
+                rt_hw_dsb();
+                rt_thread_wakeup(thread);
+            }
         }
         break;
     }
