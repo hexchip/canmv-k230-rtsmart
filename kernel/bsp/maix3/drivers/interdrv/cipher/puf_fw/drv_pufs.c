@@ -1558,6 +1558,7 @@ int pufs_device_init(void)
 }
 INIT_DEVICE_EXPORT(pufs_device_init);
 
+#if defined (RT_USING_PUFS_FILE_HASH)
 static int file_hash(int mode, char* file)
 {
     int f;
@@ -1664,3 +1665,4 @@ MSH_CMD_EXPORT(sha224sum, file sha224);
 MSH_CMD_EXPORT(sha256sum, file sha256);
 MSH_CMD_EXPORT(sha384sum, file sha384);
 MSH_CMD_EXPORT(sha512sum, file sha512);
+#endif

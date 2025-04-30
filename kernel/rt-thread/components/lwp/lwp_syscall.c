@@ -1028,8 +1028,10 @@ int sys_gettimeofday(struct timeval *tp, struct timezone *tzp)
             return -EFAULT;
         }
 
-        t_k.tv_sec = rt_tick_get() / RT_TICK_PER_SECOND;
-        t_k.tv_usec = (rt_tick_get() % RT_TICK_PER_SECOND) * (1000000 / RT_TICK_PER_SECOND);
+        if(0x00 != gettimeofday(&t_k, NULL)) {
+            t_k.tv_sec = rt_tick_get() / RT_TICK_PER_SECOND;
+            t_k.tv_usec = (rt_tick_get() % RT_TICK_PER_SECOND) * (1000000 / RT_TICK_PER_SECOND);
+        }
 
         lwp_put_to_user(tp, (void *)&t_k, sizeof t_k);
     }
@@ -1050,7 +1052,19 @@ int sys_gettimeofday(struct timeval *tp, struct timezone *tzp)
 
 int sys_settimeofday(const struct timeval *tv, const struct timezone *tzp)
 {
-    return 0;
+    struct timeval _tv;
+    struct timezone _tzp;
+
+    if(!tv) {
+        return -EFAULT;
+    }
+
+    lwp_get_from_user(&_tv, (void *)tv, sizeof(*tv));
+    if(tzp) {
+        lwp_get_from_user(&_tzp, (void *)tzp, sizeof(*tzp));
+    }
+
+    return settimeofday(&_tv, &_tzp);
 }
 
 int sys_exec(char *filename, int argc, char **argv, char **envp)

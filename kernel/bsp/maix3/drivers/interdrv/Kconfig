@@ -14,9 +14,15 @@ menu "InterDriver"
             config RT_USING_HASH
                 bool "Use HW SHA256 accelerator"
                 default n
-            config RT_USING_PUFS
+            menuconfig RT_USING_PUFS
                 bool "Use HW PUFS accelerator"
                 default n
+
+                if RT_USING_PUFS
+                    config RT_USING_PUFS_FILE_HASH
+                        bool "Enable calculate file hash with pufs"
+                        default n
+                endif
         endif
 
     config RT_USING_GNNE
