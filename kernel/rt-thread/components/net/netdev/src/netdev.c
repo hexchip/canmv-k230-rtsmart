@@ -367,6 +367,16 @@ void netdev_set_default(struct netdev *netdev)
 {
     if (netdev)
     {
+        if (0x00 != rt_memcmp(netdev, netdev_default, sizeof(struct netdev))) {
+            /* change the default netdev, update dns server */
+            for(int i = 0; i < NETDEV_DNS_SERVERS_NUM; i++) {
+                const ip_addr_t *dns = &netdev->dns_servers[i];
+                if(IPADDR_ANY != dns->addr) {
+                    netdev_change_resolv_conf(dns);
+                }
+            }
+        }
+
         netdev_default = netdev;
 
         if (netdev->ops->set_default)
@@ -706,6 +716,11 @@ void netdev_low_level_set_gw(struct netdev *netdev, const ip_addr_t *gw)
     }
 }
 
+RT_WEAK void netdev_change_resolv_conf(const ip_addr_t *dns_server)
+{
+
+}
+
 /**
  * This function will set network interface device DNS server address.
  * @NOTE it can only be called in the network interface device driver.
@@ -741,6 +756,10 @@ void netdev_low_level_set_dns_server(struct netdev *netdev, uint8_t dns_num, con
         if (netdev->addr_callback)
         {
             netdev->addr_callback(netdev, NETDEV_CB_ADDR_DNS_SERVER);
+        }
+
+        if (0x00 == rt_memcmp(netdev, netdev_default, sizeof(struct netdev))) {
+            netdev_change_resolv_conf(dns_server);
         }
     }
 }
@@ -1079,7 +1098,7 @@ FINSH_FUNCTION_EXPORT_ALIAS(netdev_ifconfig, __cmd_ifconfig, list the informatio
 #endif /* NETDEV_USING_IFCONFIG */
 
 #ifdef NETDEV_USING_PING
-int netdev_cmd_ping(char* target_name, rt_uint32_t times, rt_size_t size)
+int netdev_cmd_ping(char* target_name, rt_uint32_t times, rt_size_t size, const char *dev_name)
 {
 #define NETDEV_PING_DATA_SIZE       32
 /** ping receive timeout - in milliseconds */
@@ -1091,84 +1110,112 @@ int netdev_cmd_ping(char* target_name, rt_uint32_t times, rt_size_t size)
     ((netdev) && (netdev)->ops && (netdev)->ops->ping && \
         netdev_is_up(netdev) && netdev_is_link_up(netdev)) \
 
-    struct netdev *netdev = RT_NULL;
+    struct netdev *netdev_temp = NULL;
     struct netdev_ping_resp ping_resp;
     int index, ret = 0;
 
-    if (size == 0)
-    {
+    int netdev_pool_cnt = 0;
+    char net_dev_name_pool[16][RT_NAME_MAX];
+    const int netdev_pool_max_cnt = sizeof(net_dev_name_pool) / sizeof(net_dev_name_pool[0]);
+
+    if (size == 0) {
         size = NETDEV_PING_DATA_SIZE;
     }
 
-    if (NETDEV_PING_IS_COMMONICABLE(netdev_default))
-    {
-        /* using default network interface device for ping */
-        netdev = netdev_default;
-    }
-    else
-    {
-        /* using first internet up status network interface device */
-        netdev = netdev_get_first_by_flags(NETDEV_FLAG_LINK_UP);
-        if (netdev == RT_NULL)
-        {
-            rt_kprintf("ping: not found available network interface device.\n");
-            return -RT_ERROR;
-        }
-        else if (netdev->ops == RT_NULL || netdev->ops->ping == RT_NULL)
-        {
-            rt_kprintf("ping: network interface device(%s) not support ping feature.\n", netdev->name);
-            return -RT_ERROR;
-        }
-        else if (!netdev_is_up(netdev) || !netdev_is_link_up(netdev))
-        {
-            rt_kprintf("ping: network interface device(%s) status error.\n", netdev->name);
-            return -RT_ERROR;
-        }
+    for(int i = 0; i < netdev_pool_cnt; i++) {
+        rt_memset(&net_dev_name_pool[i][0], 0x00, RT_NAME_MAX);
     }
 
-    for (index = 0; index < times; index++)
-    {
-        int delay_tick = 0;
-        rt_tick_t start_tick = 0;
+    if(NULL == dev_name) {
+        rt_base_t level;
+        rt_slist_t *node = RT_NULL;
 
-        rt_memset(&ping_resp, 0x00, sizeof(struct netdev_ping_resp));
-        start_tick = rt_tick_get();
-        netdev = netdev_get_first_by_flags(NETDEV_FLAG_LINK_UP);
-        if (netdev == RT_NULL || !netdev_is_up(netdev) || !netdev_is_link_up(netdev))
-        {
-            rt_kprintf("ping: not found available network interface device.\n");
-            break;
-        }
+        level = rt_hw_interrupt_disable();
 
-        ret = netdev->ops->ping(netdev, (const char *)target_name, size, NETDEV_PING_RECV_TIMEO, &ping_resp);
-        if (ret == -RT_ETIMEOUT)
+        for (node = &(netdev_list->list); node; node = rt_slist_next(node))
         {
-            rt_kprintf("ping: from %s icmp_seq=%d timeout\n",
-                (ip_addr_isany(&(ping_resp.ip_addr))) ? target_name : inet_ntoa(ping_resp.ip_addr), index);
-        }
-        else if (ret == -RT_ERROR)
-        {
-            rt_kprintf("ping: unknown %s %s\n",
-                (ip_addr_isany(&(ping_resp.ip_addr))) ? "host" : "address",
-                    (ip_addr_isany(&(ping_resp.ip_addr))) ? target_name : inet_ntoa(ping_resp.ip_addr));
-        }
-        else
-        {
-            if (ping_resp.ttl == 0)
+            if (RT_NULL == (netdev_temp = rt_slist_entry(node, struct netdev, list)))
             {
-                rt_kprintf("%d bytes from %s icmp_seq=%d time=%d ms\n",
-                            ping_resp.data_len, inet_ntoa(ping_resp.ip_addr), index, ping_resp.ticks);
+                rt_kprintf("ping: not found available network interface device.\n");
+                continue;
             }
-            else
+            else if (netdev_temp->ops == RT_NULL || netdev_temp->ops->ping == RT_NULL)
             {
-                rt_kprintf("%d bytes from %s icmp_seq=%d ttl=%d time=%d ms\n",
-                            ping_resp.data_len, inet_ntoa(ping_resp.ip_addr), index, ping_resp.ttl, ping_resp.ticks);
+                rt_kprintf("ping: network interface device(%s) not support ping feature.\n", netdev_temp->name);
+                continue;
+            }
+            else if (!netdev_is_up(netdev_temp) || !netdev_is_link_up(netdev_temp))
+            {
+                rt_kprintf("ping: network interface device(%s) status error.\n", netdev_temp->name);
+                continue;
+            }
+
+            strncpy(net_dev_name_pool[netdev_pool_cnt++], netdev_temp->name, sizeof(netdev_temp->name));
+            if(netdev_pool_cnt >= netdev_pool_max_cnt) {
+                break;
             }
         }
 
-        /* if the response time is more than NETDEV_PING_DELAY, no need to delay */
-        delay_tick = ((rt_tick_get() - start_tick) > NETDEV_PING_DELAY) || (index == times) ? 0 : NETDEV_PING_DELAY;
-        rt_thread_delay(delay_tick);
+        rt_hw_interrupt_enable(level);
+    } else {
+        strncpy(net_dev_name_pool[netdev_pool_cnt++], dev_name, RT_NAME_MAX);
+    }
+
+    for(int i = 0; i < netdev_pool_cnt; i++) {
+        char *dev_name = net_dev_name_pool[i];
+
+        if(0x00 == dev_name[0]) {
+            continue;
+        }
+
+        if (RT_NULL == (netdev_temp = netdev_get_by_name(dev_name))) {
+            rt_kprintf("ping: not found available network interface device.\n");
+            continue;
+        } else if (netdev_temp->ops == RT_NULL || netdev_temp->ops->ping == RT_NULL) {
+            rt_kprintf("ping: network interface device(%s) not support ping feature.\n", netdev_temp->name);
+            continue;
+        } else if (!netdev_is_up(netdev_temp) || !netdev_is_link_up(netdev_temp)) {
+            rt_kprintf("ping: network interface device(%s) status error.\n", netdev_temp->name);
+            continue;
+        }
+
+        rt_kprintf("ping with device %s\n", dev_name);
+
+        for (index = 0; index < times; index++) {
+            int delay_tick = 0;
+            rt_tick_t start_tick = 0;
+
+            rt_memset(&ping_resp, 0x00, sizeof(struct netdev_ping_resp));
+
+            if (netdev_temp == RT_NULL || !netdev_is_up(netdev_temp) || !netdev_is_link_up(netdev_temp)) {
+                rt_kprintf("ping: not found available network interface device.\n");
+                break;
+            }
+
+            start_tick = rt_tick_get();
+
+            ret = netdev_temp->ops->ping(netdev_temp, (const char *)target_name, size, NETDEV_PING_RECV_TIMEO, &ping_resp);
+            if (ret == -RT_ETIMEOUT) {
+                rt_kprintf("ping: from %s icmp_seq=%d timeout\n",
+                    (ip_addr_isany(&(ping_resp.ip_addr))) ? target_name : inet_ntoa(ping_resp.ip_addr), index);
+            } else if (ret == -RT_ERROR) {
+                rt_kprintf("ping: unknown %s %s\n",
+                    (ip_addr_isany(&(ping_resp.ip_addr))) ? "host" : "address",
+                        (ip_addr_isany(&(ping_resp.ip_addr))) ? target_name : inet_ntoa(ping_resp.ip_addr));
+            } else {
+                if (ping_resp.ttl == 0) {
+                    rt_kprintf("%d bytes from %s icmp_seq=%d time=%d ms\n",
+                                ping_resp.data_len, inet_ntoa(ping_resp.ip_addr), index, ping_resp.ticks);
+                } else {
+                    rt_kprintf("%d bytes from %s icmp_seq=%d ttl=%d time=%d ms\n",
+                                ping_resp.data_len, inet_ntoa(ping_resp.ip_addr), index, ping_resp.ttl, ping_resp.ticks);
+                }
+            }
+
+            /* if the response time is more than NETDEV_PING_DELAY, no need to delay */
+            delay_tick = ((rt_tick_get() - start_tick) > NETDEV_PING_DELAY) || (index == times) ? 0 : NETDEV_PING_DELAY;
+            rt_thread_delay(delay_tick);
+        }
     }
 
     return RT_EOK;
@@ -1177,9 +1224,10 @@ int netdev_cmd_ping(char* target_name, rt_uint32_t times, rt_size_t size)
 int netdev_ping(int argc, char **argv)
 {
     int count = 4;
+    char *dev_name = NULL;
 
     if (2 > argc) {
-        rt_kprintf("Please input: ping <host address> [count]\n");
+        rt_kprintf("Please input: ping <host address> [count] [dev]\n");
         return 0;
     }
 
@@ -1187,7 +1235,11 @@ int netdev_ping(int argc, char **argv)
         count = atoi(argv[2]);
     }
 
-    netdev_cmd_ping(argv[1], count, 0);
+    if(4 <= argc) {
+        dev_name = argv[3];
+    }
+
+    netdev_cmd_ping(argv[1], count, 0, dev_name);
 
     return 0;
 }

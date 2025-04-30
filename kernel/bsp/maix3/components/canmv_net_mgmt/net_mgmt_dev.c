@@ -1,6 +1,7 @@
-#include "rtdef.h"
 #include <stdbool.h>
+#include <stdio.h>
 
+#include "rtdef.h"
 #include <rthw.h>
 #include <rtthread.h>
 
@@ -10,6 +11,8 @@
 #include <netdev_ipaddr.h>
 #include <netdev.h>
 #include <netdb.h>
+
+#include "dfs_file.h"
 
 #ifdef CONFIG_ENABLE_NETWORK_RT_WLAN
     #include <wlan_mgnt.h>
@@ -770,3 +773,54 @@ static int net_mgmt_dev_init(void)
     return 0;
 }
 INIT_APP_EXPORT(net_mgmt_dev_init);
+
+void netdev_change_resolv_conf(const ip_addr_t *dns_server)
+{
+    struct dfs_fd fd;
+
+    int content_size;
+    char content[128], ip[64];
+
+    if(0x00 != dfs_file_open(&fd, "/etc/resolv.conf", O_CREAT | O_TRUNC)) {
+        LOG_E("Open /etc/resolv.conf failed.\n");
+        return;
+    }
+
+    struct in_addr addr;
+    addr.s_addr = dns_server->addr;  // assuming ipv4
+    inet_ntoa_r(addr, ip, sizeof(ip));
+
+    content_size = snprintf(content, sizeof(content), "nameserver %s", ip);
+
+    if(content_size != dfs_file_write(&fd, content, content_size)) {
+        LOG_E("Write /etc/resolv.conf failed.\n");
+    }
+
+    dfs_file_close(&fd);
+}
+
+void netdev_generate_services_file(void)
+{
+    struct dfs_fd fd;
+
+    static const char* default_services = "http        80/tcp\n"
+                                          "https       443/tcp\n"
+                                          "ftp         21/tcp\n"
+                                          "ssh         22/tcp\n"
+                                          "telnet      23/tcp\n"
+                                          "smtp        25/tcp\n"
+                                          "domain      53/udp\n"
+                                          "ntp         123/udp\n";
+
+    if (0x00 != dfs_file_open(&fd, "/etc/services", O_CREAT | O_TRUNC | O_WRONLY)) {
+        rt_kprintf("Open /etc/services failed.\n");
+        return;
+    }
+
+    int size = strlen(default_services);
+    if (size != dfs_file_write(&fd, default_services, size)) {
+        rt_kprintf("Write /etc/services failed.\n");
+    }
+
+    dfs_file_close(&fd);
+}

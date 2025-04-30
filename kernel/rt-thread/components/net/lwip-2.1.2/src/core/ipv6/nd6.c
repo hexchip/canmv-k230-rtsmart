@@ -776,14 +776,14 @@ nd6_input(struct pbuf *p, struct netif *inp)
 
             if (htonl(rdnss_opt->lifetime) > 0) {
               /* TODO implement Lifetime > 0 */
-              dns_setserver(rdnss_server_idx++, &rdnss_address);
+              dns_setserver(inp, rdnss_server_idx++, &rdnss_address);
             } else {
               /* TODO implement DNS removal in dns.c */
               u8_t s;
               for (s = 0; s < DNS_MAX_SERVERS; s++) {
                 const ip_addr_t *addr = dns_getserver(s);
                 if(ip_addr_cmp(addr, &rdnss_address)) {
-                  dns_setserver(s, NULL);
+                  dns_setserver(inp, s, NULL);
                 }
               }
             }

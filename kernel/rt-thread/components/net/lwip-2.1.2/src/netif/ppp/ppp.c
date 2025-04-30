@@ -1109,9 +1109,9 @@ int sdns(ppp_pcb *pcb, u32_t ns1, u32_t ns2) {
   LWIP_UNUSED_ARG(pcb);
 
   ip_addr_set_ip4_u32_val(ns, ns1);
-  dns_setserver(0, &ns);
+  dns_setserver(pcb->netif, 0, &ns);
   ip_addr_set_ip4_u32_val(ns, ns2);
-  dns_setserver(1, &ns);
+  dns_setserver(pcb->netif, 1, &ns);
   return 1;
 }
 
@@ -1127,12 +1127,12 @@ int cdns(ppp_pcb *pcb, u32_t ns1, u32_t ns2) {
   nsa = dns_getserver(0);
   ip_addr_set_ip4_u32_val(nsb, ns1);
   if (ip_addr_cmp(nsa, &nsb)) {
-    dns_setserver(0, IP_ADDR_ANY);
+    dns_setserver(pcb->netif, 0, IP_ADDR_ANY);
   }
   nsa = dns_getserver(1);
   ip_addr_set_ip4_u32_val(nsb, ns2);
   if (ip_addr_cmp(nsa, &nsb)) {
-    dns_setserver(1, IP_ADDR_ANY);
+    dns_setserver(pcb->netif, 1, IP_ADDR_ANY);
   }
   return 1;
 }

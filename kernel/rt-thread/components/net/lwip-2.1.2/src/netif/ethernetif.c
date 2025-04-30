@@ -157,8 +157,8 @@ static int lwip_netdev_set_addr_info(struct netdev *netif, ip_addr_t *ip_addr, i
 #ifdef RT_LWIP_DNS
 static int lwip_netdev_set_dns_server(struct netdev *netif, uint8_t dns_num, ip_addr_t *dns_server)
 {
-    extern void dns_setserver(uint8_t dns_num, const ip_addr_t *dns_server);
-    dns_setserver(dns_num, dns_server);
+    extern void dns_setserver(struct netif *netif, uint8_t dns_num, const ip_addr_t *dns_server);
+    dns_setserver(netif->user_data, dns_num, dns_server);
     return ERR_OK;
 }
 #endif /* RT_LWIP_DNS */
@@ -1009,7 +1009,7 @@ void set_dns(uint8_t dns_num, char* dns_server)
 
     if ((dns_server != RT_NULL) && ipaddr_aton(dns_server, &addr))
     {
-        dns_setserver(dns_num, &addr);
+        dns_setserver(NULL, dns_num, &addr);
     }
 }
 FINSH_FUNCTION_EXPORT(set_dns, set DNS server address);

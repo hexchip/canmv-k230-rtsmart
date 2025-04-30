@@ -19,6 +19,7 @@ const struct romfs_dirent _root_dirent[] = {
     {ROMFS_DIRENT_DIR, "proc",    RT_NULL, 0},
 #endif
 #ifdef RT_USING_DFS_TMPFS
+    {ROMFS_DIRENT_DIR, "etc",     RT_NULL, 0},
     {ROMFS_DIRENT_DIR, "tmp",     RT_NULL, 0},
 #endif
 };
@@ -46,6 +47,13 @@ int mnt_init(void) {
   if (dfs_mount(RT_NULL, "/tmp", "tmp", 0, 0) != 0) {
     rt_kprintf("Dir /tmp mount failed!\n");
   }
+
+  if (dfs_mount(RT_NULL, "/etc", "tmp", 0, 0) != 0) {
+    rt_kprintf("Dir /etc mount failed!\n");
+  }
+
+  extern void netdev_generate_services_file(void);
+  netdev_generate_services_file();
 #endif
 
 #ifndef RT_FASTBOOT

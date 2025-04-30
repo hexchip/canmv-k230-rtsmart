@@ -320,7 +320,7 @@ dns_init(void)
   /* initialize default DNS server address */
   ip_addr_t dnsserver;
   DNS_SERVER_ADDRESS(&dnsserver);
-  dns_setserver(0, &dnsserver);
+  dns_setserver(NULL, 0, &dnsserver);
 #endif /* DNS_SERVER_ADDRESS */
 
   LWIP_ASSERT("sanity check SIZEOF_DNS_QUERY",
@@ -360,8 +360,10 @@ dns_init(void)
  * @param dnsserver IP address of the DNS server to set
  */
 void
-dns_setserver(u8_t numdns, const ip_addr_t *dnsserver)
+dns_setserver(struct netif *netif, u8_t numdns, const ip_addr_t *dnsserver)
 {
+  struct netif *_netif = netif;
+
   if (numdns < DNS_MAX_SERVERS) {
     if (dnsserver != NULL) {
       dns_servers[numdns] = (*dnsserver);
@@ -370,13 +372,16 @@ dns_setserver(u8_t numdns, const ip_addr_t *dnsserver)
       extern struct netif *netif_list;
       extern struct netdev *netdev_get_by_name(const char *name);
       extern void netdev_low_level_set_dns_server(struct netdev *netdev, uint8_t dns_num, const ip_addr_t *dns_server);
-      struct netif *netif = NULL;
 
-      /* set network interface device DNS server address */
-      for (netif = netif_list; netif != NULL; netif = netif->next) {
-          netdev_low_level_set_dns_server(netdev_get_by_name(netif->name), numdns, dnsserver);
+      if(NULL != _netif) {
+        netdev_low_level_set_dns_server(netdev_get_by_name(_netif->name), numdns, dnsserver);
+      } else {
+        /* set network interface device DNS server address */
+        for (_netif = netif_list; _netif != NULL; _netif = _netif->next) {
+            netdev_low_level_set_dns_server(netdev_get_by_name(_netif->name), numdns, dnsserver);
+        }
       }
-#endif /* RT_USING_NETDEV */
+      #endif /* RT_USING_NETDEV */
     } else {
       dns_servers[numdns] = *IP_ADDR_ANY;
     }

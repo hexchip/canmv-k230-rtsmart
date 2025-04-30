@@ -276,7 +276,7 @@ int socket(int domain, int type, int protocol)
     }
     else
     {
-        rt_free(d->fnode);
+        // rt_free(d->fnode);
         /* release fd */
         fd_release(fd);
         rt_set_errno(-ENOMEM);
