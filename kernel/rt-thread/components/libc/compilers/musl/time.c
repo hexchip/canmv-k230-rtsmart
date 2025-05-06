@@ -495,6 +495,11 @@ int gettimeofday(struct timeval *tv, struct timezone *tz)
 
         if (_control_rtc(RT_DEVICE_CTRL_RTC_GET_TIME, (void *)&tv->tv_sec) == RT_EOK)
         {
+            uint64_t tick;
+            __asm__ __volatile__("rdtime %0" : "=r"(tick));
+            tick %= 27 * 1000 * 1000;
+            tv->tv_usec = (tick / 27);
+
             return 0;
         }
     }
