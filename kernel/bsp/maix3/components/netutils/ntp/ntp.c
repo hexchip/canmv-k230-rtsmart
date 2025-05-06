@@ -394,7 +394,10 @@ time_t ntp_sync_to_rtc(const char *host_name)
         set_time(cur_tm->tm_hour, cur_tm->tm_min, cur_tm->tm_sec);
         set_date(cur_tm->tm_year + 1900, cur_tm->tm_mon + 1, cur_tm->tm_mday);
 #else
-        rt_device_control(rt_device_find("rtc"), RT_DEVICE_CTRL_RTC_SET_TIME, &cur_time);
+        struct timespec tp;
+        tp.tv_sec = cur_time;
+        tp.tv_nsec = 0;
+        clock_gettime(CLOCK_REALTIME, &tp);
 #endif /*RT_VER_NUM <= 0x40003*/
         LOG_I("Get local time from NTP server: %s", ctime((const time_t *) &cur_time));
 #else

@@ -185,6 +185,7 @@ menu "InterDriver"
     config RT_USING_RTC_PMU
         bool "Using RTC device drivers"
         default n
+        select RT_USING_RTC
 
     menuconfig RT_USING_SDIO
         bool "Enable SDIO Driver"
