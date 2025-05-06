@@ -124,7 +124,7 @@ int clock_gettime(clockid_t clockid, struct timespec *tp)
     {
     case CLOCK_REALTIME:
         {
-            #ifdef RT_USING_RTC
+            #if 0 //def RT_USING_RTC
             rt_device_t device;
             time_t _t;
 
