@@ -2036,6 +2036,7 @@ static int usbh_rtl8152_connect(struct usbh_hubport *hport, uint8_t intf)
     }
 
     rtl8152_class->rtl_ops.init(rtl8152_class);
+    rtl8152_set_speed(rtl8152_class, AUTONEG_ENABLE, rtl8152_class->supports_gmii ? SPEED_1000 : SPEED_100, DUPLEX_FULL);
     rtl8152_class->rtl_ops.up(rtl8152_class);
 
     if (rtl8152_class->rx_buf_sz > CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SEGSZE) {
@@ -2213,7 +2214,6 @@ find_class:
     }
 
     rtl8152_set_rx_mode(&g_rtl8152_class);
-    rtl8152_set_speed(&g_rtl8152_class, AUTONEG_ENABLE, g_rtl8152_class.supports_gmii ? SPEED_1000 : SPEED_100, DUPLEX_FULL);
 
 #ifdef CHERRY_USB_RTL8152_LINKCHECK
     g_rtl8152_class.submit_work = true;
