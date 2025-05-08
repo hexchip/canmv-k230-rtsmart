@@ -29,20 +29,24 @@ static int cdc_close(struct dfs_fd *fd)
 }
 
 static int cdc_read(struct dfs_fd *fd, void *buf, size_t count) {
+    int read_count = -1;
+
     rt_err_t error = rt_sem_take(&cdc_read_sem, rt_tick_from_millisecond(100));
 
     if (error == RT_EOK) {
-        int tmp = actual_read;
-        memcpy(buf, usb_read_buffer, actual_read);
+        read_count = actual_read;
         actual_read = 0;
-        usbd_ep_start_read(USB_DEVICE_BUS_ID, CDC_OUT_EP, usb_read_buffer, sizeof(usb_read_buffer));
-        return tmp;
+
+        if(read_count) memcpy(buf, usb_read_buffer, read_count);
     } else if (error == -RT_ETIMEOUT) {
+        read_count = 0;
+
         USB_LOG_WRN("read timeout\n");
-        return 0;
-    } else {
-        return -1;
     }
+
+    usbd_ep_start_read(USB_DEVICE_BUS_ID, CDC_OUT_EP, usb_read_buffer, sizeof(usb_read_buffer));
+
+    return read_count;
 }
 
 static int cdc_write(struct dfs_fd *fd, const void *buf, size_t count) {
