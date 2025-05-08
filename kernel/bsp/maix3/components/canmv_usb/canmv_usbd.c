@@ -84,6 +84,8 @@ static void event_handler(uint8_t busid, uint8_t event)
 {
     if (event == USBD_EVENT_RESET) {
         g_usb_device_connected = false;
+
+        rt_kprintf("usb disconnect\n");
     } else if (event == USBD_EVENT_CONFIGURED) {
         g_usb_device_connected = true;
 

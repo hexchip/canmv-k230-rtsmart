@@ -30,18 +30,25 @@ static int cdc_close(struct dfs_fd *fd)
 
 static int cdc_read(struct dfs_fd *fd, void *buf, size_t count) {
     int read_count = -1;
+    rt_err_t error = RT_ERROR;
 
-    rt_err_t error = rt_sem_take(&cdc_read_sem, rt_tick_from_millisecond(100));
-
-    if (error == RT_EOK) {
+    if (RT_EOK == (error = rt_sem_take(&cdc_read_sem, rt_tick_from_millisecond(100)))) {
         read_count = actual_read;
         actual_read = 0;
 
-        if(read_count) memcpy(buf, usb_read_buffer, read_count);
-    } else if (error == -RT_ETIMEOUT) {
-        read_count = 0;
+        if(read_count) {
+            memcpy(buf, usb_read_buffer, read_count);
+        }
+    } else {
+        if(actual_read) {
+            USB_LOG_WRN("read %d but not copy\n", actual_read);
+        }
 
-        USB_LOG_WRN("read timeout\n");
+        if ((-RT_ETIMEOUT) == error) {
+            read_count = 0;
+
+            USB_LOG_WRN("read timeout\n");
+        }
     }
 
     usbd_ep_start_read(USB_DEVICE_BUS_ID, CDC_OUT_EP, usb_read_buffer, sizeof(usb_read_buffer));
@@ -50,16 +57,17 @@ static int cdc_read(struct dfs_fd *fd, void *buf, size_t count) {
 }
 
 static int cdc_write(struct dfs_fd *fd, const void *buf, size_t count) {
+    rt_err_t error = RT_ERROR;
+
     if (count == 0 || (false == g_usb_device_connected)) {
         return 0;
     }
 
-    rt_err_t error = rt_sem_take(&cdc_write_sem, rt_tick_from_millisecond(10));
-    if (error == RT_EOK) {
+    if (RT_EOK == (error = rt_sem_take(&cdc_write_sem, rt_tick_from_millisecond(100)))) {
         usbd_ep_start_write(USB_DEVICE_BUS_ID, CDC_IN_EP, buf, count);
     }
 
-    return error == RT_EOK ? count : -error;
+    return (RT_EOK == error) ? count : -error;
 }
 
 static int cdc_poll(struct dfs_fd *fd, struct rt_pollreq *req)
@@ -123,7 +131,9 @@ static struct usbd_endpoint cdc_in_ep = {
 
 void canmv_usb_device_cdc_on_connected(void)
 {
+    rt_sem_control(&cdc_read_sem, RT_IPC_CMD_RESET, (void *)0);
     rt_sem_control(&cdc_write_sem, RT_IPC_CMD_RESET, (void *)1);
+
     usbd_ep_start_read(USB_DEVICE_BUS_ID, CDC_OUT_EP, usb_read_buffer, sizeof(usb_read_buffer));
 }
 
