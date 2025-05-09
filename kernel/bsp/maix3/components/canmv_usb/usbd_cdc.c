@@ -6,6 +6,7 @@
 #include "dfs_file.h"
 
 #include "ipc/waitqueue.h"
+#include "rtthread.h"
 
 #define CDC_MAX_MPS USB_DEVICE_MAX_MPS
 
@@ -32,7 +33,7 @@ static int cdc_read(struct dfs_fd *fd, void *buf, size_t count) {
     int read_count = -1;
     rt_err_t error = RT_ERROR;
 
-    if (RT_EOK == (error = rt_sem_take(&cdc_read_sem, rt_tick_from_millisecond(100)))) {
+    if (RT_EOK == (error = rt_sem_take(&cdc_read_sem, rt_tick_from_millisecond(10)))) {
         read_count = actual_read;
         actual_read = 0;
 
@@ -60,14 +61,16 @@ static int cdc_write(struct dfs_fd *fd, const void *buf, size_t count) {
     rt_err_t error = RT_ERROR;
 
     if (count == 0 || (false == g_usb_device_connected)) {
-        return 0;
+        return -1; /* error */
     }
 
-    if (RT_EOK == (error = rt_sem_take(&cdc_write_sem, rt_tick_from_millisecond(100)))) {
+    if (RT_EOK == (error = rt_sem_take(&cdc_write_sem, rt_tick_from_millisecond(10)))) {
         usbd_ep_start_write(USB_DEVICE_BUS_ID, CDC_IN_EP, buf, count);
+
+        return count;
     }
 
-    return (RT_EOK == error) ? count : -error;
+    return 0; /* try again */
 }
 
 static int cdc_poll(struct dfs_fd *fd, struct rt_pollreq *req)
@@ -109,11 +112,11 @@ static void usbd_cdc_acm_bulk_out(uint8_t busid, uint8_t ep, uint32_t nbytes)
 
 static void usbd_cdc_acm_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
 {
-    /* send zlp */
-    if (nbytes && (nbytes % CDC_MAX_MPS) == 0)
+    if (nbytes && (0x00 == (nbytes % CDC_MAX_MPS))) {
         usbd_ep_start_write(USB_DEVICE_BUS_ID, CDC_IN_EP, NULL, 0);
-    else
+    } else {
         rt_sem_release(&cdc_write_sem);
+    }
 }
 
 static struct usbd_interface usbd_cdc_intf;
