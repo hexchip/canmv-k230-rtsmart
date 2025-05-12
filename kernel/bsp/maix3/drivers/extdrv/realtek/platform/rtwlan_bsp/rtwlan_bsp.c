@@ -2,6 +2,7 @@
 #include "rtthread.h"
 #include "rtdevice.h"
 #include "drivers/sdio.h"
+#include "drv_gpio.h"
 #include "card.h"
 #include "wifi/wifi_conf.h"
 #include "net_stack_intf.h"
@@ -39,11 +40,26 @@ static struct rt_sdio_driver realtek_drv = {
 
 int realtek_init(void)
 {
-#ifdef REALTEK_SDIO_DEV0
+    Set_WLAN_Power_On();
+
+#if defined (REALTEK_SDIO_DEV0)
+    kd_sdhci0_reset(1);
+    rt_thread_mdelay(10);
     kd_sdhci0_reset(0);
-    rt_thread_mdelay(20);
+    rt_thread_mdelay(10);
     kd_sdhci0_reset(1);
     rt_thread_mdelay(50);
+#elif defined (REALTEK_SDIO_DEV1)
+    #if (-1) != REALTEK_SDIO_DEV_RESET
+        kd_pin_mode(REALTEK_SDIO_DEV_RESET, GPIO_DM_OUTPUT);
+
+        kd_pin_write(REALTEK_SDIO_DEV_RESET, GPIO_PV_HIGH);
+        rt_thread_mdelay(10);
+        kd_pin_write(REALTEK_SDIO_DEV_RESET, GPIO_PV_LOW);
+        rt_thread_mdelay(10);
+        kd_pin_write(REALTEK_SDIO_DEV_RESET, GPIO_PV_HIGH);
+        rt_thread_mdelay(50);
+    #endif
 #endif
 
     sdio_register_driver(&realtek_drv);
