@@ -29,6 +29,11 @@ const struct romfs_dirent romfs_root =
   ROMFS_DIRENT_DIR, "/", (rt_uint8_t *)_root_dirent, sizeof(_root_dirent) / sizeof(_root_dirent[0])
 };
 
+RT_WEAK void netdev_generate_services_file(void)
+{
+
+}
+
 int mnt_init(void) {
   rt_err_t ret;
 
@@ -52,7 +57,6 @@ int mnt_init(void) {
     rt_kprintf("Dir /etc mount failed!\n");
   }
 
-  extern void netdev_generate_services_file(void);
   netdev_generate_services_file();
 #endif
 
