@@ -61,6 +61,9 @@
 // network util
 #define IOCTRL_NET_IFCONFIG 0x100
 #define IOCTRL_NET_GETHOSTBYNAME 0x101
+#define IOCTRL_NET_SET_DEV_DEFAULT  0x102
+#define IOCTRL_NET_GET_DEV_DEFAULT  0x103
+#define IOCTRL_NET_GET_DEV_LIST  0x104
 
 struct rt_net_mgmt_device
 {
@@ -577,6 +580,97 @@ static rt_err_t _net_mgmt_dev_cmd_net_gethostbyname(void *mgmt_dev, void *args)
     return 0;
 }
 
+static rt_err_t _net_mgmt_dev_cmd_set_default(void* mgmt_dev, void* args)
+{
+    char dev_name[32];
+
+    struct netdev*         netdev   = NULL;
+    struct rt_wlan_device* wlan_dev = NULL;
+
+    lwp_get_from_user(&dev_name[0], args, sizeof(dev_name) - 1);
+    dev_name[sizeof(dev_name) - 1] = '\0';
+
+    if (0x00 == rt_strlen(dev_name)) {
+        return -1;
+    }
+
+    netdev = netdev_get_by_name(dev_name);
+    if (NULL == netdev) {
+        LOG_E("Can't find netif %s\n", dev_name);
+        return -RT_ERROR;
+    }
+    netdev_set_default(netdev);
+
+    return 0;
+}
+
+static rt_err_t _net_mgmt_dev_cmd_get_default(void* mgmt_dev, void* args)
+{
+    extern struct netdev* netdev_default;
+
+    char dev_name[32];
+
+    if (NULL == netdev_default) {
+        return -1;
+    }
+
+    rt_memcpy(dev_name, netdev_default->name, sizeof(netdev_default->name));
+
+    if (sizeof(dev_name) != lwp_put_to_user(args, dev_name, sizeof(dev_name))) {
+        return -2;
+    }
+
+    return 0;
+}
+
+static rt_err_t _net_mgmt_dev_cmd_get_dev_list(void* mgmt_dev, void* args)
+{
+#define NET_DEV_MAX_CNT 8
+
+    rt_base_t      level;
+    rt_slist_t*    node       = RT_NULL;
+    struct netdev* netdev     = RT_NULL;
+    int            netdev_cnt = 0;
+    int            name_idx   = 0;
+
+    char result_buffer[32 * NET_DEV_MAX_CNT], *pname = NULL; /* we max support 8 netdev */
+
+    /* Check if netdev list exists */
+    if (RT_NULL == netdev_list) {
+        return -1;
+    }
+
+    if ((NULL == args) || !lwp_user_accessable(args, sizeof(result_buffer))) {
+        LOG_E("user input buffer error\n");
+        return -1;
+    }
+
+    name_idx = 0;
+    rt_memset(result_buffer, 0, sizeof(result_buffer));
+
+    level    = rt_hw_interrupt_disable();
+    for (node = &(netdev_list->list); node; node = rt_slist_next(node))
+    {
+        netdev = rt_slist_entry(node, struct netdev, list);
+
+        pname = &result_buffer[name_idx * 32];
+        rt_memcpy(pname, netdev->name, RT_NAME_MAX);
+
+        if ((++name_idx) > NET_DEV_MAX_CNT) {
+            break;
+        }
+    }
+    rt_hw_interrupt_enable(level);
+
+    if (sizeof(result_buffer) != lwp_put_to_user(args, result_buffer, sizeof(result_buffer))) {
+        return -1;
+    }
+
+    return 0;
+
+#undef NET_DEV_MAX_CNT
+}
+
 struct rt_net_mgmt_device_cmd_handle {
     int cmd;
     rt_err_t (*func)(void *mgmt_dev, void *args);
@@ -699,6 +793,18 @@ static struct rt_net_mgmt_device_cmd_handle cmd_handles[] = {
     {
         .cmd = IOCTRL_NET_GETHOSTBYNAME,
         .func = _net_mgmt_dev_cmd_net_gethostbyname,
+    },
+    {
+        .cmd = IOCTRL_NET_SET_DEV_DEFAULT,
+        .func = _net_mgmt_dev_cmd_set_default,
+    },
+    {
+        .cmd = IOCTRL_NET_GET_DEV_DEFAULT,
+        .func = _net_mgmt_dev_cmd_get_default,
+    },
+    {
+        .cmd = IOCTRL_NET_GET_DEV_LIST,
+        .func = _net_mgmt_dev_cmd_get_dev_list,
     },
 };
 

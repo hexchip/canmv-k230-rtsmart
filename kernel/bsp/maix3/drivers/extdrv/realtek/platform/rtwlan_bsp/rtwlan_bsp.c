@@ -46,7 +46,7 @@ int realtek_init(void)
     kd_sdhci0_reset(1);
     rt_thread_mdelay(10);
     kd_sdhci0_reset(0);
-    rt_thread_mdelay(10);
+    rt_thread_mdelay(200);
     kd_sdhci0_reset(1);
     rt_thread_mdelay(50);
 #elif defined (REALTEK_SDIO_DEV1)
@@ -56,7 +56,7 @@ int realtek_init(void)
         kd_pin_write(REALTEK_SDIO_DEV_RESET, GPIO_PV_HIGH);
         rt_thread_mdelay(10);
         kd_pin_write(REALTEK_SDIO_DEV_RESET, GPIO_PV_LOW);
-        rt_thread_mdelay(10);
+        rt_thread_mdelay(200);
         kd_pin_write(REALTEK_SDIO_DEV_RESET, GPIO_PV_HIGH);
         rt_thread_mdelay(50);
     #endif
@@ -170,14 +170,22 @@ static rt_err_t wlan_join(struct rt_wlan_device* wlan, struct rt_sta_info* sta_i
 static rt_err_t wlan_softap(struct rt_wlan_device* wlan, struct rt_ap_info* ap_info)
 {
     int ret;
+    uint8_t mac[ETH_ALEN];
+    struct rt_wlan_buff buff = {NULL, 0};
 
     wifi_off_coAP();
     ret = wifi_on_coAP(RTW_MODE_STA_AP);
-    if (ret >= 0)
+    if (ret >= 0) {
         ret = wifi_start_ap(ap_info->ssid.val, ap_info->security, ap_info->key.val,
             ap_info->ssid.len, ap_info->key.len, ap_info->channel);
+        
+        wifi_get_ap_bssid(mac);
 
-    rt_wlan_dev_indicate_event_handle(&wlan_ap, ret < 0 ? RT_WLAN_DEV_EVT_AP_STOP : RT_WLAN_DEV_EVT_AP_START, NULL);
+        buff.data = ap_info;
+        buff.len = ETH_ALEN;
+    }
+
+    rt_wlan_dev_indicate_event_handle(&wlan_ap, ret < 0 ? RT_WLAN_DEV_EVT_AP_STOP : RT_WLAN_DEV_EVT_AP_START, &buff);
 
     return ret;
 }

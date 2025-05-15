@@ -627,6 +627,11 @@ static void rt_wlan_event_dispatch(struct rt_wlan_device *device, rt_wlan_dev_ev
         RT_WLAN_LOG_D("event: AP_START");
         _ap_mgnt.state |= RT_WLAN_STATE_ACTIVE;
         user_event = RT_WLAN_EVT_AP_START;
+
+        if(buff && buff->data && (0x06 == buff->len)) {
+            rt_memcpy(_ap_mgnt.info.bssid, buff->data, buff->len);
+        }
+
         user_buff.data = &_ap_mgnt.info;
         user_buff.len = sizeof(struct rt_wlan_info);
         break;
@@ -1482,13 +1487,17 @@ rt_err_t rt_wlan_start_ap_adv(struct rt_wlan_info *info, const char *password)
         }
     }
 
+    rt_memcpy(&_ap_mgnt.info, info, sizeof(struct rt_wlan_info));
+
     err = rt_wlan_dev_ap_start(AP_DEVICE(), info, password, password_len);
     if (err != RT_EOK)
     {
+        rt_memset(&_ap_mgnt.info, 0, sizeof(struct rt_wlan_info));
+
         MGNT_UNLOCK();
         return err;
     }
-    rt_memcpy(&_ap_mgnt.info, info, sizeof(struct rt_wlan_info));
+
     rt_memcpy(&_ap_mgnt.key.val, password, password_len);
     _ap_mgnt.key.len = password_len;
 
