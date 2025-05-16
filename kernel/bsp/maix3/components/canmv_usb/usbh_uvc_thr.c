@@ -290,15 +290,18 @@ check:
 
             if (uvc_buf->state == VIDEOBUF_DONE || uvc_buf->state == VIDEOBUF_ERROR) {
                 if (!uvc_buf->driver_use) {
-
+                    rt_base_t level;
 #if 0
                     static uint32_t prev;
                     int diff = rt_tick_get_millisecond() - prev;
                     prev = rt_tick_get_millisecond();
                     USB_LOG_ERR("F = %02d ms, L = %d\n", diff, uvc_buf->buf.bytesused);
 #endif
+                    level = rt_hw_interrupt_disable();
 
                     rt_list_remove(&uvc_buf->irq);
+
+                    rt_hw_interrupt_enable(level);
                     rt_wqueue_wakeup(&uvc_buf->wait_queue, 0);
                 } else {
 #if 0
@@ -656,6 +659,7 @@ static int uvc_fops_poll(struct dfs_fd *fd, struct rt_pollreq *req)
 {
     int mask = 0;
     int flags = 0;
+    rt_base_t level;
     rt_device_t device;
     struct usbh_video *video;
     struct uvc_buffer *uvc_buf;
@@ -671,17 +675,20 @@ static int uvc_fops_poll(struct dfs_fd *fd, struct rt_pollreq *req)
         goto done;
     }
 
+    level = rt_hw_interrupt_disable();
+
     if (rt_list_isempty(&uvc_queue.app_queue)) {
         mask |= POLLERR;
+        rt_hw_interrupt_enable(level);
         goto done;
     }
 
     uvc_buf = rt_list_first_entry(&uvc_queue.app_queue, struct uvc_buffer, stream);
+    rt_hw_interrupt_enable(level);
 
     /* only support POLLIN */
     flags = fd->flags & O_ACCMODE;
     if (flags == O_RDONLY || flags == O_RDWR) {
-        rt_base_t level;
 
         rt_poll_add(&(uvc_buf->wait_queue), req);
 
@@ -1144,9 +1151,12 @@ release:
             }
         }
 
-        if (vb_destroy_pool(uvc_queue.buffer[0].pool_id) != 0) {
+        if (uvc_queue.buffer[0].pool_id != VB_INVALID_POOLID) {
+            if (vb_destroy_pool(uvc_queue.buffer[0].pool_id) != 0) {
                 USB_LOG_ERR("fail to destroyed pool %d: %s %d\n",
-                           uvc_queue.buffer[0].pool_id, __func__, __LINE__);
+                            uvc_queue.buffer[0].pool_id, __func__, __LINE__);
+            }
+            uvc_queue.buffer[0].pool_id = VB_INVALID_POOLID;
         }
         break;
 #endif
@@ -1280,6 +1290,7 @@ release:
     }
     case VIDIOC_DQBUF: {
         void *va;
+        rt_base_t level;
         struct uvc_frame local_dq_buf;
         struct uvc_frame *dq_buf;
         struct uvc_buffer *uvc_buf;
@@ -1291,13 +1302,18 @@ release:
             lwp_get_from_user(dq_buf, args, sizeof(*dq_buf));
         }
 
+        level = rt_hw_interrupt_disable();
+
         if (rt_list_isempty(&uvc_queue.app_queue)) {
             USB_LOG_ERR("queue is empty: %s %d\n", __func__, __LINE__);
             ret = -RT_EINVAL;
+            rt_hw_interrupt_enable(level);
             goto out;
         }
 
         uvc_buf = rt_list_first_entry(&uvc_queue.app_queue, struct uvc_buffer, stream);
+        rt_hw_interrupt_enable(level);
+
         switch (uvc_buf->state) {
         case VIDEOBUF_DONE:
             uvc_buf->state = VIDEOBUF_IDLE;
@@ -1344,10 +1360,14 @@ release:
         va = uvc_buf->virt_addr;
 #else
         va = uvc_queue.mem + uvc_buf->buf.offset;
+        dq_buf->v_stream.len = dq_buf->length;
 #endif
+
         rt_hw_cpu_dcache_clean((void *)va, dq_buf->length);
 
+        level = rt_hw_interrupt_disable();
         rt_list_remove(&uvc_buf->stream);
+        rt_hw_interrupt_enable(level);
 
 #if 0
         if (uvc_buf->buf.index == 0)
