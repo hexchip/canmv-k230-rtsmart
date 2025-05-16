@@ -97,6 +97,10 @@ static int _rt_wqueue_wait(rt_wqueue_t *queue, int condition, int msec, int susp
     rt_list_init(&__wait.list);
 
     level = rt_hw_interrupt_disable();
+
+    /* reset thread error */
+    tid->error = RT_EOK;
+
     if (queue->flag == RT_WQ_FLAG_WAKEUP)
     {
         /* already wakeup */
