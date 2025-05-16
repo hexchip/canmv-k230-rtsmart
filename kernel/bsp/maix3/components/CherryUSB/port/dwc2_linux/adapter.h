@@ -158,7 +158,7 @@ static inline void *dma_alloc_coherent(void *dev, size_t size,
 {
     void *va_page, *pa, *va;
 
-    if (size > 150 * PAGE_SIZE) {
+    if (size > PAGE_SIZE) {
         dev_err(dev, "too big size\n");
         RT_ASSERT(1);
     }
