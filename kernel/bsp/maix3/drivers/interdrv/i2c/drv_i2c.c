@@ -664,10 +664,11 @@ static int __dw_i2c_read(struct i2c_regs *i2c_base, rt_uint8_t dev, uint addr,
     int need_restart = 0;
     int recv_len = len;
 
-    if (flags & I2C_M_RESTART)
+    if (flags & I2C_M_RESTART) {
         need_restart = BIT(10);
-    else if (i2c_xfer_init(i2c_base, dev, addr, alen) != 0)
+    } else if (i2c_xfer_init(i2c_base, dev, addr, alen) != 0) {
         return -RT_EBUSY;
+    }
 
     start_time_rx = get_timer(0);
 
@@ -713,7 +714,7 @@ static int __dw_i2c_write(struct i2c_regs *i2c_base, rt_uint8_t dev, uint addr,
 {
     int nb = len;
     unsigned long start_time_tx;
-    int cut = 0;
+    int cnt = 0;
     if (i2c_xfer_init(i2c_base, dev, addr, alen))
     {
         LOG_D("i2c set addr failed");
@@ -751,12 +752,12 @@ static int __dw_i2c_write(struct i2c_regs *i2c_base, rt_uint8_t dev, uint addr,
 
     while( (readl(&i2c_base->ic_status) & IC_STATUS_TFE) != IC_STATUS_TFE)
     {
-        cut = cut + 1;
+        cnt = cnt + 1;
         i2c_delay_us(100);
-        if(cut > 100)
+        if(cnt > 100) {
             return -1;
+        }
     }
-
 
     // if(readl(&i2c_base->ic_tx_abrt_source) != 0){
     //     if(readl(&i2c_base->ic_raw_intr_stat)&IC_TX_ABRT){
@@ -768,49 +769,87 @@ static int __dw_i2c_write(struct i2c_regs *i2c_base, rt_uint8_t dev, uint addr,
     return 0;
 }
 
-static int designware_i2c_xfer(struct chip_i2c_bus *bus, struct rt_i2c_msg *msg,
-                               int nmsgs)
+static inline __attribute__((always_inline)) uint16_t convert_msg_flags(struct rt_i2c_msg* msg)
 {
-    int ret;
-    int send_mesgs = 0;
+    uint16_t new_flags = 0;
+    uint16_t msg_flags = msg->flags;
 
-    send_mesgs = nmsgs;
+    /* Convert individual flags */
+    if (msg_flags & RT_I2C_RD) {
+        new_flags |= I2C_M_RD;
+    }
+    if (msg_flags & RT_I2C_ADDR_10BIT) {
+        new_flags |= I2C_M_TEN;
+    }
+    if (msg_flags & RT_I2C_NO_START) {
+        new_flags |= I2C_M_NOSTART;
+    }
+    if (msg_flags & RT_I2C_IGNORE_NACK) {
+        new_flags |= I2C_M_IGNORE_NAK;
+    }
+    if (msg_flags & RT_I2C_NO_READ_ACK) {
+        new_flags |= I2C_M_NO_RD_ACK;
+    }
+    if (msg_flags & RT_I2C_NO_STOP) {
+        /* NO_STOP means we explicitly clear the STOP flag */
+        new_flags &= ~I2C_M_STOP;
+    } else {
+        /* By default, set STOP flag unless NO_STOP was specified */
+        new_flags |= I2C_M_STOP;
+    }
 
-    /* get device from bus */
-    struct dw_i2c *i2c = &(bus->i2c);
+    /* Preserve any other flags that might be present */
+    new_flags |= (msg_flags
+                  & ~(RT_I2C_WR | RT_I2C_RD | RT_I2C_ADDR_10BIT | RT_I2C_NO_START | RT_I2C_IGNORE_NACK
+                      | RT_I2C_NO_READ_ACK | RT_I2C_NO_STOP));
 
-    msg->flags |= I2C_M_START;
-    for (; nmsgs > 0; nmsgs--, msg++)
-    {
-        if (nmsgs > 1)
-            msg->flags &= ~I2C_M_STOP;
-        else
-            msg->flags |= I2C_M_STOP;
-        if (!(msg->flags & I2C_M_START))
-            msg->flags |= I2C_M_RESTART;
-        if (msg->flags & I2C_M_RD)
-        {
-            ret = __dw_i2c_read(i2c->regs, msg->addr, 0, 0,
-                                msg->buf, msg->len, msg->flags);
+    return new_flags;
+}
+
+static int designware_i2c_xfer(struct chip_i2c_bus* bus, struct rt_i2c_msg* msg, int nmsgs) {
+    int ret, msg_cnt = nmsgs;
+    struct dw_i2c* i2c = &(bus->i2c);
+    bool is_first_msg = true;
+
+    while (nmsgs--) {
+        uint16_t msg_flags = convert_msg_flags(msg);  // Convert before incrementing
+
+        /* Set START/RESTART (only if not NOSTART) */
+        if (!(msg_flags & I2C_M_NOSTART)) {
+            if (is_first_msg) {
+                msg_flags |= I2C_M_START;
+            } else {
+                msg_flags |= I2C_M_RESTART;
+            }
         }
-        else
-        {
-            ret = __dw_i2c_write(i2c->regs, msg->addr, 0, 0,
-                                 msg->buf, msg->len, msg->flags);
+
+        /* Set STOP only for last message (unless NO_STOP was explicitly set) */
+        if ((0x00 == nmsgs) && !(msg->flags & RT_I2C_NO_STOP)) {
+            msg_flags |= I2C_M_STOP;
         }
-        if (ret)
-        {
+
+        /* Perform transfer */
+        if (msg_flags & I2C_M_RD) {
+            ret = __dw_i2c_read(i2c->regs, msg->addr, 0, 0, msg->buf, msg->len, msg_flags);
+        } else {
+            ret = __dw_i2c_write(i2c->regs, msg->addr, 0, 0, msg->buf, msg->len, msg_flags);
+        }
+
+        if (ret) {
             LOG_D("i2c_xfer: error sending");
             return -RT_EIO;
         }
+
+        msg++;  // Move to next message AFTER processing
+        is_first_msg = false;
     }
 
-    return send_mesgs;
+    return msg_cnt;  // Return original msg count (or adjust as needed)
 }
 
-static int designware_i2c_set_bus_speed(struct chip_i2c_bus *bus, unsigned int speed)
+static int designware_i2c_set_bus_speed(struct chip_i2c_bus* bus, unsigned int speed)
 {
-    struct dw_i2c *i2c = &bus->i2c;
+    struct dw_i2c* i2c = &bus->i2c;
     if (bus->slave) {
         return -1;
     }
@@ -818,49 +857,31 @@ static int designware_i2c_set_bus_speed(struct chip_i2c_bus *bus, unsigned int s
     struct dw_scl_sda_cfg scl_sda_cfg;
 
     uint32_t period = bus->clock / speed;
-    period = period - 20;
+    period          = period - 20;
 
-    scl_sda_cfg.ss_lcnt = period / 2;
-    scl_sda_cfg.ss_hcnt = period - scl_sda_cfg.ss_lcnt;
-    scl_sda_cfg.fs_lcnt = scl_sda_cfg.ss_lcnt;
-    scl_sda_cfg.fs_hcnt = scl_sda_cfg.ss_hcnt;
+    scl_sda_cfg.ss_lcnt  = period / 2;
+    scl_sda_cfg.ss_hcnt  = period - scl_sda_cfg.ss_lcnt;
+    scl_sda_cfg.fs_lcnt  = scl_sda_cfg.ss_lcnt;
+    scl_sda_cfg.fs_hcnt  = scl_sda_cfg.ss_hcnt;
     scl_sda_cfg.sda_hold = 0;
 
     return __dw_i2c_set_bus_speed(i2c->regs, &scl_sda_cfg, speed);
 }
 
-static rt_size_t chip_i2c_mst_xfer(struct rt_i2c_bus_device *bus,
-                                 struct rt_i2c_msg msgs[],
-                                 rt_uint32_t num)
+static int dw_i2c_control(struct chip_i2c_bus* bus, rt_uint32_t cmd, rt_uint32_t arg)
 {
-    return designware_i2c_xfer((struct chip_i2c_bus *)bus, msgs, num);
-}
-
-static int dw_i2c_control(struct chip_i2c_bus *bus,
-                        rt_uint32_t               cmd,
-                        rt_uint32_t               arg)
-{
-    rt_uint32_t bus_clock;
     rt_err_t ret;
 
     RT_ASSERT(bus != RT_NULL);
 
-    switch (cmd)
-    {
-    /* set 10-bit addr mode */
-    case RT_I2C_DEV_CTRL_10BIT:
-        // bus->flags |= RT_I2C_ADDR_10BIT;
-        break;
-    case RT_I2C_DEV_CTRL_TIMEOUT:
-        // bus->timeout = *(rt_uint32_t *)arg;
-        break;
-    case RT_I2C_DEV_CTRL_CLK:
-        bus_clock = arg;
-        ret = designware_i2c_set_bus_speed(bus, bus_clock);
-        if (ret < 0) {
+    switch (cmd) {
+    case RT_I2C_DEV_CTRL_CLK: {
+        rt_uint32_t bus_clock = arg;
+
+        if (0 > (ret = designware_i2c_set_bus_speed(bus, bus_clock))) {
             return -RT_EIO;
         }
-        break;
+    } break;
     default:
         break;
     }
@@ -868,16 +889,18 @@ static int dw_i2c_control(struct chip_i2c_bus *bus,
     return RT_EOK;
 }
 
-static rt_err_t chip_i2c_control(struct rt_i2c_bus_device *bus,
-                        rt_uint32_t               cmd,
-                        rt_uint32_t               arg)
+static rt_size_t chip_i2c_mst_xfer(struct rt_i2c_bus_device* bus, struct rt_i2c_msg msgs[], rt_uint32_t num)
 {
-    return dw_i2c_control((struct chip_i2c_bus *)bus, cmd, arg);
+    return designware_i2c_xfer((struct chip_i2c_bus*)bus, msgs, num);
 }
 
-static const struct rt_i2c_bus_device_ops chip_i2c_ops =
+static rt_err_t chip_i2c_control(struct rt_i2c_bus_device* bus, rt_uint32_t cmd, rt_uint32_t arg)
 {
-    .master_xfer = chip_i2c_mst_xfer,
+    return dw_i2c_control((struct chip_i2c_bus*)bus, cmd, arg);
+}
+
+static const struct rt_i2c_bus_device_ops chip_i2c_ops = {
+    .master_xfer     = chip_i2c_mst_xfer,
     .i2c_bus_control = chip_i2c_control,
 };
 

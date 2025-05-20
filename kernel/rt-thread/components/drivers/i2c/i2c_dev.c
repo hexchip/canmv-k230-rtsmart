@@ -73,6 +73,10 @@ static rt_err_t i2c_bus_device_control(rt_device_t dev,
 
     switch (cmd)
     {
+    /* set 7-bit addr mode */
+    case RT_I2C_DEV_CTRL_7BIT:
+        bus->flags &= ~RT_I2C_ADDR_10BIT;
+        break;
     /* set 10-bit addr mode */
     case RT_I2C_DEV_CTRL_10BIT:
         bus->flags |= RT_I2C_ADDR_10BIT;
