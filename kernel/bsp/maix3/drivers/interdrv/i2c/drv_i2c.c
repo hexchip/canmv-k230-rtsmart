@@ -817,6 +817,8 @@ static int designware_i2c_xfer(struct chip_i2c_bus* bus, struct rt_i2c_msg* msg,
         /* Set START/RESTART (only if not NOSTART) */
         if (!(msg_flags & I2C_M_NOSTART)) {
             if (is_first_msg) {
+                is_first_msg = false;
+
                 msg_flags |= I2C_M_START;
             } else {
                 msg_flags |= I2C_M_RESTART;
@@ -837,11 +839,13 @@ static int designware_i2c_xfer(struct chip_i2c_bus* bus, struct rt_i2c_msg* msg,
 
         if (ret) {
             LOG_D("i2c_xfer: error sending");
+
+            rt_set_errno(RT_EIO);
+
             return -RT_EIO;
         }
 
         msg++;  // Move to next message AFTER processing
-        is_first_msg = false;
     }
 
     return msg_cnt;  // Return original msg count (or adjust as needed)
@@ -851,6 +855,9 @@ static int designware_i2c_set_bus_speed(struct chip_i2c_bus* bus, unsigned int s
 {
     struct dw_i2c* i2c = &bus->i2c;
     if (bus->slave) {
+
+        rt_set_errno(RT_EINVAL);
+
         return -1;
     }
 
