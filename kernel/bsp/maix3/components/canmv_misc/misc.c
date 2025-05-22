@@ -421,6 +421,7 @@ static int misc_get_timezone(void *args) {
 }
 
 static int mpy_auto_exec_py_stage = 0;
+static uint64_t mpy_auto_exec_py_start_time_ms = 0;
 
 #if defined (RT_RECOVERY_MPY_AUTO_EXEC_PY)
 ///////////////////////////////////////////////////////////////////////////////
@@ -452,6 +453,8 @@ struct delete_file_mark {
 extern uint32_t gpt_crc32(const void *data, size_t len);
 
 void canmv_on_micropython_error(void) {
+  uint64_t time;
+
   char file_path[32];
   struct delete_file_mark mark;
 
@@ -462,6 +465,17 @@ void canmv_on_micropython_error(void) {
   if ((STAGE_BOOTPY_START == mpy_auto_exec_py_stage) || (STAGE_MAINPY_START == mpy_auto_exec_py_stage)) {
     rt_snprintf(file_path, sizeof(file_path), "/sdcard/%s", 
                 (STAGE_BOOTPY_START == mpy_auto_exec_py_stage) ? "boot.py" : "main.py");
+
+    __asm__ __volatile__("rdtime %0" : "=r"(time));
+
+    if((1000 * 120) <= ((time / 27 / 1000) - mpy_auto_exec_py_start_time_ms)) {
+      printf("main.py crashes after 2 min, not rename it.\n");
+
+      rt_iounmap(map_base);
+      rt_hw_cpu_reset();
+
+      return;
+    }
 
     mark.magic = 0xDEADBEEF;
     mark.path_stage = mpy_auto_exec_py_stage;
@@ -485,6 +499,7 @@ int check_delete_file_mark(void) {
   volatile void *memory_address = map_base + (target & MAP_MASK);
 
   memcpy(&mark, memory_address, sizeof(mark));
+  memset(memory_address, 0, sizeof(mark));
   rt_iounmap(map_base);
 
   if (mark.magic != 0xDEADBEEF) {
@@ -523,17 +538,22 @@ int check_delete_file_mark(void) {
 }
 #endif
 
-static int misc_set_auto_exec_stage(void *args) {
-  int stage;
+static int misc_set_auto_exec_stage(void* args)
+{
+    int stage;
+    uint64_t time;
 
-  if(sizeof(stage) != lwp_get_from_user(&stage, args, sizeof(stage))) {
-    rt_kprintf("%s get_frome_user failed\n", __func__);
-    return -1;
-  }
+    if (sizeof(stage) != lwp_get_from_user(&stage, args, sizeof(stage))) {
+        rt_kprintf("%s get_frome_user failed\n", __func__);
+        return -1;
+    }
 
-  mpy_auto_exec_py_stage = stage;
+    mpy_auto_exec_py_stage = stage;
 
-  return 0;
+    __asm__ __volatile__("rdtime %0" : "=r"(time));
+    mpy_auto_exec_py_start_time_ms = (time / (27 * 1000));
+
+    return 0;
 }
 
 static const struct misc_dev_handle misc_handles[] = {
