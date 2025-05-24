@@ -618,7 +618,7 @@ static int uvc_fops_close(struct dfs_fd *fd)
 #else
 
     if (uvc_queue.mem != RT_NULL) {
-        rt_free(uvc_queue.mem);
+        rt_free_align(uvc_queue.mem);
         uvc_queue.mem = RT_NULL;
     }
 #endif
@@ -1076,6 +1076,7 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
         if (video->current_format == USBH_VIDEO_FORMAT_UNCOMPRESSED) {
             buffer_size = video->current_frame.wHeight * video->current_frame.wWidth * 2;
         }
+        buffer_size = USB_ALIGN_UP(buffer_size, CONFIG_USB_ALIGN_SIZE);
 
         USB_LOG_DBG("buffer_size = %d, dwMaxVideoFrameBufferSize = %d, count = %d\n",
                    buffer_size, video->current_frame.dwMaxVideoFrameBufferSize, request->count);
@@ -1095,7 +1096,7 @@ static rt_err_t uvc_control(rt_device_t dev, int cmd, void *args)
             goto release;
         }
 #else
-        uvc_queue.mem = rt_malloc(buffer_size * (request->count + 1));
+        uvc_queue.mem = rt_malloc_align(buffer_size * (request->count + 1), CONFIG_USB_ALIGN_SIZE);
         if (uvc_queue.mem == RT_NULL) {
             USB_LOG_ERR("Can't alloc mem: %s %d\n", __func__, __LINE__);
             ret = -RT_ENOMEM;
