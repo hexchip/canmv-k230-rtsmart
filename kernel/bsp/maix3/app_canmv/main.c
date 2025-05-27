@@ -187,7 +187,12 @@ int main(void) {
   rt_kprintf("##############################################################\n");
 
 #ifdef RT_USING_SDIO
+  uint32_t wait_sd_cnt = 0;
   while (mmcsd_wait_cd_changed(100) != MMCSD_HOST_PLUGED) {
+    if(++wait_sd_cnt > 5) {
+      rt_kprintf("no mmc device\n");
+      break;
+    }
   }
 #endif //RT_USING_SDIO
 
