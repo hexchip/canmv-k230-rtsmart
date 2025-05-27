@@ -30,6 +30,7 @@
 #endif // CONFIG_BOARD_K230_CANMV_LCKFB
 
 #include "sysctl_pwr.h"
+#include "sysctl_boot.h"
 
 #ifdef ENABLE_CHERRY_USB
 
@@ -52,88 +53,98 @@
 
 #endif // ENABLE_CHERRY_USB
 
-#ifdef RT_USING_SDIO
-
-#define TO_STRING(x) #x
-#define CONCAT(x, y, z) x y z
-
-#define SD_DEV_PART(s, d, p) CONCAT(s, TO_STRING(d), p)
-
-static const struct dfs_mount_tbl custom_mount_table[] = {
-  {SD_DEV_PART("sd", SDCARD_ON_SDIO_DEV, "0"), "/bin", "elm", 0, 0},
-  {SD_DEV_PART("sd", SDCARD_ON_SDIO_DEV, "1"), "/sdcard", "elm", 0, 0},
-  {SD_DEV_PART("sd", SDCARD_ON_SDIO_DEV, "2"), "/data", "elm", 0, 0},
-  {0}
-};
-#else
-static const struct dfs_mount_tbl custom_mount_table[] = {
-  { "nand0", "/bin", "uffs", 0, 0},
-  { "nand1", "/sdcard", "uffs", 0, 0},
-  {0}
-};
-#endif // RT_USING_SDIO
-
 #ifndef CHERRY_USB_DEVICE_ENABLE_CLASS_MTP
 bool g_fs_mount_data_succ = false;
 #endif
 
+static const struct dfs_mount_tbl* const auto_mount_table[SYSCTL_BOOT_MAX] = {
+    (const struct dfs_mount_tbl[]) {
+        /* Nor Flash */
+        { 0 },
+    },
+    (const struct dfs_mount_tbl[]) {
+        /* Nand Flash */
+        { "nand0", "/bin", "uffs", 0, 0 },
+        { "nand1", "/sdcard", "uffs", 0, 0 },
+        { 0 },
+    },
+    (const struct dfs_mount_tbl[]) {
+        /* EMMC */
+        { "sd00", "/bin", "elm", 0, 0 },
+        { "sd01", "/sdcard", "elm", 0, 0 },
+        { "sd02", "/data", "elm", 0, 0 },
+        { 0 },
+    },
+    (const struct dfs_mount_tbl[]) {
+        /* SdCard */
+        { "sd10", "/bin", "elm", 0, 0 },
+        { "sd11", "/sdcard", "elm", 0, 0 },
+        { "sd12", "/data", "elm", 0, 0 },
+        { 0 },
+    },
+};
+
 static void mnt_mount_table(void)
 {
     int ret;
-    int err = 0;
-    int index = 0;
-    int fd = -1;
+    int err                     = 0;
+    int fd                      = -1;
     int mkfs_for_data_partition = 0;
 
-    while (1)
-    {
-        if (custom_mount_table[index].path == NULL) break;
+    sysctl_boot_mode_e          boot_mode;
+    const struct dfs_mount_tbl* mnt_tbl = NULL;
 
-        if (0x00 != (ret = dfs_mount(custom_mount_table[index].device_name,
-                      custom_mount_table[index].path,
-                      custom_mount_table[index].filesystemtype,
-                      custom_mount_table[index].rwflag,
-                      custom_mount_table[index].data)))
-        {
-            err = errno;
-            rt_kprintf("mount fs[%s] on %s failed(%d), error %d.\n", custom_mount_table[index].filesystemtype,
-                       custom_mount_table[index].path, ret, err);
+    boot_mode = sysctl_boot_get_boot_mode();
+    boot_mode &= 0x03;
+    mnt_tbl = auto_mount_table[boot_mode];
 
-          if(0x00 == rt_strcmp("/data", custom_mount_table[index].path)) {
-              g_fs_mount_data_succ = false;
-
-#ifdef RT_USING_SDIO
-
-#if defined (CONFIG_RT_AUTO_RESIZE_PARTITION)
-              if(0 <= (fd = open("/bin/auto_mkfs_data", O_RDONLY))) {
-                close(fd);
-                unlink("/bin/auto_mkfs_data");
-                fd = 0x1234;
-              }
-
-              if((0x1234 == fd) && (0x00 == mkfs_for_data_partition)) {
-                mkfs_for_data_partition = 1;
-
-                rt_kprintf("\033[31mStart format partition[2] to fat, it will took a long time, DO NOT POWEROFF THE BOARD, PLEASE WAIT IT DONE\033[0m\n");
-                dfs_mkfs("elm", custom_mount_table[index].device_name);
-                rt_kprintf("\n\n\033[32mformat done.\033[0m\n");
-
-                index--;
-              }
-#endif
-
-              if((-19) == err) {
-                rt_kprintf("Please format the partition[2] to FAT32.\nRefer to https://support.microsoft.com/zh-cn/windows/%E5%88%9B%E5%BB%BA%E5%92%8C%E6%A0%BC%E5%BC%8F%E5%8C%96%E7%A1%AC%E7%9B%98%E5%88%86%E5%8C%BA-bbb8e185-1bda-ecd1-3465-c9728f7d7d2e\n");
-              }
-#endif
-            }
-        } else {
-          if(0x00 == rt_strcmp("/data", custom_mount_table[index].path)) {
-            g_fs_mount_data_succ = true;
-          }
+    while (1) {
+        if (!mnt_tbl->path) {
+            break;
         }
 
-        index ++;
+        if (0x00
+            == (ret = dfs_mount(mnt_tbl->device_name, mnt_tbl->path, mnt_tbl->filesystemtype, mnt_tbl->rwflag,
+                                mnt_tbl->data))) {
+            if (0x00 == rt_strcmp("/data", mnt_tbl->path)) {
+                g_fs_mount_data_succ = true;
+            }
+        } else {
+            err = errno;
+            rt_kprintf("mount fs[%s] on %s failed(%d), error %d.\n", mnt_tbl->filesystemtype, mnt_tbl->path, ret, err);
+
+            if ((0x00 == rt_strncmp("/data", mnt_tbl->path, sizeof("/data") - 1))
+                && (0x00 == rt_strncmp("elm", mnt_tbl->filesystemtype, sizeof("elm") - 1))) {
+
+#if defined(CONFIG_RT_AUTO_RESIZE_PARTITION)
+                if (0 <= (fd = open("/bin/auto_mkfs_data", O_RDONLY))) {
+                    close(fd);
+                    unlink("/bin/auto_mkfs_data");
+                    fd = 0x1234;
+                }
+
+                if ((0x1234 == fd) && (0x00 == mkfs_for_data_partition)) {
+                    mkfs_for_data_partition = 1;
+
+                    rt_kprintf("\033[31mStart format partition[2] to fat, it will took a long time, DO NOT POWEROFF "
+                               "THE BOARD, PLEASE WAIT IT DONE\033[0m\n");
+                    dfs_mkfs("elm", mnt_tbl->device_name);
+                    rt_kprintf("\n\n\033[32mformat done.\033[0m\n");
+
+                    mnt_tbl--;
+                }
+#endif
+
+                if ((-19) == err) {
+                    rt_kprintf("Please format the partition[2] to FAT32.\nRefer to "
+                               "https://support.microsoft.com/zh-cn/windows/"
+                               "%E5%88%9B%E5%BB%BA%E5%92%8C%E6%A0%BC%E5%BC%8F%E5%8C%96%E7%A1%AC%E7%9B%98%E5%88%86%E5%"
+                               "8C%BA-bbb8e185-1bda-ecd1-3465-c9728f7d7d2e\n");
+                }
+            }
+        }
+
+        mnt_tbl++;
     }
 }
 

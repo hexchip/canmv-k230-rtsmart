@@ -11,6 +11,8 @@
 #include <dfs_fs.h>
 #include <dfs_posix.h>
 
+#include "sysctl_boot.h"
+
 #include "./config.h"
 
 struct config_handler {
@@ -363,6 +365,11 @@ static void execute_auto_resize(char *value) {
 
   struct mmcsd_blk_device *blk_dev = NULL;
 
+  int mmc_dev = -1;
+
+  sysctl_boot_mode_e boot_mode;
+  boot_mode = sysctl_boot_get_boot_mode();
+
   if (0x01 != sscanf(value, "%c", &enable)) {
     rt_kprintf("%s parse value failed.\n", __func__);
     return;
@@ -379,9 +386,17 @@ static void execute_auto_resize(char *value) {
     return;
   }
 
+  if(SYSCTL_BOOT_EMMC == boot_mode) {
+    mmc_dev = 0;
+  } else if(SYSCTL_BOOT_SDCARD == boot_mode) {
+    mmc_dev = 1;
+  } else {
+    return;
+  }
+
   disable_auto_resize();
 
-  rt_snprintf(dev_name, sizeof(dev_name), "sd%d", SDCARD_ON_SDIO_DEV);
+  rt_snprintf(dev_name, sizeof(dev_name), "sd%d", mmc_dev);
   if (NULL == (dev_sd = rt_device_find(dev_name))) {
     rt_kprintf("%s find /dev/sd failed.\n", __func__);
     goto _exit;

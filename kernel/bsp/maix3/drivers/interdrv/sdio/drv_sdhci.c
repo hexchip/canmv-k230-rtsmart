@@ -21,6 +21,8 @@
 #include <ioremap.h>
 #include <cache.h>
 
+#include "sysctl_boot.h"
+
 #ifdef RT_USING_SDIO
 
 #define DBG_TAG "drv_sdhci"
@@ -916,10 +918,19 @@ rt_int32_t kd_sdhci_init(void)
     mmcsd_host1->private_data = sdhci_host1;
     sdhci_host1->host = mmcsd_host1;
 #endif
-#ifdef SDCARD_ON_SDIO_DEV
-    kd_sdhci_change(SDCARD_ON_SDIO_DEV);
-#endif
+
+    sysctl_boot_mode_e boot_mode;
+
+    boot_mode = sysctl_boot_get_boot_mode();
+
+    if(SYSCTL_BOOT_EMMC == boot_mode) {
+        kd_sdhci_change(0);
+    } else if(SYSCTL_BOOT_SDCARD == boot_mode) {
+        kd_sdhci_change(1);
+    }
+
     rt_iounmap(hi_sys_virt_addr);
+
     return 0;
 }
 INIT_DEVICE_EXPORT(kd_sdhci_init);

@@ -198,7 +198,7 @@ menu "InterDriver"
 
             if RT_USING_SDIO0
                 config RT_SDIO0_EMMC
-                    bool "SDIO0 device is eMMC"
+                    bool "SDIO0 device is eMMC Card"
                     default n
                 config RT_SDIO0_1V8
                     bool "SDIO0 device is 1.8V"
@@ -208,21 +208,6 @@ menu "InterDriver"
             config RT_USING_SDIO1
                 bool "Enable SDIO1"
                 default n
-
-            choice SDCARD_ON_SDIO_DEV
-                bool "SdCard is on SDIOx"
-
-                config SDCARD_ON_SDIO_DEV0
-                    bool "SdCard is on SDIO0"
-
-                config SDCARD_ON_SDIO_DEV1
-                    bool "SdCard is on SDIO1"
-            endchoice
-
-            config SDCARD_ON_SDIO_DEV
-                int 
-                default 0 if SDCARD_ON_SDIO_DEV0
-                default 1 if SDCARD_ON_SDIO_DEV1
         endif
 
         config RT_USING_SPI
