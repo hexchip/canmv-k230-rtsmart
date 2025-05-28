@@ -128,20 +128,20 @@ static int misc_open(struct dfs_fd *file) { return 0; }
 
 static int misc_close(struct dfs_fd *file) { return 0; }
 
-#define MISC_DEV_CMD_READ_HEAP          (0x1024 + 0)
-#define MISC_DEV_CMD_READ_PAGE          (0x1024 + 1)
-#define MISC_DEV_CMD_GET_MEMORY_SIZE    (0x1024 + 2)
-#define MISC_DEV_CMD_CPU_USAGE          (0x1024 + 3)
-#define MISC_DEV_CMD_CREATE_SOFT_I2C    (0x1024 + 4)
-#define MISC_DEV_CMD_DELETE_SOFT_I2C    (0x1024 + 5)
-#define MISC_DEV_CMD_GET_FS_STAT        (0x1024 + 6)
-#define MISC_DEV_CMD_NTP_SYNC           (0x1024 + 7)
-#define MISC_DEV_CMD_GET_UTC_TIMESTAMP  (0x1024 + 8)
-#define MISC_DEV_CMD_SET_UTC_TIMESTAMP  (0x1024 + 9)
-#define MISC_DEV_CMD_GET_LOCAL_TIME     (0x1024 + 10)
-#define MISC_DEV_CMD_SET_TIMEZONE       (0x1024 + 11)
-#define MISC_DEV_CMD_GET_TIMEZONE       (0x1024 + 12)
-#define MISC_DEV_CMD_SET_AUTO_EXEC_PY_STAGE (0x1024 + 13)
+#define MISC_DEV_CMD_READ_HEAP                _IOWR('M', 0x00, void *)
+#define MISC_DEV_CMD_READ_PAGE                _IOWR('M', 0x01, void *)
+#define MISC_DEV_CMD_GET_MEMORY_SIZE          _IOWR('M', 0x02, void *)
+#define MISC_DEV_CMD_CPU_USAGE                _IOWR('M', 0x03, void *)
+#define MISC_DEV_CMD_CREATE_SOFT_I2C          _IOWR('M', 0x04, void *)
+#define MISC_DEV_CMD_DELETE_SOFT_I2C          _IOWR('M', 0x05, void *)
+#define MISC_DEV_CMD_GET_FS_STAT              _IOWR('M', 0x06, void *)
+#define MISC_DEV_CMD_NTP_SYNC                 _IOWR('M', 0x07, void *)
+#define MISC_DEV_CMD_GET_UTC_TIMESTAMP        _IOWR('M', 0x08, void *)
+#define MISC_DEV_CMD_SET_UTC_TIMESTAMP        _IOWR('M', 0x09, void *)
+#define MISC_DEV_CMD_GET_LOCAL_TIME           _IOWR('M', 0x0a, void *)
+#define MISC_DEV_CMD_SET_TIMEZONE             _IOWR('M', 0x0b, void *)
+#define MISC_DEV_CMD_GET_TIMEZONE             _IOWR('M', 0x0c, void *)
+#define MISC_DEV_CMD_SET_AUTO_EXEC_PY_STAGE   _IOWR('M', 0x0d, void *)
 
 struct meminfo_t {
   size_t total_size;

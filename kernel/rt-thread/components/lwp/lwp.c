@@ -1084,6 +1084,11 @@ out:
     {
         close(fd);
     }
+
+#if defined (RT_OPTIMIZE_LWP_LOAD) && defined (RT_USING_DFS_TMPFS)
+    unlink(tmp_file_name);
+#endif
+
     return ret;
 }
 
