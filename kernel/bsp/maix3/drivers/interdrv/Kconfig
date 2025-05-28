@@ -261,4 +261,30 @@ menu "InterDriver"
             bool "Using Watch Dog device drivers"
             default n
 
+        menuconfig DRV_SYSCTL_BOOT_FORCE_MODE
+            bool "Force Sysctl Boot Mode"
+            default n
+
+            if DRV_SYSCTL_BOOT_FORCE_MODE
+                choice
+                    bool "Forct Sysctl Boot From "
+                    default DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SDCARD
+
+                    config DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SPI_NOR
+                        bool "Spi Nor Flash"
+                    config DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SPI_NAND
+                        bool "Spi Nand Flash"
+                    config DRV_SYSCTL_BOOT_FORCE_MODE_MODE_EMMC
+                        bool "Emmc (SDIO0)"
+                    config DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SDCARD
+                        bool "SdCard (SDIO1)"
+                endchoice
+
+                config DRV_SYSCTL_BOOT_FORCE_MODE_MODE
+                    int
+                    default 0 if DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SPI_NOR
+                    default 1 if DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SPI_NAND
+                    default 2 if DRV_SYSCTL_BOOT_FORCE_MODE_MODE_EMMC
+                    default 3 if DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SDCARD
+            endif
 endmenu

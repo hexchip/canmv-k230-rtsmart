@@ -32,8 +32,11 @@ volatile sysctl_boot_t* sysctl_boot = (volatile sysctl_boot_t*)SYSCTL_BOOT_BASE_
 
 sysctl_boot_mode_e sysctl_boot_get_boot_mode(void)
 {
+#if defined (DRV_SYSCTL_BOOT_FORCE_MODE)
+    return (sysctl_boot_mode_e)DRV_SYSCTL_BOOT_FORCE_MODE_MODE;
+#else
     switch(sysctl_boot->soc_boot_ctl & 0x3) /*bit0~1*/
-    {        
+    {
         case 1:
             return SYSCTL_BOOT_NANDFLASH;
         case 2:
@@ -44,6 +47,7 @@ sysctl_boot_mode_e sysctl_boot_get_boot_mode(void)
         default:
             return SYSCTL_BOOT_NORFLASH;
     }
+#endif
 }
 
 bool sysctl_boot_get_otp_bypass(void)
