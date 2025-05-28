@@ -9,6 +9,7 @@
 #include "rthw.h"
 #include "rtthread.h"
 #include <rtconfig.h>
+#include "tick.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -232,28 +233,6 @@ int spinand_check_ecc_status(struct aic_spinand *flash, uint8_t status)
     return -SPINAND_ERR;
 }
 
-#include "tick.h"
-
-static inline uint64_t perf_get_times(void)
-{
-    uint64_t cnt;
-    __asm__ __volatile__(
-                         "rdtime %0"
-                         : "=r"(cnt));
-    return cnt;
-}
-
-static inline void delay_us(uint64_t us)
-{
-    uint64_t delay = (TIMER_CLK_FREQ / 1000000) * us;
-    volatile uint64_t cur_time = perf_get_times();
-    while (1) {
-        if ((perf_get_times() - cur_time) >= delay) {
-            break;
-        }
-    }
-}
-
 int spinand_isbusy(struct aic_spinand *flash, uint8_t *status)
 {
     uint32_t i = 0, cnt = 1000;
@@ -261,7 +240,7 @@ int spinand_isbusy(struct aic_spinand *flash, uint8_t *status)
     int result;
 
     do {
-        delay_us(1);
+        cpu_ticks_delay_us(1);
         i++;
         result = spinand_read_status(flash, &SR);
         if (result != SPINAND_SUCCESS) {

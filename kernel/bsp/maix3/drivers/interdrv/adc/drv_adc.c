@@ -41,25 +41,6 @@
 static struct rt_adc_device k230_adc;
 k_adc_dev_t adc_dev;
 
-static uint64_t adc_perf_get_times(void)
-{
-    uint64_t cnt;
-    __asm__ __volatile__(
-        "rdtime %0"
-        : "=r"(cnt));
-    return cnt;
-}
-static void adc_delay_us(uint64_t us)
-{
-    uint64_t delay = (TIMER_CLK_FREQ / 1000000) * us;
-    volatile uint64_t cur_time = adc_perf_get_times();
-    while(1)
-    {
-        if((adc_perf_get_times() - cur_time ) >= delay)
-            break;
-    }
-}
-
 static int k_adc_drv_hw_init(k_adc_regs_t *adc_regs)
 {
     rt_uint32_t reg;
@@ -76,7 +57,7 @@ static int k_adc_drv_hw_init(k_adc_regs_t *adc_regs)
     reg |= (0x1 << 20);
     writel(reg, &adc_regs->trim_reg);
 
-    adc_delay_us(150);
+    cpu_ticks_delay_us(150);
 
     reg &= ~(0x1 << 20);
     writel(reg, &adc_regs->trim_reg);

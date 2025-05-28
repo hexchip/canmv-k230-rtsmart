@@ -18,11 +18,7 @@ static float riscv_cputime_getres(void)
 
 static uint64_t riscv_cputime_gettime(void)
 {
-    uint64_t time_elapsed;
-    __asm__ __volatile__(
-        "rdtime %0"
-        : "=r"(time_elapsed));
-    return time_elapsed;
+    return cpu_ticks();
 }
 
 const static struct rt_clock_cputime_ops _riscv_ops =

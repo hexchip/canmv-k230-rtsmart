@@ -15,25 +15,6 @@
 #include "page.h"
 #include "ioremap.h"
 
-static inline uint64_t perf_get_times(void)
-{
-    uint64_t cnt;
-    __asm__ __volatile__(
-                         "rdtime %0"
-                         : "=r"(cnt));
-    return cnt;
-}
-
-static inline void connector_delay_us(uint64_t us)
-{
-    uint64_t delay = (TIMER_CLK_FREQ / 1000000) * us;
-    volatile uint64_t cur_time = perf_get_times();
-    while (1) {
-        if ((perf_get_times() - cur_time) >= delay)
-            break;
-    }
-}
-
 #define GFP_KERNEL (0x0)
 
 typedef uint8_t u8;
@@ -56,7 +37,7 @@ typedef struct rt_spinlock spinlock_t;
 typedef rt_spinlock_t spinlock_t;
 #endif
 
-#define udelay connector_delay_us
+#define udelay cpu_ticks_delay_us
 #define __packed __attribute__((packed))
 #define mdelay(ms) udelay((ms) * 1000)
 

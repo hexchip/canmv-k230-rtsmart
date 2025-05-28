@@ -10,6 +10,7 @@
  */
 #include <rtthread.h>
 #include <rthw.h>
+#include "tick.h"
 #include <lwp.h>
 #include "usage.h"
 
@@ -27,16 +28,6 @@
 #else
     static rt_uint32_t g_lock;
 #endif
-
-static volatile uint64_t time_elapsed = 0;
-
-static uint64_t get_ticks()
-{
-    __asm__ __volatile__(
-        "rdtime %0"
-        : "=r"(time_elapsed));
-    return time_elapsed;
-}
 
 typedef struct
 {
@@ -59,14 +50,14 @@ static rt_bool_t top_command_enable = RT_FALSE;
 
 void init_cal_usage_time(void)
 {
-    schedule_last_time = get_ticks();
+    schedule_last_time = cpu_ticks();
 }
 
 void thread_stats_scheduler_hook(struct rt_thread *from, struct rt_thread *to)
 {
     volatile rt_ubase_t time;
     RT_ASSERT(schedule_last_time != 0);
-    time = get_ticks();
+    time = cpu_ticks();
     if(time > schedule_last_time) {
         from->user_data += (time - schedule_last_time);
     } else {
@@ -109,7 +100,7 @@ static void thread_cal_usage()
     rt_base_t level;
 
     level = rt_spin_lock_irqsave(&g_lock);
-    time = get_ticks();
+    time = cpu_ticks();
 
     if(time > total_time_last) {
         total_time = time - total_time_last;
@@ -140,7 +131,7 @@ static void thread_cal_usage()
         thread->user_data = 0;
     }
 
-    total_time_last = get_ticks();
+    total_time_last = cpu_ticks();
     schedule_last_time = total_time_last;
     rt_spin_unlock_irqrestore(&g_lock, level);
     thread_info_index = i;
@@ -247,7 +238,7 @@ rt_int32_t cpu_usage_init(void)
     g_usage_timer = rt_timer_create("usage_timer", usage_cal_time_func, RT_NULL,
                 rt_tick_from_millisecond(USAGE_CAL_PERIOD), RT_TIMER_FLAG_PERIODIC);
     RT_ASSERT(g_usage_timer != RT_NULL);
-    total_time_last = get_ticks();
+    total_time_last = cpu_ticks();
     rt_timer_start(g_usage_timer);
 }
 INIT_COMPONENT_EXPORT(cpu_usage_init);

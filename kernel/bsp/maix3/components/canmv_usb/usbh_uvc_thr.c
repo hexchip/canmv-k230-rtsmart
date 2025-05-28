@@ -5,6 +5,7 @@
 #include <dfs_posix.h>
 #include <lwp.h>
 #include <lwp_user_mm.h>
+#include "tick.h"
 
 #define UVC_URBS (5)
 #define UVC_MAX_PACKETS (32)
@@ -96,15 +97,6 @@ static int usb_control_msg(struct usbh_hubport *hport, uint8_t request, uint8_t 
 #define min_t(type, a, b) min(((type) a), ((type) b))
 #define max_t(type, a, b) max(((type) a), ((type) b))
 
-static uint64_t get_ticks()
-{
-    volatile uint64_t time_elapsed;
-    __asm__ __volatile__(
-        "rdtime %0"
-        : "=r"(time_elapsed));
-    return time_elapsed;
-}
-
 static struct uvc_buffer *get_uvc_buf()
 {
     struct uvc_buffer *uvc_buf = &uvc_queue.buffer[uvc_queue.count];
@@ -122,8 +114,8 @@ static struct uvc_buffer *get_uvc_buf()
         static uint64_t timeout;
 
         /* print log per second */
-        if ((int64_t)(timeout - get_ticks()) < 0) {
-            timeout = get_ticks() + (1000 * 1000 * 1) * 27;
+        if ((int64_t)(timeout - cpu_ticks()) < 0) {
+            timeout = cpu_ticks() + (1000 * 1000 * 1) * 27;
             rt_hw_interrupt_enable(level);
             USB_LOG_ERR("app process too slow\n");
             level = rt_hw_interrupt_disable();
@@ -1350,9 +1342,7 @@ release:
             /* todo */
             dq_buf->v_stream.end_of_stream = 0;
 
-            volatile uint64_t time_elapsed = 0;
-            __asm__ __volatile__("rdtime %0" : "=r"(time_elapsed));
-
+            uint64_t time_elapsed = cpu_ticks();
             dq_buf->v_stream.pts = time_elapsed / 27;
         } else {
             USB_LOG_ERR("Unsupport format %s %d\n", __func__, __LINE__);

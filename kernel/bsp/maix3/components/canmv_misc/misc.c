@@ -11,6 +11,7 @@
 #include <lwp_user_mm.h>
 
 #include "board.h"
+#include "tick.h"
 #include "ioremap.h"
 
 #ifdef RT_USING_LWP
@@ -466,7 +467,7 @@ void canmv_on_micropython_error(void) {
     rt_snprintf(file_path, sizeof(file_path), "/sdcard/%s", 
                 (STAGE_BOOTPY_START == mpy_auto_exec_py_stage) ? "boot.py" : "main.py");
 
-    __asm__ __volatile__("rdtime %0" : "=r"(time));
+    time = cpu_ticks();
 
     if((1000 * 120) <= ((time / 27 / 1000) - mpy_auto_exec_py_start_time_ms)) {
       printf("main.py crashes after 2 min, not rename it.\n");
@@ -550,7 +551,7 @@ static int misc_set_auto_exec_stage(void* args)
 
     mpy_auto_exec_py_stage = stage;
 
-    __asm__ __volatile__("rdtime %0" : "=r"(time));
+    time = cpu_ticks();
     mpy_auto_exec_py_start_time_ms = (time / (27 * 1000));
 
     return 0;

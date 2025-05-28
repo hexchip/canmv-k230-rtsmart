@@ -58,3 +58,22 @@ int rt_hw_tick_init(void)
 #endif
     return 0;
 }
+
+void cpu_ticks_delay_us(uint64_t us)
+{
+    const uint64_t start       = cpu_ticks();
+    const uint64_t delay_ticks = (TIMER_CLK_FREQ / 1000000) * us;
+
+    while (1) {
+        volatile uint64_t current = cpu_ticks();
+        // Handle potential counter wrap-around
+        if ((current - start) >= delay_ticks) {
+            break;
+        }
+    }
+}
+
+void cpu_ticks_delay_ms(uint64_t ms)
+{
+    return cpu_ticks_delay_us(ms * 1000);
+}

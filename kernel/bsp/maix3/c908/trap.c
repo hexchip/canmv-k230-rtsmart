@@ -287,18 +287,6 @@ static int illegal_inst_recoverable(rt_ubase_t stval, struct rt_hw_stack_frame *
 #define IN_USER_SPACE (stval >= USER_VADDR_START && stval < USER_VADDR_TOP)
 #define PAGE_FAULT (id == EP_LOAD_PAGE_FAULT || id == EP_STORE_PAGE_FAULT)
 
-#ifdef RT_USING_USAGE
-static volatile uint64_t time_elapsed = 0;
-
-static uint64_t get_ticks()
-{
-    __asm__ __volatile__(
-        "rdtime %0"
-        : "=r"(time_elapsed));
-    return time_elapsed;
-}
-#endif
-
 /* Trap entry */
 void handle_trap(rt_size_t scause,rt_size_t stval,rt_size_t sepc,struct rt_hw_stack_frame *sp)
 {
@@ -313,10 +301,10 @@ void handle_trap(rt_size_t scause,rt_size_t stval,rt_size_t sepc,struct rt_hw_st
         volatile uint64_t enter_trap;
         volatile uint64_t leave_trap;
         current_thread = rt_thread_self();
-        enter_trap = get_ticks();
+        enter_trap = cpu_ticks();
         rt_interrupt_enter();
         plic_handle_irq();
-        leave_trap = get_ticks();
+        leave_trap = cpu_ticks();
         if(current_thread->user_data > (leave_trap - enter_trap))
             current_thread->user_data -= (leave_trap - enter_trap);
         rt_interrupt_leave();

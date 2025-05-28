@@ -1,6 +1,7 @@
 #include <rtthread.h>
 #include <rtdevice.h>
 #include <rthw.h>
+#include "tick.h"
 
 #include <stdint.h>
 
@@ -38,15 +39,6 @@ typedef union
 static char *gpio1_reg = NULL;
 struct rt_device ws2812_dev;
 
-static inline uint64_t get_ticks()
-{
-    static volatile uint64_t time_elapsed = 0;
-    __asm__ __volatile__(
-        "rdtime %0"
-        : "=r"(time_elapsed));
-    return time_elapsed;
-}
-
 static inline void ws2812_out0(void)
 {
     volatile uint64_t tick;
@@ -57,14 +49,14 @@ static inline void ws2812_out0(void)
     gpio_val |= (1 << WS2812_GPIO_PIN);
     writel(gpio_val, gpio1_reg);
 
-    tick = get_ticks();
-    while (get_ticks() - tick < 7);
+    tick = cpu_ticks();
+    while (cpu_ticks() - tick < 7);
 
     gpio_val &= ~(1 << WS2812_GPIO_PIN);
     writel(gpio_val, gpio1_reg);
 
-    tick = get_ticks();
-    while (get_ticks() - tick < 17);
+    tick = cpu_ticks();
+    while (cpu_ticks() - tick < 17);
 }
 
 static inline  void ws2812_out1(void)
@@ -77,14 +69,14 @@ static inline  void ws2812_out1(void)
     gpio_val |= (1 << WS2812_GPIO_PIN);
     writel(gpio_val, gpio1_reg);
 
-    tick = get_ticks();
-    while (get_ticks() - tick < 17);
+    tick = cpu_ticks();
+    while (cpu_ticks() - tick < 17);
 
     gpio_val &= ~(1 << WS2812_GPIO_PIN);
     writel(gpio_val, gpio1_reg);
 
-    tick = get_ticks();
-    while (get_ticks() - tick < 17);
+    tick = cpu_ticks();
+    while (cpu_ticks() - tick < 17);
 }
 
 void ws2812_set_value(ws2812_value data)

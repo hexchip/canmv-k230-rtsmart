@@ -48,27 +48,6 @@ static void config_pin_use_as_soft_i2c(int pin) {
     fpioa_set_pin_cfg(pin, reg.u.value);
 }
 
-static inline uint64_t get_tick(void)
-{
-    uint64_t cnt;
-
-    __asm__ __volatile__(
-        "rdtime %0"
-        : "=r"(cnt));
-
-    return cnt;
-}
-
-static void soft_i2c_udelay(rt_uint32_t us) {
-    uint64_t delay = (TIMER_CLK_FREQ / 1000000) * us;
-    volatile uint64_t cur_time = get_tick();
-
-    while(1) {
-        if((get_tick() - cur_time ) >= delay)
-            break;
-    }
-}
-
 static void soft_i2c_set_sda(void *data, rt_int32_t state) {
     struct st_iomux_reg_t reg;
     struct soft_i2c_priv_t *priv = (struct soft_i2c_priv_t *)data;
@@ -268,13 +247,13 @@ int rt_soft_i2c_add_dev(int bus_num, int scl, int sda, uint32_t freq, uint32_t t
     // ops
     memset(&priv->dev_ops, 0, sizeof(priv->dev_ops));
 
-    priv->dev_ops.set_sda = soft_i2c_set_sda,
-    priv->dev_ops.get_sda = soft_i2c_get_sda,
+    priv->dev_ops.set_sda = soft_i2c_set_sda;
+    priv->dev_ops.get_sda = soft_i2c_get_sda;
 
-    priv->dev_ops.set_scl = soft_i2c_set_scl,
-    priv->dev_ops.get_scl = soft_i2c_get_scl,
+    priv->dev_ops.set_scl = soft_i2c_set_scl;
+    priv->dev_ops.get_scl = soft_i2c_get_scl;
 
-    priv->dev_ops.udelay = soft_i2c_udelay,
+    priv->dev_ops.udelay = (void (*)(rt_uint32_t us))cpu_ticks_delay_us;
 
     priv->dev_ops.timeout = timeout;
     priv->dev_ops.delay_us = soft_i2c_freq_to_delay(freq);

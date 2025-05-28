@@ -87,26 +87,6 @@ struct chip_i2c_bus
     int irq;
 };
 
-static uint64_t i2c_perf_get_times(void)
-{
-    uint64_t cnt;
-    __asm__ __volatile__(
-        "rdtime %0"
-        : "=r"(cnt));
-    return cnt;
-}
-
-static void i2c_delay_us(uint64_t us)
-{
-    uint64_t delay = (TIMER_CLK_FREQ / 1000000) * us;
-    volatile uint64_t cur_time = i2c_perf_get_times();
-    while(1)
-    {
-        if((i2c_perf_get_times() - cur_time ) >= delay)
-            break;
-    }
-}
-
 static rt_size_t get_timer(rt_size_t base)
 {
     return rt_tick_get() - base ;
@@ -753,7 +733,7 @@ static int __dw_i2c_write(struct i2c_regs *i2c_base, rt_uint8_t dev, uint addr,
     while( (readl(&i2c_base->ic_status) & IC_STATUS_TFE) != IC_STATUS_TFE)
     {
         cnt = cnt + 1;
-        i2c_delay_us(100);
+        cpu_ticks_delay_us(100);
         if(cnt > 100) {
             return -1;
         }
