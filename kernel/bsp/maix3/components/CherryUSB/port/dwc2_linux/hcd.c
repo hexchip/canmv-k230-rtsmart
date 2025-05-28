@@ -1630,7 +1630,7 @@ int dwc2_hcd_init(struct dwc2_hsotg *hsotg)
          * in Buffer DMA mode.
          */
         hsotg->unaligned_cache = rt_mp_create_align("dwc2-unaligned-dma", 10,
-                                                    DWC2_KMEM_UNALIGNED_BUF_SIZE, 4);
+                                                    DWC2_KMEM_UNALIGNED_BUF_SIZE, CONFIG_USB_ALIGN_SIZE);
         if (!hsotg->unaligned_cache) {
             dev_err(hsotg->dev,
                     "unable to create dwc2 unaligned cache\n");
