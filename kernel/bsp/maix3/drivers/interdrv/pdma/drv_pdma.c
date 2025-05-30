@@ -90,6 +90,7 @@ typedef struct {
         int irq;
         char* name;
         void* data;
+        rt_uint32_t size;
         void (*callback)(void* param);
         void* param;
     } chan[PDMA_CH_MAX];
@@ -159,7 +160,7 @@ int rt_dma_chan_release(int chan)
     if (chan >= PDMA_CH_MAX)
         return -RT_EINVAL;
 
-    if (pdma_take(1000, &level))
+    if (pdma_take(RT_WAITING_FOREVER, &level))
         return -RT_ETIMEOUT;
 
     pdma_dev.reg->pdma_ch_en &= ~(1 << chan);
@@ -169,6 +170,7 @@ int rt_dma_chan_release(int chan)
     pdma_dev.chan[chan].name = RT_NULL;
     data = pdma_dev.chan[chan].data;
     pdma_dev.chan[chan].data = RT_NULL;
+    pdma_dev.chan[chan].size = 0;
 
     kd_hardlock_unlock(pdma_dev.hardlock);
     rt_hw_interrupt_enable(level);
@@ -209,10 +211,17 @@ int rt_dma_chan_config(int chan, pdma_transfer_cfg_t* cfg)
         return -RT_EINVAL;
 
     list_num = (cfg->length - 1) / PDMA_MAX_LINE_SIZE + 1;
-    list = rt_malloc(sizeof(pdma_llt_t) * list_num);
-    if (list == RT_NULL) {
-        LOG_E("malloc pdma list failed\n");
-        return -RT_ENOMEM;
+    if (list_num == pdma_dev.chan[chan].size) {
+        list = pdma_dev.chan[chan].data;
+    } else {
+        list = rt_malloc(sizeof(pdma_llt_t) * list_num);
+        if (list == RT_NULL) {
+            LOG_E("malloc pdma list failed\n");
+            return -RT_ENOMEM;
+        }
+        rt_free(pdma_dev.chan[chan].data);
+        pdma_dev.chan[chan].data = list;
+        pdma_dev.chan[chan].size = list_num;
     }
 
     for (int i = 0; i < list_num; i++) {
@@ -236,8 +245,6 @@ int rt_dma_chan_config(int chan, pdma_transfer_cfg_t* cfg)
     pdma_dev.reg->ch_peri_dev_sel[chan] = cfg->device;
     pdma_dev.reg->pdma_ch_reg[chan].ch_cfg = cfg->ch_cfg;
     pdma_dev.reg->pdma_ch_reg[chan].ch_llt_saddr = (rt_uint64_t)list;
-    rt_free(pdma_dev.chan[chan].data);
-    pdma_dev.chan[chan].data = list;
 
     return 0;
 }

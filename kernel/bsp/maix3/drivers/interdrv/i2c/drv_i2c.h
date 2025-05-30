@@ -9,7 +9,8 @@
 #ifndef __DW_I2C_H_
 #define __DW_I2C_H_
 
-typedef unsigned char     uchar;
+#include <rtdef.h>
+
 #define BIT(x)              (1<<(x))
 /*
  * Registers offset
@@ -171,7 +172,11 @@ struct i2c_regs
     rt_uint32_t ic_rxflr;           /* 0x78 */
     rt_uint32_t ic_sda_hold;        /* 0x7c */
     rt_uint32_t ic_tx_abrt_source;  /* 0x80 */
-    rt_uint8_t  res1[0x18];         /* 0x84 */
+    rt_uint32_t res1;               /* 0x84 */
+    rt_uint32_t ic_dma_cr;          /* 0x88 */
+    rt_uint32_t ic_dma_tdlr;        /* 0x8c */
+    rt_uint32_t ic_dma_rdlr;        /* 0x90 */
+    rt_uint32_t res2[2];            /* 0x94 */
     rt_uint32_t ic_enable_status;   /* 0x9c */
 };
 
@@ -241,6 +246,7 @@ struct i2c_regs
 #define IC_TL7          0x07
 #define IC_RX_TL        IC_TL0
 #define IC_TX_TL        IC_TL0
+#define IC_FIFO_DEPTH   32
 
 /* i2c enable register definitions */
 #define IC_ENABLE_0B    0x0001
@@ -263,9 +269,8 @@ struct i2c_regs
 #define I2C_FAST_SPEED          400000
 #define I2C_STANDARD_SPEED      100000
 
-#define I2C_SLAVE_IOCTL_SET_BUFFER_SIZE               0
-#define I2C_SLAVE_IOCTL_SET_ADDR                      1  
-
+#define I2C_SLAVE_IOCTL_SET_BUFFER_SIZE 0
+#define I2C_SLAVE_IOCTL_SET_ADDR        1
 struct i2c_adapter
 {
     void (*init)(struct i2c_adapter *adap, int speed, int slaveaddr);
