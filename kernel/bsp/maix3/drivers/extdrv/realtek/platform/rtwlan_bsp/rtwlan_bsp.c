@@ -9,11 +9,11 @@
 #include "customer_rtos_service.h"
 
 static rt_int32_t realtek_probe(struct rt_mmcsd_card* card);
+static rt_err_t wlan_get_mac(struct rt_wlan_device* wlan, rt_uint8_t mac[]);
 
 struct sdio_func* wifi_sdio_func;
 struct rt_sdio_function* rtt_sdio_func;
 static struct rt_wlan_device wlan_sta, wlan_ap;
-static uint8_t sta_disconnect_wait = 0;
 
 void Set_WLAN_Power_On(void)
 {
@@ -71,13 +71,8 @@ INIT_COMPONENT_EXPORT(realtek_init);
 
 void wlan_event_indication(rtw_event_indicate_t event, char* buf, int buf_len)
 {
-    if (event == WIFI_EVENT_FOURWAY_HANDSHAKE_DONE) {
-        rt_wlan_dev_indicate_event_handle(&wlan_sta, RT_WLAN_DEV_EVT_CONNECT, NULL);
-    } else if (event == WIFI_EVENT_DISCONNECT) {
-        if (sta_disconnect_wait) {
-            rt_wlan_dev_indicate_event_handle(&wlan_sta, RT_WLAN_DEV_EVT_DISCONNECT, NULL);
-            sta_disconnect_wait = 0;
-        }
+    if (event == WIFI_EVENT_DISCONNECT) {
+        rt_wlan_dev_indicate_event_handle(&wlan_sta, RT_WLAN_DEV_EVT_DISCONNECT, NULL);
     } else if (event == WIFI_EVENT_STA_ASSOC || event == WIFI_EVENT_STA_DISASSOC) {
         struct rt_wlan_buff buff;
         struct rt_wlan_info wlan_info;
@@ -163,8 +158,10 @@ static rt_err_t wlan_join(struct rt_wlan_device* wlan, struct rt_sta_info* sta_i
 
     ret = wifi_connect(sta_info->ssid.val, sta_info->security, sta_info->key.val,
         sta_info->ssid.len, sta_info->key.len, 0, NULL);
+    rt_wlan_dev_indicate_event_handle(&wlan_sta, ret ? RT_WLAN_DEV_EVT_CONNECT_FAIL :
+        RT_WLAN_DEV_EVT_CONNECT, NULL);
 
-    return ret ? -RT_ERROR : 0;
+    return 0;
 }
 
 static rt_err_t wlan_softap(struct rt_wlan_device* wlan, struct rt_ap_info* ap_info)
@@ -178,10 +175,9 @@ static rt_err_t wlan_softap(struct rt_wlan_device* wlan, struct rt_ap_info* ap_i
     if (ret >= 0) {
         ret = wifi_start_ap(ap_info->ssid.val, ap_info->security, ap_info->key.val,
             ap_info->ssid.len, ap_info->key.len, ap_info->channel);
-        
-        wifi_get_ap_bssid(mac);
 
-        buff.data = ap_info;
+        wlan_get_mac(&wlan_ap, mac);
+        buff.data = mac;
         buff.len = ETH_ALEN;
     }
 
@@ -192,8 +188,13 @@ static rt_err_t wlan_softap(struct rt_wlan_device* wlan, struct rt_ap_info* ap_i
 
 static rt_err_t wlan_disconnect(struct rt_wlan_device* wlan)
 {
-    sta_disconnect_wait = 1;
-    return wifi_disconnect();
+    int ret;
+
+    ret = wifi_disconnect();
+    if (ret == 0)
+        rt_wlan_dev_indicate_event_handle(&wlan_sta, RT_WLAN_DEV_EVT_DISCONNECT, NULL);
+
+    return ret;
 }
 
 static rt_err_t wlan_ap_stop(struct rt_wlan_device* wlan)
@@ -278,6 +279,8 @@ static rt_err_t wlan_get_mac(struct rt_wlan_device* wlan, rt_uint8_t mac[])
 
     wifi_get_mac_address(addr);
     sscanf(addr, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", mac, mac + 1, mac + 2, mac + 3, mac + 4, mac + 5);
+    if (wlan == &wlan_ap)
+        mac[5] = mac[5] + 1;
 
     return 0;
 }

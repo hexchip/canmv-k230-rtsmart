@@ -251,7 +251,7 @@ static int dw_i2c_xfer(struct chip_i2c_bus* bus)
     struct i2c_regs* i2c_base = bus->regs;
     uint8_t *        send_buf, *recv_buf;
     uint8_t *        send_buf_ext, *recv_buf_ext;
-    uint32_t         recv_len;
+    uint32_t         recv_len, to;
     int              ret;
 
     recv_len         = bus->recv_len;
@@ -279,6 +279,15 @@ static int dw_i2c_xfer(struct chip_i2c_bus* bus)
     bus->send_buf = send_buf;
     bus->recv_buf = recv_buf;
 
+    to = 1000;
+    while (readl(&i2c_base->ic_enable_status) & IC_ENABLE_0B) {
+        if (to-- == 0) {
+            rt_free(send_buf);
+            rt_free(recv_buf);
+            LOG_E("i2c xfer busy");
+            return -RT_EBUSY;
+        }
+    }
     writel(bus->slave_addr, &i2c_base->ic_tar);
     writel(bus->recv_len - 1 > IC_FIFO_DEPTH - 1 ? IC_FIFO_DEPTH - 1 : bus->recv_len - 1, &i2c_base->ic_rx_tl);
     writel(IC_FIFO_DEPTH / 2 - 1, &i2c_base->ic_tx_tl);
