@@ -33,7 +33,7 @@ static int cdc_read(struct dfs_fd *fd, void *buf, size_t count) {
     int read_count = -1;
     rt_err_t error = RT_ERROR;
 
-    if (RT_EOK == (error = rt_sem_take(&cdc_read_sem, rt_tick_from_millisecond(10)))) {
+    if (RT_EOK == (error = rt_sem_take(&cdc_read_sem, rt_tick_from_millisecond(100)))) {
         read_count = actual_read;
         actual_read = 0;
 
