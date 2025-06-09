@@ -31,8 +31,9 @@
 #include <stdbool.h>
 #include "sysctl_clk.h"
 #include "drv_pwm.h"
+
 static struct rt_device_pwm kd_pwm;
-kd_pwm_t *reg_pwm;
+static uint8_t channel_used;
 
 static int check_channel(int channel)
 {
@@ -52,10 +53,10 @@ static int pwm_start(kd_pwm_t *reg, int channel)
         return ret;
 
     if (channel > 2)
-    {
         reg = (kd_pwm_t *)((void*)reg + 0x40);
-    }
-    reg->pwmcfg |= (1 << 12);  //default always mode
+    reg->pwmcfg |= (1 << 12) | (1 << 9) | (1 << 10);
+    channel_used |= (1 << channel);
+
     return ret;
 }
 
@@ -67,10 +68,11 @@ static int pwm_stop(kd_pwm_t *reg, int channel)
         return ret;
 
     if (channel > 2)
-    {
         reg = (kd_pwm_t *)((void*)reg + 0x40);
-    }
-    reg->pwmcfg &= ~(1 << 12);
+    channel_used &= ~(1 << channel);
+    *((&reg->pwmcmp1) + (channel % 3)) = *((&reg->pwmcmp1) + (channel % 3)) ? -1 : 0;
+    if (!(channel_used & (7 << (channel / 3 * 3))))
+        reg->pwmcfg &= ~(1 << 12);
 
     return ret;
 }
@@ -132,11 +134,10 @@ static int kd_pwm_set(kd_pwm_t *reg, int channel, struct rt_pwm_configuration *c
     if (pwmscale > 0xf)
         return -RT_EINVAL;
 
-    reg->pwmcfg |= (1 << 9);  //default always mode
-    reg->pwmcfg &= (~0xf);
-    reg->pwmcfg |= pwmscale;  //scale
+    if ((reg->pwmcfg & 0xf) != pwmscale)
+        reg->pwmcfg = reg->pwmcfg & ~0xf | pwmscale;
     reg->pwmcmp0 = (period >> pwmscale);
-    *((&reg->pwmcmp1) + (channel % 3)) = reg->pwmcmp0 - (pulse >> pwmscale);
+    *((&reg->pwmcmp1) + (channel % 3)) = (period >> pwmscale) - (pulse >> pwmscale);
 
     return RT_EOK;
 }
@@ -188,12 +189,10 @@ static struct rt_pwm_ops drv_ops =
 
 int rt_hw_pwm_init(void)
 {
-    reg_pwm = (kd_pwm_t *)rt_ioremap((void *)PWM_BASE_ADDR, PWM_IO_SIZE);
+    void *reg = rt_ioremap((void *)PWM_BASE_ADDR, PWM_IO_SIZE);
     kd_pwm.ops = &drv_ops;
-    rt_device_pwm_register(&kd_pwm, "pwm", &drv_ops, (void *)reg_pwm);
-#ifndef RT_FASTBOOT
-    rt_kprintf("pwm driver register OK\n");
-#endif
+    rt_device_pwm_register(&kd_pwm, "pwm", &drv_ops, reg);
+
     return RT_EOK;
 }
 INIT_DEVICE_EXPORT(rt_hw_pwm_init);
