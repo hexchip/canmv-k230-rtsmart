@@ -28,10 +28,10 @@
 
 #include <rtdef.h>
 
-#define RT_DEVICE_TS_CTRL_SET_MODE          0x01
-#define RT_DEVICE_TS_CTRL_GET_MODE          0x02
-#define RT_DEVICE_TS_CTRL_SET_TRIM          0x03
-#define RT_DEVICE_TS_CTRL_GET_TRIM          0x04
+#define RT_DEVICE_TS_CTRL_SET_MODE          _IOW('T', 1, uint8_t)
+#define RT_DEVICE_TS_CTRL_GET_MODE          _IOR('T', 2, uint8_t)
+#define RT_DEVICE_TS_CTRL_SET_TRIM          _IOW('T', 3, uint8_t)
+#define RT_DEVICE_TS_CTRL_GET_TRIM          _IOR('T', 4, uint8_t)
 
 #define RT_DEVICE_TS_CTRL_MODE_SINGLE       0x01
 #define RT_DEVICE_TS_CTRL_MODE_CONTINUUOS   0x02
