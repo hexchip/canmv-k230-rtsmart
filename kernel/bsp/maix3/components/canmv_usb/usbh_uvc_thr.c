@@ -110,7 +110,9 @@ static struct uvc_buffer *get_uvc_buf()
 
     if (!rt_list_isempty(&uvc_queue.irq_queue)) {
         uvc_buf = rt_list_first_entry(&uvc_queue.irq_queue, struct uvc_buffer, irq);
-    } else {
+    }
+#if 0
+    else {
         static uint64_t timeout;
 
         /* print log per second */
@@ -121,6 +123,7 @@ static struct uvc_buffer *get_uvc_buf()
             level = rt_hw_interrupt_disable();
         }
     }
+#endif
 
 out:
     rt_hw_interrupt_enable(level);
