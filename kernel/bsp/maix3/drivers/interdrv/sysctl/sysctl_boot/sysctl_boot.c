@@ -30,7 +30,9 @@
 
 volatile sysctl_boot_t* sysctl_boot = (volatile sysctl_boot_t*)SYSCTL_BOOT_BASE_ADDR;
 
-sysctl_boot_mode_e sysctl_boot_get_boot_mode(void)
+static int boot_mode = -1;
+
+static sysctl_boot_mode_e sysctl_boot_get_boot_mode_r(void)
 {
 #if defined (DRV_SYSCTL_BOOT_FORCE_MODE)
     return (sysctl_boot_mode_e)DRV_SYSCTL_BOOT_FORCE_MODE_MODE;
@@ -48,6 +50,15 @@ sysctl_boot_mode_e sysctl_boot_get_boot_mode(void)
             return SYSCTL_BOOT_NORFLASH;
     }
 #endif
+}
+
+sysctl_boot_mode_e sysctl_boot_get_boot_mode(void)
+{
+    if((-1) != boot_mode) {
+        return (sysctl_boot_mode_e)boot_mode;
+    }
+
+    return sysctl_boot_get_boot_mode_r();
 }
 
 bool sysctl_boot_get_otp_bypass(void)
@@ -94,6 +105,8 @@ int rt_hw_sysctl_boot_init(void)
         rt_kprintf("sysctl_boot ioremap error\n");
         return -1;
     }
+
+    boot_mode = sysctl_boot_get_boot_mode_r();
 
     return 0;
 }

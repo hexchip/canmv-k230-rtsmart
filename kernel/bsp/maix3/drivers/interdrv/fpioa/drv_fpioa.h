@@ -27,24 +27,32 @@
 
 #include <stdint.h>
 
+#define BANK_VOL_3V3_MSC 0
+#define BANK_VOL_1V8_MSC 1
+
+#define K230_PIN_COUNT     64
+#define K230_PMU_PIN_COUNT 8
+
 struct st_iomux_reg_t {
     union {
         struct {
-            uint32_t st : 1;                // bit 0    输入施密特触发器控制使能
-            uint32_t ds : 4;                // bit 1-4  驱动电流控制
-            uint32_t pd : 1;                // bit 5    下拉使能
-            uint32_t pu : 1;                // bit 6    上拉使能
-            uint32_t oe : 1;                // bit 7    输出使能
-            uint32_t ie : 1;                // bit 8    输入使能
-            uint32_t msc : 1;               // bit 9    电压选择 !!! be careful !!!
-            uint32_t rsv_bit10 : 1;         // bit 10
-            uint32_t io_sel : 3;            // bit 11-13 复用功能选择
-            uint32_t rsv_bit14_30 : 17;     // bit 14-30
-            uint32_t di : 1;                // bit 31   当前PAD输入到芯片内部的数据(即PAD的C端)
+            uint32_t st : 1; // bit 0    输入施密特触发器控制使能
+            uint32_t ds : 4; // bit 1-4  驱动电流控制
+            uint32_t pd : 1; // bit 5    下拉使能
+            uint32_t pu : 1; // bit 6    上拉使能
+            uint32_t oe : 1; // bit 7    输出使能
+            uint32_t ie : 1; // bit 8    输入使能
+            uint32_t msc : 1; // bit 9    电压选择 !!! be careful !!!
+            uint32_t rsv_bit10 : 1; // bit 10
+            uint32_t io_sel : 3; // bit 11-13 复用功能选择
+            uint32_t rsv_bit14_30 : 17; // bit 14-30
+            uint32_t di : 1; // bit 31   当前PAD输入到芯片内部的数据(即PAD的C端)
         } bit;
         uint32_t value;
     } u;
 };
+
+int kd_fpioa_init(void);
 
 uint32_t fpioa_get_pin_cfg(int pin);
 

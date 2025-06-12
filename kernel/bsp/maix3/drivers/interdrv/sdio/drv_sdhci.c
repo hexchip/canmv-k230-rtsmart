@@ -927,6 +927,8 @@ rt_int32_t kd_sdhci_init(void)
         kd_sdhci_change(0);
     } else if(SYSCTL_BOOT_SDCARD == boot_mode) {
         kd_sdhci_change(1);
+    } else {
+        rt_kprintf("not boot from mmc device (%d)\n", boot_mode);
     }
 
     rt_iounmap(hi_sys_virt_addr);

@@ -38,7 +38,7 @@ void fpioa_set_pin_cfg(int pin, uint32_t cfg) {
     *(fpioa_reg + pin) = (*(fpioa_reg + pin) & 0x200) | cfg;
 }
 
-int kd_fioa_init(void)
+int kd_fpioa_init(void)
 {
     if(NULL == fpioa_reg) {
         fpioa_reg = (uint32_t *)rt_ioremap((void *)0X91105000, 0x00001000UL);
@@ -46,4 +46,4 @@ int kd_fioa_init(void)
 
     return 0;
 }
-INIT_PREV_EXPORT(kd_fioa_init);
+INIT_BOARD_EXPORT(kd_fpioa_init);
