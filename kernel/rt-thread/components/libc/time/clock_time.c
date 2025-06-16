@@ -225,15 +225,21 @@ int clock_nanosleep(clockid_t clockid, int flags, const struct timespec *rqtp, s
 
         if (rt_get_errno() == -RT_EINTR)
         {
-            if (rmtp)
+            rt_tick_t tick_now = rt_tick_get();
+            if (tick_old + tick > tick_now)
             {
-                tick = tick_old + tick - rt_tick_get();
-                /* get the passed time */
-                rmtp->tv_sec = tick / RT_TICK_PER_SECOND;
-                rmtp->tv_nsec = (tick % RT_TICK_PER_SECOND) * (NANOSECOND_PER_SECOND / RT_TICK_PER_SECOND);
+                if (rmtp)
+                {
+                    tick = tick_old + tick - tick_now;
+                    /* get the passed time */
+                    rmtp->tv_sec = tick / RT_TICK_PER_SECOND;
+                    rmtp->tv_nsec = (tick % RT_TICK_PER_SECOND) * (NANOSECOND_PER_SECOND / RT_TICK_PER_SECOND);
+                }
+                rt_set_errno(EINTR);
+                return -RT_ERROR;
             }
-            rt_set_errno(EINTR);
-            return -RT_ERROR;
+            else
+                rt_set_errno(0);
         }
     }
     break;
@@ -255,14 +261,20 @@ int clock_nanosleep(clockid_t clockid, int flags, const struct timespec *rqtp, s
 
         if (rt_get_errno() == -RT_EINTR)
         {
-            if (rmtp)
+            uint64_t rmtp_cpu_tick = clock_cpu_gettime();
+            if (cpu_tick_old + cpu_tick > rmtp_cpu_tick)
             {
-                uint64_t rmtp_cpu_tick = cpu_tick_old + cpu_tick - clock_cpu_gettime();
-                rmtp->tv_sec = ((int)(rmtp_cpu_tick * unit)) / NANOSECOND_PER_SECOND;
-                rmtp->tv_nsec = ((int)(rmtp_cpu_tick * unit)) % NANOSECOND_PER_SECOND;
+                if (rmtp)
+                {
+                    rmtp_cpu_tick = cpu_tick_old + cpu_tick - rmtp_cpu_tick;
+                    rmtp->tv_sec = ((int)(rmtp_cpu_tick * unit)) / NANOSECOND_PER_SECOND;
+                    rmtp->tv_nsec = ((int)(rmtp_cpu_tick * unit)) % NANOSECOND_PER_SECOND;
+                }
+                rt_set_errno(EINTR);
+                return -RT_ERROR;
             }
-            rt_set_errno(EINTR);
-            return -RT_ERROR;
+            else
+                rt_set_errno(0);
         }
         else
             while (clock_cpu_gettime() - cpu_tick_old < cpu_tick);
@@ -297,14 +309,20 @@ int nanosleep(const struct timespec *rqtp, struct timespec *rmtp)
 
     if (rt_get_errno() == -RT_EINTR)
     {
-        if (rmtp)
+        uint64_t rmtp_cpu_tick = clock_cpu_gettime();
+        if (cpu_tick_old + cpu_tick > rmtp_cpu_tick)
         {
-            uint64_t rmtp_cpu_tick = cpu_tick_old + cpu_tick - clock_cpu_gettime();
-            rmtp->tv_sec = ((uint64_t)(rmtp_cpu_tick * unit)) / NANOSECOND_PER_SECOND;
-            rmtp->tv_nsec = ((uint64_t)(rmtp_cpu_tick * unit)) % NANOSECOND_PER_SECOND;
+            if (rmtp)
+            {
+                rmtp_cpu_tick = cpu_tick_old + cpu_tick - rmtp_cpu_tick;
+                rmtp->tv_sec = ((int)(rmtp_cpu_tick * unit)) / NANOSECOND_PER_SECOND;
+                rmtp->tv_nsec = ((int)(rmtp_cpu_tick * unit)) % NANOSECOND_PER_SECOND;
+            }
+            rt_set_errno(EINTR);
+            return -RT_ERROR;
         }
-        rt_set_errno(EINTR);
-        return -RT_ERROR;
+        else
+            rt_set_errno(0);
     }
     else
         while (clock_cpu_gettime() - cpu_tick_old < cpu_tick);
@@ -315,15 +333,21 @@ int nanosleep(const struct timespec *rqtp, struct timespec *rmtp)
 
     if (rt_get_errno() == -RT_EINTR)
     {
-        if (rmtp)
+        rt_tick_t tick_now = rt_tick_get();
+        if (tick_old + tick > tick_now)
         {
-            tick = tick_old + tick - rt_tick_get();
-            /* get the passed time */
-            rmtp->tv_sec = tick / RT_TICK_PER_SECOND;
-            rmtp->tv_nsec = (tick % RT_TICK_PER_SECOND) * (NANOSECOND_PER_SECOND / RT_TICK_PER_SECOND);
+            if (rmtp)
+            {
+                tick = tick_old + tick - tick_now;
+                /* get the passed time */
+                rmtp->tv_sec = tick / RT_TICK_PER_SECOND;
+                rmtp->tv_nsec = (tick % RT_TICK_PER_SECOND) * (NANOSECOND_PER_SECOND / RT_TICK_PER_SECOND);
+            }
+            rt_set_errno(EINTR);
+            return -RT_ERROR;
         }
-        rt_set_errno(EINTR);
-        return -RT_ERROR;
+        else
+            rt_set_errno(0);
     }
 #endif
     return 0;
