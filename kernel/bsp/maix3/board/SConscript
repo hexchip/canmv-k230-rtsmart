@@ -4,9 +4,21 @@ from building import *
 
 cwd     = GetCurrentDir()
 src     = Glob('*.c')
-CPPPATH = [cwd]
+path = [cwd]
+CPPDEFINES = []
 
-group = DefineGroup('Board', src, depend = [''], CPPPATH = CPPPATH)
+if GetDepend(['CONFIG_BOARD']):
+    board = GetConfigValue('CONFIG_BOARD').strip('"')
+
+    path += [cwd + '/configs/' + board]
+
+    pinmux_src = cwd + '/configs/' + board + '/pinmux_config.c'
+    if os.path.exists(pinmux_src):
+        CPPDEFINES += [f'BOARD_CFG_FILE="{pinmux_src}"']
+    else:
+        print("Warning: pinmux_config.c not found at", pinmux_src)
+
+group = DefineGroup('Board', src, depend = [''], CPPPATH = path, CPPDEFINES = CPPDEFINES)
 
 objs = [group]
 
