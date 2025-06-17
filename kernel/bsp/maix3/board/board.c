@@ -321,6 +321,8 @@ void rt_hw_board_init(void)
 
     rt_hw_tick_init();
 
+    board_pinmux_init();
+
 #ifdef RT_USING_CONSOLE
     rt_hw_uart_init();
     rt_console_set_device(RT_CONSOLE_DEVICE_NAME);

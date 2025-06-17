@@ -33,6 +33,8 @@ extern rt_size_t get_mem_mmz_size(void);
 void rt_hw_board_init(void);
 void rt_init_user_mem(struct rt_thread *thread, const char *name, unsigned long *entry);
 
+int board_pinmux_init(void);
+
 /*
 From《K230 Technical Reference Manual》 1.5 Address Space mapping
 

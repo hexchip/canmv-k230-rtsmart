@@ -28,59 +28,15 @@
 #include "rtconfig.h"
 #include "rtthread.h"
 
+#include "drv_gpio.h"
+
 #define STRINGIFY(x) #x
 #define TOSTRING(x)  STRINGIFY(x)
 
 /* include configs/{CONFIG_BOARD}/pinmux_config.c */
 #include TOSTRING(BOARD_CFG_FILE)
 
-static inline int should_ignore_pin(int pin)
-{
-    /* List of pins to ignore for voltage bank consistency checks */
-    const int    ignore_pins[]   = { 9, 42, 43, 46, 47, 50, 51, 52, 53, 54, 55, 56, 57, 58 };
-    const size_t num_ignore_pins = sizeof(ignore_pins) / sizeof(ignore_pins[0]);
-
-    for (size_t i = 0; i < num_ignore_pins; i++) {
-        if (pin == ignore_pins[i]) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-#ifdef CONFIG_BOARD_CHIP_K230D
-
-#if !defined(VOL_BANK0_IO2_13) || !defined(VOL_BANK3_IO38_49) || !defined(VOL_BANK4_IO50_61)
-#error "must define VOL_BANK4_IO50_61"
-#endif
-
-struct k230d_drop_pin_cfg {
-    int                   pin;
-    struct st_iomux_reg_t reg;
-};
-
-static const struct k230d_drop_pin_cfg k230d_drop_pin_cfgs[] = {
-    { 9, { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK0_IO2_13, .io_sel = 0 } } },
-
-    { 42, { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK3_IO38_49, .io_sel = 0 } } },
-    { 43, { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK3_IO38_49, .io_sel = 0 } } },
-    { 46, { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK3_IO38_49, .io_sel = 0 } } },
-    { 47, { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK3_IO38_49, .io_sel = 0 } } },
-
-    { 50, { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } },
-    { 51, { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } },
-    { 52, { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } },
-    { 53, { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } },
-    { 54, { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } },
-    { 55, { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } },
-    { 56, { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } },
-    { 57, { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } },
-    { 58, { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } },
-};
-
-#endif
-
-static int board_pinmux_init(void)
+int board_pinmux_init(void)
 {
     uint32_t curr, set;
 
@@ -94,9 +50,20 @@ static int board_pinmux_init(void)
         if (curr != set) {
             rt_kprintf("Pin %d setting not same\n", i);
             rt_kprintf("curr 0x%08X, set 0x%08X\n", curr, set);
+        } else {
+            fpioa_set_pin_cfg(i, set);
         }
     }
 
     return 0;
 }
-INIT_BOARD_EXPORT(board_pinmux_init);
+
+static int _board_specific_pin_init_sequence_wrap()
+{
+    rt_hw_gpio_init();
+
+    board_specific_pin_init_sequence();
+
+    return 0;
+}
+INIT_PREV_EXPORT(_board_specific_pin_init_sequence_wrap);

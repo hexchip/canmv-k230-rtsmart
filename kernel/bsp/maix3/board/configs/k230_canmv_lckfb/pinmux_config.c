@@ -1,4 +1,4 @@
-/* Copyright (c) 2024, Canaan Bright Sight Co., Ltd
+/* Copyright (c) 2025, Canaan Bright Sight Co., Ltd
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -113,3 +113,8 @@ const struct st_iomux_reg_t board_pinmux_cfg[K230_PIN_COUNT] = {
     [63] = { .u.bit = { .st = 1, .ds = 4, .pd = 0, .pu = 1, .oe = 1, .ie = 1, .msc = VOL_BANK5_IO62_63, .io_sel = 0 } }, // GPIO63
 };
 /* clang-format on */
+
+static inline __attribute__((always_inline)) void board_specific_pin_init_sequence()
+{
+    
+}

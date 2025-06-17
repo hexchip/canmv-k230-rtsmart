@@ -35,7 +35,7 @@ uint32_t fpioa_get_pin_cfg(int pin) {
 }
 
 void fpioa_set_pin_cfg(int pin, uint32_t cfg) {
-    *(fpioa_reg + pin) = (*(fpioa_reg + pin) & 0x200) | cfg;
+    *(fpioa_reg + pin) = (*(fpioa_reg + pin) & (~0xFFFFFFFF)) | cfg;
 }
 
 int kd_fpioa_init(void)

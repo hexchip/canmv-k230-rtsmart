@@ -574,6 +574,11 @@ int rt_hw_gpio_init(void)
 {
     rt_err_t ret;
 
+    static int gpio_inited = 0;
+    if(gpio_inited) {
+        return 0;
+    }
+
     gpio_dev.base[0] = rt_ioremap((void*)GPIO0_BASE_ADDR, GPIO0_IO_SIZE);
     gpio_dev.base[1] = rt_ioremap((void*)GPIO1_BASE_ADDR, GPIO1_IO_SIZE);
 
@@ -593,6 +598,8 @@ int rt_hw_gpio_init(void)
                       RT_TIMER_FLAG_ONE_SHOT | RT_TIMER_FLAG_SOFT_TIMER);
     }
 #endif // RT_GPIO_IRQ_METHOD_DIRECT
+
+    gpio_inited = 1;
 
     return ret;
 }

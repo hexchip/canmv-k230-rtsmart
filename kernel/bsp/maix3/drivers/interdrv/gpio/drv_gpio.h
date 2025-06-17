@@ -111,6 +111,8 @@ typedef struct {
     void*       sigval;
 } gpio_irqcfg_t;
 
+int rt_hw_gpio_init(void);
+
 rt_err_t kd_pin_irq_enable(rt_base_t pin, rt_uint32_t enabled);
 rt_err_t kd_pin_detach_irq(rt_int32_t pin);
 rt_err_t kd_pin_attach_irq(rt_int32_t pin, rt_uint32_t mode, void (*hdr)(void* args), void* args);
