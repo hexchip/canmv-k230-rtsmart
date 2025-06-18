@@ -136,6 +136,7 @@ struct kd_uart_device {
     struct rt_serial_rx_fifo *kd_rx_fifo;
 
     uint64_t dev_open_ref_cnt;
+    uint32_t baudrate;
     int id;
     volatile uint8_t t_flag;
 };
@@ -397,6 +398,8 @@ static rt_size_t uart_write(rt_device_t dev, rt_off_t pos, const void *buffer, r
     cfg.ch_cfg.ch_dev_hsize = PSBYTE1;
     cfg.ch_cfg.ch_dat_endian = PDEFAULT;
     cfg.ch_cfg.ch_dev_blen = PBURST_LEN_16;
+    if (kd_uart_device->baudrate < 19200)
+        cfg.ch_cfg.ch_dev_blen = PBURST_LEN_1;
     cfg.ch_cfg.ch_priority = 7;
     cfg.ch_cfg.ch_dev_tout = 0xFFF;
     if (rt_dma_chan_config(ch, &cfg)) {
@@ -405,6 +408,7 @@ static rt_size_t uart_write(rt_device_t dev, rt_off_t pos, const void *buffer, r
     }
     rt_dma_chan_start(ch);
     if (rt_dma_chan_done(ch, size)) {
+        rt_dma_chan_stop(ch);
         LOG_E("uart pdma transfer failed");
         goto error;
     }
@@ -475,6 +479,7 @@ static rt_err_t uart_control_set_baud(rt_device_t dev, void *args)
     read32(uart_base + UART_USR);
     read32(uart_base + UART_FCR);
     write32(uart_base + UART_IER, 0x81);
+    kd_uart_device->baudrate = config->baud_rate;
 
     return RT_EOK;
 }
@@ -626,6 +631,7 @@ int kd_hw_uart_init(void)
     kd_uart_device->kd_rx_fifo->put_index = 0;
     kd_uart_device->kd_rx_fifo->get_index = 0;
     kd_uart_device->kd_rx_fifo->is_full = RT_FALSE;
+    kd_uart_device->baudrate = DEFAULT_BAUDRATE;
 
     /* register interrupt handler */
     rt_hw_interrupt_install(UART1_IRQ, rt_hw_uart_isr, kd_uart_device, "uart1");
@@ -657,6 +663,7 @@ int kd_hw_uart_init(void)
     kd_uart_device->kd_rx_fifo->put_index = 0;
     kd_uart_device->kd_rx_fifo->get_index = 0;
     kd_uart_device->kd_rx_fifo->is_full = RT_FALSE;
+    kd_uart_device->baudrate = DEFAULT_BAUDRATE;
 
     /* register interrupt handler */
     rt_hw_interrupt_install(UART2_IRQ, rt_hw_uart_isr, kd_uart_device, "uart2");
@@ -688,6 +695,7 @@ int kd_hw_uart_init(void)
     kd_uart_device->kd_rx_fifo->put_index = 0;
     kd_uart_device->kd_rx_fifo->get_index = 0;
     kd_uart_device->kd_rx_fifo->is_full = RT_FALSE;
+    kd_uart_device->baudrate = DEFAULT_BAUDRATE;
 
     /* register interrupt handler */
     rt_hw_interrupt_install(UART3_IRQ, rt_hw_uart_isr, kd_uart_device, "uart3");
@@ -719,6 +727,7 @@ int kd_hw_uart_init(void)
     kd_uart_device->kd_rx_fifo->put_index = 0;
     kd_uart_device->kd_rx_fifo->get_index = 0;
     kd_uart_device->kd_rx_fifo->is_full = RT_FALSE;
+    kd_uart_device->baudrate = DEFAULT_BAUDRATE;
 
     /* register interrupt handler */
     rt_hw_interrupt_install(UART4_IRQ, rt_hw_uart_isr, kd_uart_device, "uart4");
