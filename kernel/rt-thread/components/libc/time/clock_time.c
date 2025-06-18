@@ -165,7 +165,7 @@ RTM_EXPORT(clock_gettime);
 
 int clock_settime(clockid_t clockid, const struct timespec *tp)
 {
-    int second;
+    time_t second;
     rt_tick_t tick;
     rt_device_t device;
 

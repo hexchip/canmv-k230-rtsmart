@@ -31,7 +31,7 @@ extern "C" {
  * and used in other calls.
  */
 struct timeval {
-    long    tv_sec;     /* seconds */
+    time_t  tv_sec;     /* seconds */
     long    tv_usec;    /* and microseconds */
 };
 #endif /* _TIMEVAL_DEFINED */

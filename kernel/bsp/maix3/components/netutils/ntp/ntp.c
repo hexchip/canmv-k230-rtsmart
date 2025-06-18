@@ -397,7 +397,7 @@ time_t ntp_sync_to_rtc(const char *host_name)
         struct timespec tp;
         tp.tv_sec = cur_time;
         tp.tv_nsec = 0;
-        clock_gettime(CLOCK_REALTIME, &tp);
+        clock_settime(CLOCK_REALTIME, &tp);
 #endif /*RT_VER_NUM <= 0x40003*/
         LOG_I("Get local time from NTP server: %s", ctime((const time_t *) &cur_time));
 #else

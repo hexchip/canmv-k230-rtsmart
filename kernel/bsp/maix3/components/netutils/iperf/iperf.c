@@ -28,11 +28,11 @@
 #define IPERF_MODE_SERVER   1
 #define IPERF_MODE_CLIENT   2
 
-#if (RT_VER_NUM >= 0x50000)
-#define IPERF_GET_THREAD_NAME(th) (th->parent.name)
-#else
+// #if (RT_VER_NUM >= 0x50000)
+// #define IPERF_GET_THREAD_NAME(th) (th->parent.name)
+// #else
 #define IPERF_GET_THREAD_NAME(th) (th->name)
-#endif
+// #endif
 
 typedef struct
 {

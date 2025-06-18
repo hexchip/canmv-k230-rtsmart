@@ -372,6 +372,8 @@ static rt_err_t rtc_alarm_set(void *args)
     rt_hw_interrupt_install(IRQN_PMU_INTERRUPT, rtc_irq, NULL, "rtc");
     rt_hw_interrupt_umask(IRQN_PMU_INTERRUPT);
     rtc_set_interrupt(1, setup->flag);
+
+    return RT_EOK;
 }
 
 static rt_err_t kd_rtc_control(rt_device_t dev, int cmd, void *args)
