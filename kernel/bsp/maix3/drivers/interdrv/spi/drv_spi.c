@@ -397,7 +397,7 @@ static rt_uint32_t drv_spi_xfer(struct rt_spi_device* device, struct rt_spi_mess
 
         // must set ser
         if(0x00 == (cfg->parent.hard_cs & 0x7F)) {
-            spi->ser = BIT(4); // default select cs4
+            spi->ser = BIT(0); // default select cs0
         } else {
             spi->ser = cfg->parent.hard_cs & 0x7F;
         }
@@ -560,7 +560,7 @@ static rt_uint32_t drv_spi_xfer(struct rt_spi_device* device, struct rt_spi_mess
 
         // must set ser
         if(0x00 == (cfg->parent.hard_cs & 0x7F)) {
-            spi->ser = BIT(4); // default select cs4
+            spi->ser = BIT(0); // default select cs0
         } else {
             spi->ser = cfg->parent.hard_cs & 0x7F;
         }

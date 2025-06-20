@@ -1732,17 +1732,17 @@ int dwc2_hcd_init(struct dwc2_hsotg *hsotg)
 error12:
     rt_workqueue_destroy(hsotg->hi_prio_bh.work_queue);
 error11:
-    rt_mp_delete_align(hsotg->bitmap_size_multi_cache);
+    rt_mp_delete(hsotg->bitmap_size_multi_cache);
 error10:
-    rt_mp_delete_align(hsotg->bitmap_size_cache);
+    rt_mp_delete(hsotg->bitmap_size_cache);
 error9:
-    rt_mp_delete_align(hsotg->qtd_cache);
+    rt_mp_delete(hsotg->qtd_cache);
 error8:
-    rt_mp_delete_align(hsotg->qh_cache);
+    rt_mp_delete(hsotg->qh_cache);
 error7:
-    rt_mp_delete_align(hsotg->dwc2_urb_iso_cache);
+    rt_mp_delete(hsotg->dwc2_urb_iso_cache);
 error6:
-    rt_mp_delete_align(hsotg->dwc2_urb_cache);
+    rt_mp_delete(hsotg->dwc2_urb_cache);
 error5:
     rt_mp_delete_align(hsotg->unaligned_cache);
 error4:
