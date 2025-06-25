@@ -658,4 +658,4 @@ int misc_device_init(void) {
 
   return 0;
 }
-INIT_DEVICE_EXPORT(misc_device_init);
+INIT_APP_EXPORT(misc_device_init);

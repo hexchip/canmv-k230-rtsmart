@@ -172,4 +172,4 @@ int rt_hw_otp_init(void)
 #endif
     return ret;
 }
-INIT_BOARD_EXPORT(rt_hw_otp_init);
+INIT_DEVICE_EXPORT(rt_hw_otp_init);

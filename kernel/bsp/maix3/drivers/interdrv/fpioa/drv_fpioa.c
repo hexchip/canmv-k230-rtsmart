@@ -46,4 +46,4 @@ int kd_fpioa_init(void)
 
     return 0;
 }
-INIT_BOARD_EXPORT(kd_fpioa_init);
+INIT_PREV_EXPORT(kd_fpioa_init);

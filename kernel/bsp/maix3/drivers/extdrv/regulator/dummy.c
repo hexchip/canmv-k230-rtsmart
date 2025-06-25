@@ -84,4 +84,4 @@ int regulator_dummpy_init(void) {
 
   return ret;
 }
-INIT_ENV_EXPORT(regulator_dummpy_init);
+INIT_DEVICE_EXPORT(regulator_dummpy_init);

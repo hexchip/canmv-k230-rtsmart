@@ -333,4 +333,4 @@ int rt_hw_pdma_device_init(void)
 
     return 0;
 }
-INIT_BOARD_EXPORT(rt_hw_pdma_device_init);
+INIT_PREV_EXPORT(rt_hw_pdma_device_init);

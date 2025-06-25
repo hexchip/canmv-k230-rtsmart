@@ -109,4 +109,4 @@ int rt_hw_hardlock_init(void)
 #endif
     return 0;
 }
-INIT_BOARD_EXPORT(rt_hw_hardlock_init);
+INIT_PREV_EXPORT(rt_hw_hardlock_init);
