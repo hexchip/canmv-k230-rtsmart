@@ -44,13 +44,15 @@ menu "InterDriver"
             endchoice
         endif
 
-    config RT_USING_HARDLOCK
+    menuconfig RT_USING_HARDLOCK
         bool "Enable HardLock Driver"
         default n
 
-    config RT_USING_PDMA
-        bool "Enable PDMA Driver"
-        default n
+        if RT_USING_HARDLOCK
+            config RT_HARD_LOCK_USE_DUMMY
+                bool "Use Dummy HardLock Impl"
+                default y
+        endif
 
     menuconfig RT_USING_HWTIMER
         bool "Using hardware timer device drivers"
@@ -151,32 +153,9 @@ menu "InterDriver"
                 endif
         endif
 
-    menuconfig RT_USING_SPI
-        bool "Enable SPI Driver"
+    config RT_USING_PDMA
+        bool "Enable PDMA Driver"
         default n
-
-        if RT_USING_SPI
-            config RT_USING_SPI0
-                bool "Enable SPI0"
-                default n
-            config RT_SPI0_RXSD
-                int "SPI0 ReadSample Delay"
-                default 0
-
-            config RT_USING_SPI1
-                bool "Enable SPI1"
-                default n
-            config RT_SPI1_RXSD
-                int "SPI1 ReadSample Delay"
-                default 0
-
-            config RT_USING_SPI2
-                bool "Enable SPI2"
-                default n
-            config RT_SPI2_RXSD
-                int "SPI2 ReadSample Delay"
-                default 0
-        endif
 
     config RT_USING_PWM
         bool "Using PWM device drivers"
@@ -210,81 +189,98 @@ menu "InterDriver"
                 default n
         endif
 
-        config RT_USING_SPI
-            bool "Enable SPI1 device driver"
-            default n
+    menuconfig RT_USING_SPI
+        bool "Enable SPI Driver"
+        default n
 
-        menuconfig RT_USING_TS
-            bool "Enable Tsensor driver"
-            default n
+        if RT_USING_SPI
+            config RT_USING_SPI0
+                bool "Enable SPI0"
+                default n
+            config RT_SPI0_RXSD
+                int "SPI0 ReadSample Delay"
+                default 0
 
-            if RT_USING_TS
+            config RT_USING_SPI1
+                bool "Enable SPI1"
+                default n
+            config RT_SPI1_RXSD
+                int "SPI1 ReadSample Delay"
+                default 0
 
-                config DRV_TS_USE_RT_DEVICE
-                    bool "Tsensor driver use RT Device framework"
-                    default n
+            config RT_USING_SPI2
+                bool "Enable SPI2"
+                default n
+            config RT_SPI2_RXSD
+                int "SPI2 ReadSample Delay"
+                default 0
+        endif
 
-            endif
-        
-        menuconfig RT_USING_CANAAN_UART
-            bool "Enable Uart Canaan device model driver"
-            default n
-            
-            if RT_USING_CANAAN_UART
-                config RT_USING_UART_CANAAN_1
-                    bool "Enable Uart Canaan device 1"
-                    default n
-                config RT_USING_UART_CANAAN_2
-                    bool "Enable Uart Canaan device 2"
-                    default n
-                config RT_USING_UART_CANAAN_3
-                    bool "Enable Uart Canaan device 3"
-                    default n
-                config RT_USING_UART_CANAAN_4
-                    bool "Enable Uart Canaan device 4"
-                    default n
+    menuconfig DRV_SYSCTL_BOOT_FORCE_MODE
+        bool "Force Sysctl Boot Mode"
+        default n
 
-                config CANAAN_UART_BUFFER_SIZE
-                    int "Uart Canaan Buffer size in Bytes"
-                    default 131072
+        if DRV_SYSCTL_BOOT_FORCE_MODE
+            choice
+                bool "Forct Sysctl Boot From "
+                default DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SDCARD
 
-                config POLLIN_SIZE
-                    int
-                    default CANAAN_UART_BUFFER_SIZE/2
+                config DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SPI_NOR
+                    bool "Spi Nor Flash"
+                config DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SPI_NAND
+                    bool "Spi Nand Flash"
+                config DRV_SYSCTL_BOOT_FORCE_MODE_MODE_EMMC
+                    bool "Emmc (SDIO0)"
+                config DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SDCARD
+                    bool "SdCard (SDIO1)"
+            endchoice
 
-                config UART_TIMEOUT
-                    int "Uart Canaan Pool timeout"
-                    default 1000
-            endif
+            config DRV_SYSCTL_BOOT_FORCE_MODE_MODE
+                int
+                default 0 if DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SPI_NOR
+                default 1 if DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SPI_NAND
+                default 2 if DRV_SYSCTL_BOOT_FORCE_MODE_MODE_EMMC
+                default 3 if DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SDCARD
+        endif
 
-        config RT_USING_WDT
-            bool "Using Watch Dog device drivers"
-            default n
+    menuconfig RT_USING_TS
+        bool "Enable Tsensor driver"
+        default n
 
-        menuconfig DRV_SYSCTL_BOOT_FORCE_MODE
-            bool "Force Sysctl Boot Mode"
-            default n
+        if RT_USING_TS
+            config DRV_TS_USE_RT_DEVICE
+                bool "Tsensor driver use RT Device framework"
+                default n
+        endif
 
-            if DRV_SYSCTL_BOOT_FORCE_MODE
-                choice
-                    bool "Forct Sysctl Boot From "
-                    default DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SDCARD
+    menuconfig RT_USING_SERIAL
+        bool "USING Serial device drivers"
+        default n
 
-                    config DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SPI_NOR
-                        bool "Spi Nor Flash"
-                    config DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SPI_NAND
-                        bool "Spi Nand Flash"
-                    config DRV_SYSCTL_BOOT_FORCE_MODE_MODE_EMMC
-                        bool "Emmc (SDIO0)"
-                    config DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SDCARD
-                        bool "SdCard (SDIO1)"
-                endchoice
+        if RT_USING_SERIAL
+            config RT_SERIAL_ENABLE_UART0
+                bool "Enable Uart device 0"
+                default y
+            config RT_SERIAL_ENABLE_UART1
+                bool "Enable Uart device 1"
+                default y
+            config RT_SERIAL_ENABLE_UART2
+                bool "Enable Uart device 2"
+                default y
+            config RT_SERIAL_ENABLE_UART3
+                bool "Enable Uart device 3"
+                default y
+            config RT_SERIAL_ENABLE_UART4
+                bool "Enable Uart device 4"
+                default y
 
-                config DRV_SYSCTL_BOOT_FORCE_MODE_MODE
-                    int
-                    default 0 if DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SPI_NOR
-                    default 1 if DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SPI_NAND
-                    default 2 if DRV_SYSCTL_BOOT_FORCE_MODE_MODE_EMMC
-                    default 3 if DRV_SYSCTL_BOOT_FORCE_MODE_MODE_SDCARD
-            endif
+            config RT_SERIAL_RECV_BUF_SIZE
+                hex "Uart Device Recv Buffer Size"
+                default 0x4000
+        endif
+
+    config RT_USING_WDT
+        bool "Using Watch Dog device drivers"
+        default n
+
 endmenu

@@ -323,11 +323,6 @@ void rt_hw_board_init(void)
 
     board_pinmux_init();
 
-#ifdef RT_USING_CONSOLE
-    rt_hw_uart_init();
-    rt_console_set_device(RT_CONSOLE_DEVICE_NAME);
-#endif /* RT_USING_CONSOLE */
-
 #ifdef RT_USING_HEAP
     rt_kprintf("heap: [0x%08x - 0x%08x], size %d KB\n", (rt_ubase_t) RT_HW_HEAP_BEGIN, (rt_ubase_t) RT_HW_HEAP_END, (rt_ubase_t)RT_HEAP_SIZE / 1024);
 #endif

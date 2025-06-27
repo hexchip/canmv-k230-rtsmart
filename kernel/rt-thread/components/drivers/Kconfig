@@ -45,7 +45,7 @@ menuconfig RT_USING_SERIAL
         endchoice
         config RT_SERIAL_USING_DMA
             bool "Enable serial DMA mode"
-            default y
+            default n
 
         config RT_SERIAL_RB_BUFSZ
             int "Set RX buffer size"
