@@ -8,4 +8,8 @@ menu "Board Configuration"
         bool "Fastboot, disable some log output"
         default n
 
+    config RT_BOARD_ENABLE_PINMUX
+        bool "Enable Pinmux Configure"
+        default n
+
 endmenu

@@ -321,7 +321,9 @@ void rt_hw_board_init(void)
 
     rt_hw_tick_init();
 
+#ifdef RT_BOARD_ENABLE_PINMUX
     board_pinmux_init();
+#endif
 
 #ifdef RT_USING_HEAP
     rt_kprintf("heap: [0x%08x - 0x%08x], size %d KB\n", (rt_ubase_t) RT_HW_HEAP_BEGIN, (rt_ubase_t) RT_HW_HEAP_END, (rt_ubase_t)RT_HEAP_SIZE / 1024);
