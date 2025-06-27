@@ -23,6 +23,7 @@
 #include "sysctl_clk.h"
 
 #include "drv_uart.h"
+#include "math.h"
 
 #ifdef RT_DEBUG
 #define DBG_LVL DBG_LOG
@@ -102,6 +103,7 @@
 #define UART_DEFAULT_BAUDRATE 115200
 #define UART_TIMEOUT_TICKS    (RT_TICK_PER_SECOND / 100) /* 10ms timeout */
 #define MAX_BAUD_ERROR_PPM    20000 // 2% tolerance
+#define DLF_SIZE              4
 
 #define write32(addr, value) writel(value, addr)
 #define read32(addr)         readl(addr)
@@ -119,7 +121,10 @@ typedef enum _uart_receive_trigger {
 
 struct uart_inst {
     struct rt_serial_device device;
-    void*                   reg;
+
+    void*    reg;
+    uint32_t char_tmo_ticks;
+
     struct {
         uint32_t addr;
         uint32_t index;
@@ -172,48 +177,66 @@ _on_error_drop_fifo:
     return;
 }
 
-#define DIV_ROUND_CLOSEST(x, divisor)                                                                                          \
-    ({                                                                                                                         \
-        typeof(x)       __x = x;                                                                                               \
-        typeof(divisor) __d = divisor;                                                                                         \
-        (((typeof(x))-1) > 0 || ((typeof(divisor))-1) > 0 || (__x) > 0) ? (((__x) + ((__d) / 2)) / (__d))                      \
-                                                                        : (((__x) - ((__d) / 2)) / (__d));                     \
-    })
-
-static int drv_uart_calc_baud_divisor(struct uart_inst* inst, uint32_t baudrate)
+static uint32_t drv_uart_calc_baud_divisor(struct uart_inst* inst, uint32_t baudrate)
 {
-    const unsigned int mode_x_div = 16;
-
+    const unsigned int mode_x_div    = 16;
+    const unsigned int bits_per_char = 10; // 8N1 format
     RT_ASSERT(inst);
-    volatile void* uart_base = inst->reg;
-    RT_ASSERT(uart_base);
 
-    uint32_t clock = sysctl_clk_get_leaf_freq(SYSCTL_CLK_UART_0_CLK + inst->uart.index);
+    uint32_t clock     = sysctl_clk_get_leaf_freq(SYSCTL_CLK_UART_0_CLK + inst->uart.index);
+    float    exact_div = (float)clock / (mode_x_div * baudrate);
+    uint16_t int_div   = (uint16_t)exact_div;
+    float    frac      = exact_div - int_div;
 
-    return DIV_ROUND_CLOSEST(clock, mode_x_div * baudrate);
+    // Compute fractional part
+    uint8_t dlf = (uint8_t)(frac * (1 << DLF_SIZE) + 0.5f);
+    if (dlf >= (1 << DLF_SIZE)) {
+        dlf = 0;
+        int_div += 1;
+    }
+
+    // Calculate actual baudrate and error
+    float actual_baud   = (float)clock / (mode_x_div * (int_div + (float)dlf / (1 << DLF_SIZE)));
+    float error_percent = 100.0f * fabsf((actual_baud - baudrate) / baudrate);
+
+    // Store timeout in inst
+    float char_time_s    = (float)bits_per_char / actual_baud;
+    inst->char_tmo_ticks = rt_tick_from_millisecond((uint32_t)(char_time_s * 1000 + 0.5f)) * 2;
+
+    if (error_percent > 2.0f) {
+        rt_kprintf("[UART] Baud mismatch: requested=%u, actual=%.2f, error=%.2f%%\n", baudrate, actual_baud, error_percent);
+    }
+
+    // Pack result as (dlf << 16) | (dlh << 8) | dll
+    return ((uint32_t)dlf << 16) | ((int_div >> 8) << 8) | (int_div & 0xFF);
 }
 
 static void drv_uart_set_baudrate(struct uart_inst* inst, uint32_t baudrate)
 {
     RT_ASSERT(inst);
-
     volatile void* uart_base = inst->reg;
     RT_ASSERT(uart_base);
 
-    /* Wait for UART to be idle */
+    // Wait for idle
     while (!(read32(uart_base + UART_LSR) & UART_LSR_TEMT)) { }
 
-    /* Set DLAB = 1 */
+    uint32_t packed = drv_uart_calc_baud_divisor(inst, baudrate);
+
+    uint8_t dll = packed & 0xFF;
+    uint8_t dlh = (packed >> 8) & 0xFF;
+    uint8_t dlf = (packed >> 16) & ((1 << DLF_SIZE) - 1);
+
+    // Enable DLAB
     uint32_t lcr = read32(uart_base + UART_LCR);
     write32(uart_base + UART_LCR, lcr | 0x80);
 
-    /* Set divisor */
-    int div = drv_uart_calc_baud_divisor(inst, baudrate);
-    write32(uart_base + UART_DLL, div & 0xFF);
-    write32(uart_base + UART_DLH, (div >> 8) & 0xFF);
+    // Set divisor registers
+    write32(uart_base + UART_DLL, dll);
+    write32(uart_base + UART_DLH, dlh);
+    write32(uart_base + UART_DLF, dlf);
 
     /* Clear DLAB */
-    write32(uart_base + UART_LCR, lcr & ~0x80);
+    write32(uart_base + UART_LCR, lcr & 0x7F);
 }
 
 static uint8_t drv_uart_get_fcr(struct uart_inst* inst)
@@ -396,13 +419,19 @@ static int drv_uart_putc(struct rt_serial_device* serial, char c)
     volatile void* uart_base = inst->reg;
     RT_ASSERT(uart_base);
 
+    // Determine timeout in ticks
+    rt_tick_t timeout_ticks = (inst->char_tmo_ticks != 0) ? inst->char_tmo_ticks : UART_TIMEOUT_TICKS;
+
     rt_tick_t start = rt_tick_get();
 
+    // Wait for transmit holding register to become empty
     while (!(read32(uart_base + UART_LSR) & UART_LSR_THRE)) {
-        if (rt_tick_get() - start > UART_TIMEOUT_TICKS) {
+        if (rt_tick_get() - start > timeout_ticks) {
             return -RT_ETIMEOUT;
         }
     }
+
+    // Write character
     write32(uart_base + UART_THR, c);
 
     return 1;
