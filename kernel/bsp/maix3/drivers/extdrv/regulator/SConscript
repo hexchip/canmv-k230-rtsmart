@@ -7,10 +7,11 @@ src     = []
 CPPPATH = [cwd]
 
 src += Glob('regulator.c')
-src += Glob('dummy.c')
 
 if GetDepend(['RT_USING_REGULATOR_TPS6286X']):
     src += Glob('tps6286x.c')
+else:
+    src += Glob('dummy.c')
 
 group = DefineGroup('REGULATOR', src, depend = ['RT_USING_PM', 'RT_USING_REGULATOR'], CPPPATH = CPPPATH)
 
