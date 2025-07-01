@@ -139,6 +139,6 @@ int ws2812_regulator_init(void)
     RT_ASSERT(rt_device_register(&ws2812_dev,"ws2812",RT_DEVICE_FLAG_RDWR) == RT_EOK);
     return 0;
 }
-INIT_DEVICE_EXPORT(ws2812_regulator_init);
+INIT_COMPONENT_EXPORT(ws2812_regulator_init);
 
 #endif // WS2812_USE_DRV_GPIO
