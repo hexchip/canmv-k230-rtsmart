@@ -200,8 +200,13 @@ static uint32_t drv_uart_calc_baud_divisor(struct uart_inst* inst, uint32_t baud
     float error_percent = 100.0f * fabsf((actual_baud - baudrate) / baudrate);
 
     // Store timeout in inst
-    float char_time_s    = (float)bits_per_char / actual_baud;
-    inst->char_tmo_ticks = rt_tick_from_millisecond((uint32_t)(char_time_s * 1000 + 0.5f)) * 2;
+    float char_time_s = (float)bits_per_char / actual_baud;
+
+    uint32_t char_time_ticks = rt_tick_from_millisecond((uint32_t)(char_time_s * 1000.f + 0.5f)) * 2;
+    if (char_time_ticks < 2) {
+        char_time_ticks = 2;
+    }
+    inst->char_tmo_ticks = char_time_ticks;
 
     if (error_percent > 2.0f) {
         rt_kprintf("[UART] Baud mismatch: requested=%u, actual=%.2f, error=%.2f%%\n", baudrate, actual_baud, error_percent);
@@ -427,6 +432,13 @@ static int drv_uart_putc(struct rt_serial_device* serial, char c)
     // Wait for transmit holding register to become empty
     while (!(read32(uart_base + UART_LSR) & UART_LSR_THRE)) {
         if (rt_tick_get() - start > timeout_ticks) {
+            if ((read32(uart_base + UART_LSR) & UART_LSR_THRE)) {
+                break;
+            }
+
+            // Timeout occurred
+            rt_kprintf("uart%d putc timeout\n", inst->uart.index);
+
             return -RT_ETIMEOUT;
         }
     }
