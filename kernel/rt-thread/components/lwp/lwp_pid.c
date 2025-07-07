@@ -610,7 +610,13 @@ pid_t lwp_name2pid(const char *name)
 
 int lwp_getpid(void)
 {
-    return ((struct rt_lwp *)rt_thread_self()->lwp)->pid;
+    rt_thread_t self = rt_thread_self();
+
+    if(NULL == self->lwp) {
+        return 0;
+    }
+
+    return ((struct rt_lwp *)self->lwp)->pid;
 }
 
 pid_t waitpid(pid_t pid, int *status, int options)

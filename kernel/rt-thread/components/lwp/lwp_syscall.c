@@ -4603,6 +4603,9 @@ const static void* func_table[] =
     SYSCALL_SIGN(sys_timer_settime),
     SYSCALL_SIGN(sys_timer_gettime),
     SYSCALL_SIGN(sys_timer_getoverrun),
+
+    SYSCALL_SIGN(sys_hw_interrupt_disable),
+    SYSCALL_SIGN(sys_hw_interrupt_enable),
 };
 
 const void *lwp_get_sys_api(rt_uint32_t number)

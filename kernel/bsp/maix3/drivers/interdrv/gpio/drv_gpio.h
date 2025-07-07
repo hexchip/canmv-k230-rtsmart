@@ -28,71 +28,26 @@
 
 #include "rtdef.h"
 
-#define GPIO_IRQ_MAX_NUM     (64)
-#define GPIO_MAX_NUM         (64 + 8)
-#define IRQN_GPIO0_INTERRUPT 32
+#define GPIO_IRQ_MAX_NUM (64)
+#define GPIO_MAX_NUM     (64 + 8)
 
-/* k230 gpio register table */
-#define DATA_OUTPUT    0x0
-#define DIRECTION      0x04
-#define DATA_SOURCE    0x08
-#define INT_ENABLE     0x30
-#define INT_MASK       0x34
-#define INT_TYPE_LEVEL 0x38
-#define INT_POLARITY   0x3c
-#define INT_STATUS     0x40
-#define INT_STATUS_RAW 0x44
-#define INT_DEBOUNCE   0x48
-#define INT_CLEAR      0x4c
-#define DATA_INPUT     0x50
-#define VER_ID_CODE    0x64
-#define INT_BOTHEDGE   0x68
-
-#define DATA_INPUT_STRIDE  0x04 /* register stride 32 bits */
-#define DATA_OUTPUT_STRIDE 0x0c /* register stride 3*32 bits */
-#define DIRECTION_STRIDE   0x0c /* register stride 3*32 bits */
-
-#define KD_GPIO_HIGH        1
-#define KD_GPIO_LOW         0
 #define KD_GPIO_IRQ_DISABLE 0x00
 #define KD_GPIO_IRQ_ENABLE  0x01
 
-/* ioctl */
-
-#define KD_GPIO_DM_OUTPUT          _IOW('G', 0, int)
-#define KD_GPIO_DM_INPUT           _IOW('G', 1, int)
-#define KD_GPIO_DM_INPUT_PULL_UP   _IOW('G', 2, int)
-#define KD_GPIO_DM_INPUT_PULL_DOWN _IOW('G', 3, int)
-#define KD_GPIO_WRITE_LOW          _IOW('G', 4, int)
-#define KD_GPIO_WRITE_HIGH         _IOW('G', 5, int)
-
-#define KD_GPIO_PE_RISING  _IOW('G', 7, int)
-#define KD_GPIO_PE_FALLING _IOW('G', 8, int)
-#define KD_GPIO_PE_BOTH    _IOW('G', 9, int)
-#define KD_GPIO_PE_HIGH    _IOW('G', 10, int)
-#define KD_GPIO_PE_LOW     _IOW('G', 11, int)
-
-#define KD_GPIO_READ_VALUE _IOW('G', 12, int)
-
-#define KD_GPIO_SET_MODE    _IOW('G', 20, int)
-#define KD_GPIO_GET_MODE    _IOWR('G', 21, int)
-#define KD_GPIO_SET_VALUE   _IOW('G', 22, int)
-#define KD_GPIO_GET_VALUE   _IOWR('G', 23, int)
-#define KD_GPIO_SET_IRQ     _IOW('G', 24, int)
-#define KD_GPIO_GET_IRQ     _IOWR('G', 25, int)
-#define KD_GPIO_SET_IRQ_STAT  _IOW('G', 26, int)
-
 typedef enum _gpio_pin_edge {
-    GPIO_PE_RISING = 0,
-    GPIO_PE_FALLING,
-    GPIO_PE_BOTH,
-    GPIO_PE_HIGH,
-    GPIO_PE_LOW,
+    GPIO_PE_RISING  = 0,
+    GPIO_PE_FALLING = 1,
+    GPIO_PE_BOTH    = 2,
+    GPIO_PE_HIGH    = 3,
+    GPIO_PE_LOW     = 4,
 } gpio_pin_edge_t;
 
 typedef enum _gpio_drive_mode {
-    GPIO_DM_OUTPUT = 0,
-    GPIO_DM_INPUT  = 1,
+    GPIO_DM_OUTPUT         = 0,
+    GPIO_DM_INPUT          = 1,
+    GPIO_DM_INPUT_PULLUP   = 2,
+    GPIO_DM_INPUT_PULLDOWN = 3,
+    GPIO_DM_OUTPUT_OD      = 4,
 } gpio_drive_mode_t;
 
 typedef enum _gpio_pin_value { GPIO_PV_LOW, GPIO_PV_HIGH } gpio_pin_value_t;
@@ -104,20 +59,23 @@ typedef struct {
 
 typedef struct {
     rt_uint16_t pin;
-    rt_uint8_t  enable;
-    rt_uint8_t  mode;
-    rt_uint16_t debounce;
-    rt_uint8_t  signo;
-    void*       sigval;
+    rt_uint16_t mode; // @ref gpio_pin_edge_t
+    rt_uint16_t debounce_ms;
+    rt_uint16_t signo;
+    void*       sigval; // reuse as callback
 } gpio_irqcfg_t;
 
-int rt_hw_gpio_init(void);
+int kd_pin_init(void);
+
+rt_err_t kd_pin_attach_irq(rt_base_t pin, rt_uint32_t mode, void (*hdr)(void* args), void* args);
+rt_err_t kd_pin_detach_irq(rt_base_t pin);
 
 rt_err_t kd_pin_irq_enable(rt_base_t pin, rt_uint32_t enabled);
-rt_err_t kd_pin_detach_irq(rt_int32_t pin);
-rt_err_t kd_pin_attach_irq(rt_int32_t pin, rt_uint32_t mode, void (*hdr)(void* args), void* args);
-rt_err_t kd_pin_write(rt_base_t pin, rt_base_t value);
+
 rt_err_t kd_pin_mode(rt_base_t pin, rt_base_t mode);
-int      kd_pin_read(rt_base_t pin);
+rt_err_t kd_pin_mode_get(rt_base_t pin, rt_base_t* mode);
+
+rt_err_t kd_pin_write(rt_base_t pin, rt_base_t value);
+rt_err_t kd_pin_read(rt_base_t pin);
 
 #endif

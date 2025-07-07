@@ -46,6 +46,9 @@
 #define DBG_TAG "pwm"
 #include <rtdbg.h>
 
+#define write32(addr, value) writel(value, (volatile void*)(rt_uint64_t)(addr))
+#define read32(addr)         readl((const volatile void*)(rt_uint64_t)(addr))
+
 /* PWM Register Definition */
 typedef struct {
     uint32_t scale : 4; /* Clock scale factor */
@@ -101,6 +104,8 @@ struct pwm_inst_wrap {
 
 static uint32_t _pwm_dev_inst_type;
 
+static struct pwm_inst_wrap pwm_inst_wrap;
+
 /* PWM Channel Mapping */
 #define PWM_CHANNEL_TO_INST(ch)  ((ch) / 3) /* 0-2: instance 0, 3-5: instance 1 */
 #define PWM_CHANNEL_TO_SUBCH(ch) ((ch) % 3) /* Sub-channel within instance */
@@ -118,19 +123,22 @@ static int pwm_start(struct pwm_inst* inst, int channel)
         return -RT_EINVAL;
     }
 
+    uint32_t curr_cfg;
     uint32_t period = inst->period;
     uint32_t scale  = inst->scale;
     uint32_t pulse  = inst->pulses[channel];
 
     /* Configure PWM scale and period */
-    inst->reg->pwmcfg  = (inst->reg->pwmcfg & (~0x0F)) | scale;
-    inst->reg->pwmcmp0 = period >> scale;
+    curr_cfg = read32(&inst->reg->pwmcfg);
+    write32(&inst->reg->pwmcfg, (curr_cfg & (~0x0F) | scale));
+    write32(&inst->reg->pwmcmp0, period >> scale);
 
-    /* Set pulse width for the channel */
-    inst->reg->pwm_chn_pulse[channel] = (period - pulse) >> scale;
+    /* Set pulse width */
+    write32(&inst->reg->pwm_chn_pulse[channel], (period - pulse) >> scale);
 
     /* Enable PWM */
-    inst->reg->pwmcfg |= (1 << 12); /* Enable bit */
+    curr_cfg = read32(&inst->reg->pwmcfg);
+    write32(&inst->reg->pwmcfg, curr_cfg | (1 << 12));
     inst->enable[channel] = 1;
 
     return RT_EOK;
@@ -144,21 +152,22 @@ static int pwm_start(struct pwm_inst* inst, int channel)
  */
 static int pwm_stop(struct pwm_inst* inst, int channel)
 {
+    uint32_t curr_cfg;
+
     if (channel < 0 || channel > 2) {
         LOG_E("Invalid channel %d", channel);
         return -RT_EINVAL;
     }
 
     inst->enable[channel] = 0;
+    write32(&inst->reg->pwm_chn_pulse[channel], UINT32_MAX);
 
-    inst->reg->pwm_chn_pulse[channel] = UINT32_MAX;
-
-    /* Disable PWM if no channels are active */
     if (!inst->enable[0] && !inst->enable[1] && !inst->enable[2]) {
-        inst->reg->pwmcount = UINT32_MAX;
-
+        write32(&inst->reg->pwmcount, UINT32_MAX);
         rt_thread_delay(1);
-        inst->reg->pwmcfg &= ~(1 << 12);
+
+        curr_cfg = read32(&inst->reg->pwmcfg);
+        write32(&inst->reg->pwmcfg, curr_cfg & ~(1 << 12));
     }
 
     return RT_EOK;
@@ -181,10 +190,10 @@ static rt_err_t kd_pwm_get(struct pwm_inst* inst, rt_uint8_t channel, struct rt_
     uint32_t pwm_pclock = sysctl_clk_get_leaf_freq(SYSCTL_CLK_PWM_PCLK_GATE);
 
     if (inst->enable[channel]) {
-        uint32_t scale = inst->reg->pwmcfg & 0x0f;
+        uint32_t scale = read32(&inst->reg->pwmcfg) & 0x0f;
         pwm_pclock >>= scale;
-        period = inst->reg->pwmcmp0;
-        pulse  = period - inst->reg->pwm_chn_pulse[channel];
+        period = read32(&inst->reg->pwmcmp0);
+        pulse  = period - read32(&inst->reg->pwm_chn_pulse[channel]);
     } else {
         period = inst->period;
         pulse  = inst->pulses[channel];
@@ -220,7 +229,7 @@ static int kd_pwm_set(struct pwm_inst* inst, int channel, struct rt_pwm_configur
 
     /* Validate parameters */
     if (pulse > period || period > ((1 << (15 + 16)) - 1LL)) {
-        LOG_E("Invalid configuration for channel %d (pulse=%llu, period=%llu)", channel, pulse, period);
+        LOG_E("Invalid config for channel %d (pulse=%llu, period=%llu)", channel, pulse, period);
         return -RT_EINVAL;
     }
 
@@ -238,11 +247,10 @@ static int kd_pwm_set(struct pwm_inst* inst, int channel, struct rt_pwm_configur
     /* Update hardware if channel is active */
     if (inst->enable[channel]) {
         if (period != inst->period) {
-            inst->reg->pwmcfg  = (inst->reg->pwmcfg & (~0x0F)) | pwmscale;
-            inst->reg->pwmcmp0 = period >> pwmscale;
+            write32(&inst->reg->pwmcfg, (read32(&inst->reg->pwmcfg) & (~0x0F)) | pwmscale);
+            write32(&inst->reg->pwmcmp0, period >> pwmscale);
         }
-
-        inst->reg->pwm_chn_pulse[channel] = (period - pulse) >> pwmscale;
+        write32(&inst->reg->pwm_chn_pulse[channel], (period - pulse) >> pwmscale);
     }
 
     /* Store current settings */
@@ -265,12 +273,7 @@ static int kd_pwm_get_state(struct pwm_inst* inst, int channel)
         LOG_E("Invalid channel %d", channel);
         return -RT_EINVAL;
     }
-
-    if (inst->enable[channel]) {
-        return RT_EOK;
-    }
-
-    return RT_ERROR;
+    return inst->enable[channel] ? RT_EOK : RT_ERROR;
 }
 
 /**
@@ -286,46 +289,41 @@ static rt_err_t kd_pwm_control(struct rt_device_pwm* device, int cmd, void* arg)
         return -RT_EINVAL;
     }
 
-    struct rt_pwm_configuration* configuration = (struct rt_pwm_configuration*)arg;
-    struct pwm_inst_wrap*        pwm_inst_wrap = (struct pwm_inst_wrap*)(device->parent.user_data);
+    struct rt_pwm_configuration* config = (struct rt_pwm_configuration*)arg;
+    struct pwm_inst_wrap*        wrap   = (struct pwm_inst_wrap*)(device->parent.user_data);
 
     /* Validate instance type */
-    if (&_pwm_dev_inst_type != pwm_inst_wrap->inst_type) {
+    if (&_pwm_dev_inst_type != wrap->inst_type) {
         return -RT_EINVAL;
     }
 
     /* Validate channel number */
-    if (configuration->channel < 0 || configuration->channel > 5) {
-        LOG_E("Invalid channel %d", configuration->channel);
+    if (config->channel < 0 || config->channel > 5) {
+        LOG_E("Invalid channel %d", config->channel);
         return -RT_EINVAL;
     }
 
     /* Map channel to instance and sub-channel */
-    uint32_t         inst_idx = PWM_CHANNEL_TO_INST(configuration->channel);
-    uint32_t         sub_ch   = PWM_CHANNEL_TO_SUBCH(configuration->channel);
-    struct pwm_inst* pwm_inst = &pwm_inst_wrap->pwm[inst_idx];
+    uint32_t         inst_idx = PWM_CHANNEL_TO_INST(config->channel);
+    uint32_t         sub_ch   = PWM_CHANNEL_TO_SUBCH(config->channel);
+    struct pwm_inst* pwm_inst = &wrap->pwm[inst_idx];
 
     /* Execute command */
     switch (cmd) {
     case PWM_CMD_ENABLE:
     case KD_PWM_CMD_ENABLE:
         return pwm_start(pwm_inst, sub_ch);
-
     case PWM_CMD_DISABLE:
     case KD_PWM_CMD_DISABLE:
         return pwm_stop(pwm_inst, sub_ch);
-
     case PWM_CMD_SET:
     case KD_PWM_CMD_SET_CFG:
-        return kd_pwm_set(pwm_inst, sub_ch, configuration);
-
+        return kd_pwm_set(pwm_inst, sub_ch, config);
     case PWM_CMD_GET:
     case KD_PWM_CMD_GET_CFG:
-        return kd_pwm_get(pwm_inst, sub_ch, configuration);
-
+        return kd_pwm_get(pwm_inst, sub_ch, config);
     case KD_PWM_CMD_GET_STAT:
         return kd_pwm_get_state(pwm_inst, sub_ch);
-
     default:
         LOG_W("Unsupported command %d", cmd);
         return -RT_EINVAL;
@@ -355,17 +353,16 @@ int rt_hw_pwm_init(void)
     }
 
     /* Initialize PWM wrapper */
-    static struct pwm_inst_wrap pwm_inst_wrap;
     rt_memset(&pwm_inst_wrap, 0, sizeof(pwm_inst_wrap));
     pwm_inst_wrap.inst_type = &_pwm_dev_inst_type;
 
     /* Initialize PWM instance 0 (channels 0-2) */
-    pwm_inst_wrap.pwm[0].reg         = (kd_pwm_t*)((char*)reg + 0x00);
-    pwm_inst_wrap.pwm[0].reg->pwmcfg = (1 << 9) | (1 << 10); /* deglitch and enalways and cmpxcenter */
+    pwm_inst_wrap.pwm[0].reg = (kd_pwm_t*)((char*)reg + 0x00);
+    write32(&pwm_inst_wrap.pwm[0].reg->pwmcfg, (1 << 9) | (1 << 10)); /* deglitch and enalways and cmpxcenter */
 
     /* Initialize PWM instance 1 (channels 3-5) */
-    pwm_inst_wrap.pwm[1].reg         = (kd_pwm_t*)((char*)reg + 0x40);
-    pwm_inst_wrap.pwm[1].reg->pwmcfg = (1 << 9) | (1 << 10); /* deglitch and enalways and cmpxcenter */
+    pwm_inst_wrap.pwm[1].reg = (kd_pwm_t*)((char*)reg + 0x40);
+    write32(&pwm_inst_wrap.pwm[1].reg->pwmcfg, (1 << 9) | (1 << 10)); /* deglitch and enalways and cmpxcenter */
 
     /* Register PWM device */
     pwm_inst_wrap.device.ops = &drv_ops;
@@ -378,3 +375,63 @@ int rt_hw_pwm_init(void)
     return RT_EOK;
 }
 INIT_DEVICE_EXPORT(rt_hw_pwm_init);
+
+#if defined(RT_USING_MSH) && defined(RT_PWM_ENABLE_BUILTIN_CMD)
+#include <finsh.h>
+#include <msh.h>
+
+static void do_pwm(int argc, char** argv)
+{
+    if (argc < 3) {
+        rt_kprintf("Usage:\n  pwm enable <channel>\n  pwm disable <channel>\n"
+                   "  pwm set <channel> <period_ns> <pulse_ns>\n  pwm get <channel>\n"
+                   "Channels: 0-5\n");
+        return;
+    }
+
+    struct rt_pwm_configuration config  = { .channel = atoi(argv[2]) };
+    rt_device_t                 pwm_dev = rt_device_find("pwm");
+
+    if (!pwm_dev) {
+        rt_kprintf("PWM device not found\n");
+        return;
+    }
+
+    const char* cmd = argv[1];
+    if (!rt_strcmp(cmd, "enable")) {
+        rt_kprintf(rt_device_control(pwm_dev, PWM_CMD_ENABLE, &config) == RT_EOK ? "Enabled PWM channel %d\n"
+                                                                                 : "Failed to enable channel %d\n",
+                   config.channel);
+    } else if (!rt_strcmp(cmd, "disable")) {
+        rt_kprintf(rt_device_control(pwm_dev, PWM_CMD_DISABLE, &config) == RT_EOK ? "Disabled PWM channel %d\n"
+                                                                                  : "Failed to disable channel %d\n",
+                   config.channel);
+    } else if (!rt_strcmp(cmd, "set") && argc == 5) {
+        config.period = atoi(argv[3]);
+        config.pulse  = atoi(argv[4]);
+        if (rt_device_control(pwm_dev, PWM_CMD_SET, &config) == RT_EOK) {
+            rt_kprintf("Set channel %d: period=%dns, pulse=%dns (%.1f%%)\n", config.channel, config.period, config.pulse,
+                       (float)config.pulse * 100 / config.period);
+        } else {
+            rt_kprintf("Failed to set PWM parameters\n");
+        }
+    } else if (!rt_strcmp(cmd, "get")) {
+        if (rt_device_control(pwm_dev, PWM_CMD_GET, &config) == RT_EOK) {
+            rt_kprintf("Channel %d: period=%dns, pulse=%dns (%.1f%%)\n", config.channel, config.period, config.pulse,
+                       (float)config.pulse * 100 / config.period);
+        } else {
+            rt_kprintf("Failed to get PWM parameters\n");
+        }
+    } else {
+        rt_kprintf("Invalid command\n");
+    }
+}
+
+MSH_CMD_EXPORT_ALIAS(do_pwm, pwm,
+                     "PWM command:\n"
+                     "  enable <channel>\n"
+                     "  disable <channel>\n"
+                     "  set <channel> <period_ns> <pulse_ns>\n"
+                     "  get <channel>\n"
+                     "Channels: 0-5");
+#endif

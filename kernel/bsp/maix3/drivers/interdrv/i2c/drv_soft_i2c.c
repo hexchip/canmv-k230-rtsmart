@@ -32,94 +32,45 @@ struct soft_i2c_priv_t {
 };
 
 static void config_pin_use_as_soft_i2c(int pin) {
-    struct st_iomux_reg_t reg;
-
-    reg.u.value = fpioa_get_pin_cfg(pin);
-
-    reg.u.bit.st = 1;
-    reg.u.bit.ds = 15;
-    reg.u.bit.pd = 0;
-    reg.u.bit.pu = 0;
-    reg.u.bit.oe = 1;
-    reg.u.bit.ie = 1;
-    // don't change reg.u.bit.msc
-    reg.u.bit.io_sel = 0;
-
-    fpioa_set_pin_cfg(pin, reg.u.value);
+    // set pin to GPIO output mode
+    if(0x00 != kd_pin_mode(pin, GPIO_DM_OUTPUT_OD)) {
+        LOG_E("set pin %d mode failed", pin);
+        return; 
+    }
 }
 
 static void soft_i2c_set_sda(void *data, rt_int32_t state) {
-    struct st_iomux_reg_t reg;
+    fpioa_iomux_cfg_t reg;
     struct soft_i2c_priv_t *priv = (struct soft_i2c_priv_t *)data;
 
     int sda_pin = priv->sda_pin;
-
-    if(0x01 != priv->sda_mode) {
-        priv->sda_mode = 1;
-
-        reg.u.value = fpioa_get_pin_cfg(sda_pin);
-        reg.u.bit.oe = 1;
-        fpioa_set_pin_cfg(sda_pin, reg.u.value);
-
-        kd_pin_mode(sda_pin, GPIO_DM_OUTPUT);
-    }
 
     kd_pin_write(sda_pin, state);
 }
 
 static rt_int32_t soft_i2c_get_sda(void *data) {
-    struct st_iomux_reg_t reg;
+    fpioa_iomux_cfg_t reg;
     struct soft_i2c_priv_t *priv = (struct soft_i2c_priv_t *)data;
 
     int sda_pin = priv->sda_pin;
-
-    if(0x00 != priv->sda_mode) {
-        priv->sda_mode = 0;
-
-        reg.u.value = fpioa_get_pin_cfg(sda_pin);
-        reg.u.bit.oe = 0;
-        fpioa_set_pin_cfg(sda_pin, reg.u.value);
-
-        kd_pin_mode(sda_pin, GPIO_DM_INPUT);
-    }
 
     return kd_pin_read(sda_pin);
 }
 
 static void soft_i2c_set_scl(void *data, rt_int32_t state) {
-    struct st_iomux_reg_t reg;
+    fpioa_iomux_cfg_t reg;
     struct soft_i2c_priv_t *priv = (struct soft_i2c_priv_t *)data;
 
     int scl_pin = priv->scl_pin;
-
-    if(0x01 != priv->scl_mode) {
-        priv->scl_mode = 1;
-
-        reg.u.value = fpioa_get_pin_cfg(scl_pin);
-        reg.u.bit.oe = 1;
-        fpioa_set_pin_cfg(scl_pin, reg.u.value);
-
-        kd_pin_mode(scl_pin, GPIO_DM_OUTPUT);
-    }
 
     kd_pin_write(scl_pin, state);
 }
 
 static rt_int32_t soft_i2c_get_scl(void *data) {
-    struct st_iomux_reg_t reg;
+    fpioa_iomux_cfg_t reg;
     struct soft_i2c_priv_t *priv = (struct soft_i2c_priv_t *)data;
 
     int scl_pin = priv->scl_pin;
-
-    if(0x00 != priv->scl_mode) {
-        priv->scl_mode = 0;
-
-        reg.u.value = fpioa_get_pin_cfg(scl_pin);
-        reg.u.bit.oe = 0;
-        fpioa_set_pin_cfg(scl_pin, reg.u.value);
-
-        kd_pin_mode(scl_pin, GPIO_DM_INPUT);
-    }
 
     return kd_pin_read(scl_pin);
 }

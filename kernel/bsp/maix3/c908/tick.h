@@ -21,9 +21,30 @@ int rt_hw_tick_init(void);
 
 static inline __attribute__((always_inline)) uint64_t cpu_ticks(void)
 {
-    uint64_t cnt;
-    __asm__ __volatile__("rdtime %0" : "=r"(cnt));
-    return cnt;
+    uint64_t time;
+    __asm__ __volatile__("rdtime %0" : "=r"(time));
+    return time;
+}
+
+static __inline __attribute__((__always_inline__)) uint64_t cpu_ticks_ms(void)
+{
+    uint64_t time;
+    __asm__ __volatile__("rdtime %0" : "=r"(time));
+    return (time / (TIMER_CLK_FREQ / 1000));
+}
+
+static __inline __attribute__((__always_inline__)) uint64_t cpu_ticks_us(void)
+{
+    uint64_t time;
+    __asm__ __volatile__("rdtime %0" : "=r"(time));
+    return (time / (TIMER_CLK_FREQ / 1000000));
+}
+
+static __inline __attribute__((__always_inline__)) uint64_t cpu_ticks_ns(void)
+{
+    uint64_t time;
+    __asm__ __volatile__("rdtime %0" : "=r"(time));
+    return (time * 1000000000ULL) / TIMER_CLK_FREQ;
 }
 
 void cpu_ticks_delay_us(uint64_t us);

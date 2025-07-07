@@ -25,6 +25,10 @@ menu "InterDriver"
                 endif
         endif
 
+    config RT_FPIOA_ENABLE_BUILTIN_CMD
+        bool "Enable fpioa test command"
+        default n
+
     config RT_USING_GNNE
         bool "Enable GNNE driver for ai"
         default y
@@ -34,14 +38,9 @@ menu "InterDriver"
         default n
 
         if RT_USING_GPIO
-            choice
-                bool "GPIO IRQ Method"
-
-                config RT_GPIO_IRQ_METHOD_WORKQUEUE
-                    bool "WorkQueue"
-                config RT_GPIO_IRQ_METHOD_DIRECT
-                    bool "Direct"
-            endchoice
+            config RT_GPIO_ENABLE_BUILTIN_CMD
+                bool "Enable gpio test command"
+                default n
         endif
 
     menuconfig RT_USING_HARDLOCK
@@ -157,9 +156,15 @@ menu "InterDriver"
         bool "Enable PDMA Driver"
         default n
 
-    config RT_USING_PWM
+    menuconfig RT_USING_PWM
         bool "Using PWM device drivers"
         default n
+
+        if RT_USING_PWM
+            config RT_PWM_ENABLE_BUILTIN_CMD
+                    bool "Enable pwm test command"
+                    default n
+        endif
 
     config RT_USING_RTC_PMU
         bool "Using RTC device drivers"
