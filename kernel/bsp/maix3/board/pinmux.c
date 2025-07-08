@@ -26,9 +26,17 @@
 #include <stdio.h>
 
 #include "rtconfig.h"
+#include "rtdebug.h"
 #include "rtthread.h"
 
+#include "drv_fpioa.h"
 #include "drv_gpio.h"
+
+/* if func is FUNC_MAX, use cfg, else use func default */
+typedef struct _board_pinmux_cfg_t {
+    fpioa_func_t      func; /* function */
+    fpioa_iomux_cfg_t cfg; /* pinmux configuration */
+} board_pinmux_cfg_t;
 
 #define STRINGIFY(x) #x
 #define TOSTRING(x)  STRINGIFY(x)
@@ -36,22 +44,82 @@
 /* include configs/{CONFIG_BOARD}/pinmux_config.c */
 #include TOSTRING(BOARD_CFG_FILE)
 
+static int board_get_pin_bank_voltage(int pin)
+{
+    if (pin < 0 || pin >= FPIOA_PIN_MAX_NUM) {
+        rt_kprintf("Invalid pin number: %d\n", pin);
+        return -1;
+    }
+
+    switch (pin) {
+    case 0 ... 1:
+        return VOL_BANK_IO0_1;
+    case 2 ... 13:
+        return VOL_BANK0_IO2_13;
+    case 14 ... 25:
+        return VOL_BANK1_IO14_25;
+    case 26 ... 37:
+        return VOL_BANK2_IO26_37;
+    case 38 ... 49:
+        return VOL_BANK3_IO38_49;
+    case 50 ... 61:
+        return VOL_BANK4_IO50_61;
+    case 62 ... 63:
+        return VOL_BANK5_IO62_63;
+    default:
+        rt_kprintf("Pin %d does not have a defined voltage bank\n", pin);
+        return -1;
+    }
+}
+
 int board_pinmux_init(void)
 {
-    uint32_t curr, set;
+    int               bank_voltage;
+    fpioa_iomux_cfg_t curr_cfg;
 
-    kd_fpioa_init();
+    if (sizeof(board_pinmux_cfg) / sizeof(board_pinmux_cfg[0]) != FPIOA_PIN_MAX_NUM) {
+        rt_kprintf("Pinmux configuration size mismatch: expected %d, got %zu\n", FPIOA_PIN_MAX_NUM,
+                   sizeof(board_pinmux_cfg) / sizeof(board_pinmux_cfg[0]));
+        RT_ASSERT(sizeof(board_pinmux_cfg) / sizeof(board_pinmux_cfg[0]) == FPIOA_PIN_MAX_NUM);
+        return -1;
+    }
 
-    for (int i = 0; i < K230_PIN_COUNT; i++) {
-        curr = fpioa_get_pin_cfg(i);
-        curr &= 0x7FFFFFFF; /* ignore di */
-        set = board_pinmux_cfg[i].u.value;
+    /* set bank voltage */
+    for (int i = 0; i < FPIOA_PIN_MAX_NUM; i++) {
+        if (0 > (bank_voltage = board_get_pin_bank_voltage(i))) {
+            rt_kprintf("Failed to get voltage for pin %d\n", i);
+            RT_ASSERT(0);
+            continue;
+        }
 
-        if (curr != set) {
-            rt_kprintf("Pin %d setting not same\n", i);
-            rt_kprintf("curr 0x%08X, set 0x%08X\n", curr, set);
+        if (0x00 != drv_fpioa_get_pin_cfg(i, &curr_cfg.u.value)) {
+            rt_kprintf("Failed to get pin %d configuration\n", i);
+            RT_ASSERT(0);
+            continue;
+        }
+        curr_cfg.u.bit.msc = bank_voltage & 0x01;
+        if (0x00 != drv_fpioa_set_pin_cfg(i, curr_cfg.u.value)) {
+            rt_kprintf("Failed to set pin %d configuration\n", i);
+            RT_ASSERT(0);
+            continue;
+        }
+    }
+
+    for (int i = 0; i < FPIOA_PIN_MAX_NUM; i++) {
+        if (board_pinmux_cfg[i].func == FUNC_MAX) {
+            /* use cfg */
+            if (0x00 != drv_fpioa_set_pin_cfg(i, board_pinmux_cfg[i].cfg.u.value)) {
+                rt_kprintf("Failed to set pin %d configuration\n", i);
+                RT_ASSERT(0);
+                continue;
+            }
         } else {
-            fpioa_set_pin_cfg(i, set);
+            /* use func */
+            if (0x00 != drv_fpioa_set_pin_func(i, board_pinmux_cfg[i].func)) {
+                rt_kprintf("Failed to set pin %d function %d\n", i, board_pinmux_cfg[i].func);
+                RT_ASSERT(0);
+                continue;
+            }
         }
     }
 
@@ -60,7 +128,7 @@ int board_pinmux_init(void)
 
 static int _board_specific_pin_init_sequence_wrap()
 {
-    rt_hw_gpio_init();
+    kd_pin_init();
 
     board_specific_pin_init_sequence();
 

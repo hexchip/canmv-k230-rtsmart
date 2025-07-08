@@ -34,7 +34,8 @@
 #define VOL_BANK5_IO62_63 BANK_VOL_3V3_MSC
 
 /* clang-format off */
-const struct st_iomux_reg_t board_pinmux_cfg[K230_PIN_COUNT] = {
+#if 0
+const fpioa_iomux_cfg_t board_pinmux_cfg[FPIOA_PIN_MAX_NUM] = {
     /* BOOT IO */
     [0] = { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 1, .msc = VOL_BANK_IO0_1, .io_sel = 0 } }, // GPIO0
     [1] = { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 1, .msc = VOL_BANK_IO0_1, .io_sel = 0 } }, // GPIO1
@@ -115,9 +116,89 @@ const struct st_iomux_reg_t board_pinmux_cfg[K230_PIN_COUNT] = {
     [57] = { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } }, // NC
     [58] = { .u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } }, // NC
 };
+#endif
+
+const board_pinmux_cfg_t board_pinmux_cfg[FPIOA_PIN_MAX_NUM] = {
+    /* BOOT IO */
+    [0] = { .func = GPIO0, .cfg = { .u.value = 0 } }, // GPIO0
+    [1] = { .func = GPIO1, .cfg = { .u.value = 0 } }, // GPIO1
+
+    /* BANK0 */
+    [2] = { .func = GPIO2, .cfg = { .u.value = 0 } }, // GPIO2
+    [3] = { .func = UART1_TXD, .cfg = { .u.value = 0 } }, // UART1_TXD
+    [4] = { .func = UART1_RXD, .cfg = { .u.value = 0 } }, // UART1_RXD
+    [5] = { .func = UART2_TXD, .cfg = { .u.value = 0 } }, // UART2_TXD
+    [6] = { .func = UART2_RXD, .cfg = { .u.value = 0 } }, // UART2_RXD
+    [7] = { .func = GPIO7, .cfg = { .u.value = 0 } }, // GPIO7
+    [8] = { .func = GPIO8, .cfg = { .u.value = 0 } }, // GPIO8
+    [10] = { .func = GPIO10, .cfg = { .u.value = 0 } }, // GPIO10
+    [11] = { .func = GPIO11, .cfg = { .u.value = 0 } }, // GPIO11
+    [12] = { .func = GPIO12, .cfg = { .u.value = 0 } }, // GPIO12
+    [13] = { .func = M_CLK1, .cfg = { .u.value = 0 } }, // M_CLK1
+
+    /* BANK1 */
+    [14] = { .func = GPIO14, .cfg = { .u.value = 0 } }, // GPIO14
+    [15] = { .func = GPIO15, .cfg = { .u.value = 0 } }, // GPIO15
+    [16] = { .func = GPIO16, .cfg = { .u.value = 0 } }, // GPIO16
+    [17] = { .func = GPIO17, .cfg = { .u.value = 0 } }, // GPIO17
+    [18] = { .func = GPIO18, .cfg = { .u.value = 0 } }, // GPIO18
+    [19] = { .func = GPIO19, .cfg = { .u.value = 0 } }, // GPIO19
+    [20] = { .func = GPIO20, .cfg = { .u.value = 0 } }, // GPIO20
+    [21] = { .func = GPIO21, .cfg = { .u.value = 0 } }, // GPIO21
+    [22] = { .func = GPIO22, .cfg = { .u.value = 0 } }, // GPIO22
+    [23] = { .func = GPIO23, .cfg = { .u.value = 0 } }, // GPIO23
+    [24] = { .func = GPIO24, .cfg = { .u.value = 0 } }, // GPIO24
+    [25] = { .func = GPIO25, .cfg = { .u.value = 0 } }, // GPIO25
+
+    /* BANK2 */
+    [26] = { .func = GPIO26, .cfg = { .u.value = 0 } }, // GPIO26
+    [27] = { .func = GPIO27, .cfg = { .u.value = 0 } }, // GPIO27
+    [28] = { .func = GPIO28, .cfg = { .u.value = 0 } }, // GPIO28
+    [29] = { .func = GPIO29, .cfg = { .u.value = 0 } }, // GPIO29
+    [30] = { .func = GPIO30, .cfg = { .u.value = 0 } }, // GPIO30
+    [31] = { .func = GPIO31, .cfg = { .u.value = 0 } }, // GPIO31
+    [32] = { .func = GPIO32, .cfg = { .u.value = 0 } }, // GPIO32
+    [33] = { .func = GPIO33, .cfg = { .u.value = 0 } }, // GPIO33
+    [34] = { .func = GPIO34, .cfg = { .u.value = 0 } }, // GPIO34
+    [35] = { .func = GPIO35, .cfg = { .u.value = 0 } }, // GPIO35
+    [36] = { .func = GPIO36, .cfg = { .u.value = 0 } }, // GPIO36
+    [37] = { .func = GPIO37, .cfg = { .u.value = 0 } }, // GPIO37
+
+    /* BANK3 */
+    [38] = { .func = UART0_TXD, .cfg = { .u.value = 0 } }, // UART0_TXD
+    [39] = { .func = UART0_RXD, .cfg = { .u.value = 0 } }, // UART0_RXD
+    [40] = { .func = GPIO40, .cfg = { .u.value = 0 } }, // GPIO40
+    [41] = { .func = GPIO41, .cfg = { .u.value = 0 } }, // GPIO41
+    [44] = { .func = GPIO44, .cfg = { .u.value = 0 } }, // GPIO44
+    [45] = { .func = GPIO45, .cfg = { .u.value = 0 } }, // GPIO45
+    [48] = { .func = IIC0_SCL, .cfg = { .u.value = 0 } }, // IIC0_SCL
+    [49] = { .func = IIC0_SDA, .cfg = { .u.value = 0 } }, // IIC0_SDA
+
+    /* BANK4 */
+    [59] = { .func = GPIO59, .cfg = { .u.value = 0 } }, // GPIO59
+    [60] = { .func = GPIO60, .cfg = { .u.value = 0 } }, // GPIO60
+    [61] = { .func = GPIO61, .cfg = { .u.value = 0 } }, // GPIO61
+
+    /* BANK5 */
+    [62] = { .func = GPIO62, .cfg = { .u.value = 0 } }, // GPIO62
+    [63] = { .func = GPIO63, .cfg = { .u.value = 0 } }, // GPIO63
+
+    /* DROP PINS */
+    [9]  = { .func = FUNC_MAX, .cfg = {.u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK0_IO2_13, .io_sel = 0 } } }, // NC
+    [42] = { .func = FUNC_MAX, .cfg = {.u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK3_IO38_49, .io_sel = 0 } } }, // NC
+    [43] = { .func = FUNC_MAX, .cfg = {.u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK3_IO38_49, .io_sel = 0 } } }, // NC
+    [46] = { .func = FUNC_MAX, .cfg = {.u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK3_IO38_49, .io_sel = 0 } } }, // NC
+    [47] = { .func = FUNC_MAX, .cfg = {.u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK3_IO38_49, .io_sel = 0 } } }, // NC
+    [50] = { .func = FUNC_MAX, .cfg = {.u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } }, // NC
+    [51] = { .func = FUNC_MAX, .cfg = {.u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } }, // NC
+    [52] = { .func = FUNC_MAX, .cfg = {.u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } }, // NC
+    [53] = { .func = FUNC_MAX, .cfg = {.u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } }, // NC
+    [54] = { .func = FUNC_MAX, .cfg = {.u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } }, // NC
+    [55] = { .func = FUNC_MAX, .cfg = {.u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } }, // NC
+    [56] = { .func = FUNC_MAX, .cfg = {.u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } }, // NC
+    [57] = { .func = FUNC_MAX, .cfg = {.u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } }, // NC
+    [58] = { .func = FUNC_MAX, .cfg = {.u.bit = { .st = 0, .ds = 0, .pd = 0, .pu = 0, .oe = 0, .ie = 0, .msc = VOL_BANK4_IO50_61, .io_sel = 0 } } }, // NC
+};
 /* clang-format on */
 
-static inline __attribute__((always_inline)) void board_specific_pin_init_sequence()
-{
-    
-}
+static inline __attribute__((always_inline)) void board_specific_pin_init_sequence() { }
