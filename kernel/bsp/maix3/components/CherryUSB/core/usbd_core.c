@@ -28,7 +28,7 @@ USB_NOCACHE_RAM_SECTION struct usbd_core_priv {
     /** Setup packet */
     USB_MEM_ALIGNX struct usb_setup_packet setup;
     /** Pointer to data buffer */
-    uint8_t *ep0_data_buf;
+    USB_MEM_ALIGNX uint8_t *ep0_data_buf;
     /** Remaining bytes in buffer */
     uint32_t ep0_data_buf_residue;
     /** Total length of control transfer */
@@ -45,7 +45,7 @@ USB_NOCACHE_RAM_SECTION struct usbd_core_priv {
     struct usb_bos_descriptor *bos_desc;
 #endif
     /* Buffer used for storing standard, class and vendor request data */
-    USB_MEM_ALIGNX uint8_t req_data[CONFIG_USBDEV_REQUEST_BUFFER_LEN];
+    USB_MEM_ALIGNX uint8_t req_data[USB_ALIGN_UP(CONFIG_USBDEV_REQUEST_BUFFER_LEN, CONFIG_USB_ALIGN_SIZE)];
 
     /** Currently selected configuration */
     uint8_t configuration;
