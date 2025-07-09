@@ -32,36 +32,46 @@ menu "Components Configuration"
                             bool "Using Dev1"
                     endchoice
 
+                    config CHERRY_USB_DEVICE_USING_DMA
+                        bool "Enable Device DMA"
+                        default n
+
                     config CHERRY_USB_DEVICE_USING_DEV
                         int
                         default 0 if CHERRY_USB_DEVICE_USING_DEV0
                         default 1 if CHERRY_USB_DEVICE_USING_DEV1
 
-                    config CHERRY_USB_DEVICE_ENABLE_CLASS_CDC_ACM
-                        bool "Enable CDC ACM"
+                    menuconfig ENABLE_CHERRY_USB_DEVICE_CLASS_DRV
+                        bool "Enable CherryUSB Device Class Driver"
+                        default y
 
-                    config CHERRY_USB_DEVICE_ENABLE_CLASS_MSC
-                        bool "Enable MSC"
+                        if ENABLE_CHERRY_USB_DEVICE_CLASS_DRV
+                            config CHERRY_USB_DEVICE_ENABLE_CLASS_CDC_ACM
+                                bool "Enable CDC ACM"
 
-                    menuconfig CHERRY_USB_DEVICE_ENABLE_CLASS_MTP
-                        bool "Enable MTP"
-                        select CHERRY_USB_DEVICE_ENABLE_CLASS_MSC
+                            config CHERRY_USB_DEVICE_ENABLE_CLASS_MSC
+                                bool "Enable MSC"
 
-                        if CHERRY_USB_DEVICE_ENABLE_CLASS_MTP
-                            config MTP_USE_FILE_STAT_OPERATION
-                            bool "Use file stat in uMTP-Responder"
-                            default n
+                            menuconfig CHERRY_USB_DEVICE_ENABLE_CLASS_MTP
+                                bool "Enable MTP"
+                                select CHERRY_USB_DEVICE_ENABLE_CLASS_MSC
+
+                                if CHERRY_USB_DEVICE_ENABLE_CLASS_MTP
+                                    config MTP_USE_FILE_STAT_OPERATION
+                                    bool "Use file stat in uMTP-Responder"
+                                    default n
+                                endif
                         endif
 
-                endif
+                    config ENABLE_CANMV_USB_DEV
+                        bool "Enable USB Device for CanMV"
+                        default n
+                        select CHERRY_USB_DEVICE_ENABLE_CLASS_CDC_ACM
+                        select CHERRY_USB_DEVICE_ENABLE_CLASS_MTP
+                        help
+                            CanMV USB Device Select class CDC_ACM and MSC MTP
 
-            config ENABLE_CANMV_USB_DEV
-                bool "Enable USB Device for CanMV"
-                default n
-                select CHERRY_USB_DEVICE_ENABLE_CLASS_CDC_ACM
-                select CHERRY_USB_DEVICE_ENABLE_CLASS_MTP
-                help
-                    CanMV USB Device Select class CDC_ACM and MSC MTP
+                        endif
 
             menuconfig ENABLE_CHERRY_USB_HOST
                 bool "Enable CherryUSB Host"
@@ -102,71 +112,78 @@ menu "Components Configuration"
                         default 0 if CHERRY_USB_HOST_USING_DEV0
                         default 1 if CHERRY_USB_HOST_USING_DEV1
 
-                    config CHERRY_USB_HOST_ENABLE_CLASS_HID
-                        bool "Enable HID"
-                        default n
+                    menuconfig ENABLE_CHERRY_USB_HOST_CLASS_DRV
+                        bool "Enable CherryUSB Host Class Driver"
+                        default y
 
-                    config CHERRY_USB_HOST_ENABLE_CLASS_MSC
-                        bool "Enable MSC"
-                        default n
+                        if ENABLE_CHERRY_USB_HOST_CLASS_DRV
+                            config CHERRY_USB_HOST_ENABLE_CLASS_HID
+                                bool "Enable HID"
+                                default n
 
-                    if CHERRY_USB_HC_DRV_DWC2
-                        config CHERRY_USB_HOST_ENABLE_CLASS_UVC
-                            bool "Enable UVC"
-                            default n
+                            config CHERRY_USB_HOST_ENABLE_CLASS_MSC
+                                bool "Enable MSC"
+                                default n
+
+                            if CHERRY_USB_HC_DRV_DWC2
+                                config CHERRY_USB_HOST_ENABLE_CLASS_UVC
+                                    bool "Enable UVC"
+                                    default n
+                            endif
+
+                            menuconfig CHERRY_USB_HOST_ENABLE_CLASS_NET_RTL8152
+                                bool "Enable net RTL8152"
+                                default n
+
+                                if CHERRY_USB_HOST_ENABLE_CLASS_NET_RTL8152
+                                    config CHERRY_USB_RTL8152_LINKCHECK
+                                        bool "Enable Link Down Check"
+                                        default n
+                                endif
+
+                            menuconfig CHERRY_USB_HOST_ENABLE_CLASS_SERIAL
+                                bool "Enable SERIAL"
+                                default n
+
+                                if CHERRY_USB_HOST_ENABLE_CLASS_SERIAL
+
+                                    config CHERRY_USB_HOST_ENABLE_CLASS_SERIAL_EC200M
+                                    bool "Enable serial EC200M"
+                                    default y
+
+                                endif
+
+                            config CHERRY_USB_HOST_ENABLE_CLASS_CDC_ACM
+                                bool "Enable cdc ACM"
+                                default n
+
+                            config CHERRY_USB_HOST_ENABLE_CLASS_CDC_ECM
+                                bool "Enable cdc ECM"
+                                default n
+
+                        endif
+
+                    config ENABLE_CANMV_USB_HOST
+                        bool "Enable USB Host for CanMV(Some USB Host Drivers)"
+                        default n
+                        select CHERRY_USB_HOST_ENABLE_CLASS_NET_RTL8152
+                        help
+                            CanMV USB Host support for class net/rtl8152 and etc.
+
+                    if ENABLE_CANMV_USB_HOST
+                        config CANMV_USB_PWR_PIN
+                            int "CanMV USB Host Power Control GPIO"
+                            default -1
+                        config CANMV_USB_PWR_PIN_VALID_VAL
+                            int "CanMV USB Host Power Vaild PIN Value"
+                            default 1
                     endif
 
-                    menuconfig CHERRY_USB_HOST_ENABLE_CLASS_NET_RTL8152
-                        bool "Enable net RTL8152"
-                        default n
-
-                        if CHERRY_USB_HOST_ENABLE_CLASS_NET_RTL8152
-                            config CHERRY_USB_RTL8152_LINKCHECK
-                                bool "Enable Link Down Check"
-                                default n
-                        endif
-
-                    menuconfig CHERRY_USB_HOST_ENABLE_CLASS_SERIAL
-                        bool "Enable SERIAL"
-                        default n
-
-                        if CHERRY_USB_HOST_ENABLE_CLASS_SERIAL
-
-                            config CHERRY_USB_HOST_ENABLE_CLASS_SERIAL_EC200M
-                            bool "Enable serial EC200M"
-                            default y
+                    config CANMV_USB_HOST_NET_RTL8152_DEV_NAME
+                        string
+                        default "u0"
 
                         endif
-
-                    config CHERRY_USB_HOST_ENABLE_CLASS_CDC_ACM
-                        bool "Enable cdc ACM"
-                        default n
-
-                    config CHERRY_USB_HOST_ENABLE_CLASS_CDC_ECM
-                        bool "Enable cdc ECM"
-                        default n
-
-                endif
-
-            config ENABLE_CANMV_USB_HOST
-                bool "Enable USB Host for CanMV(Some USB Host Drivers)"
-                default n
-                select CHERRY_USB_HOST_ENABLE_CLASS_NET_RTL8152
-                help
-                    CanMV USB Host support for class net/rtl8152 and etc.
-
-            if ENABLE_CANMV_USB_HOST
-                config CANMV_USB_PWR_PIN
-                    int "CanMV USB Host Power Control GPIO"
-                    default -1
-                config CANMV_USB_PWR_PIN_VALID_VAL
-                    int "CanMV USB Host Power Vaild PIN Value"
-                    default 1
-            endif
-
-            config CANMV_USB_HOST_NET_RTL8152_DEV_NAME
-                string
-                default "u0"
         endif
 
     config RT_USING_DEVMEM2
