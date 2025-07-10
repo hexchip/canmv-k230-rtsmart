@@ -121,7 +121,7 @@ static void *_lwp_map_user(struct rt_lwp *lwp, void *map_va, size_t map_size, in
     if (!va)
     {
         rt_kprintf("Memory exhaustion!\r\n");
-        sys_exit(-1);
+        // sys_exit(-1);
         return 0;
     }
 
