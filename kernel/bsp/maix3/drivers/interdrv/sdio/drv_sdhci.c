@@ -400,8 +400,8 @@ static rt_err_t sdhci_transfer_data_blocking(struct sdhci_host* sdhci_host, stru
             return -1;
         }
         if (event & SDHCI_INT_ERROR) {
-            LOG_D("%s: Error detected in status(0x%X)!\n", __func__, sdhci_host->error_code);
-            emmc_reg_display(sdhci_host);
+            LOG_E("%s: Error detected in status(0x%X)!\n", __func__, sdhci_host->error_code);
+            // emmc_reg_display(sdhci_host);
             return -1;
         }
         if (event & SDHCI_INT_DMA_END) {
@@ -866,9 +866,11 @@ rt_int32_t kd_sdhci_init(void)
     mmcsd_host0->flags = MMCSD_BUSWIDTH_4 | MMCSD_MUTBLKWRITE | MMCSD_SUP_HIGHSPEED | MMCSD_SUP_SDIO_IRQ;
 #endif
     mmcsd_host0->valid_ocr = sdhci_host0->io_fixed_1v8 ? VDD_165_195 : VDD_32_33 | VDD_33_34;
-#ifdef RT_USING_CYW43XX
+
+#if defined(RT_USING_CYW43XX) && defined(CYW43XX_SDIO_DEV0)
     mmcsd_host0->valid_ocr = VDD_32_33 | VDD_33_34;
 #endif
+
     mmcsd_host0->max_seg_size = 512 * 512;
     mmcsd_host0->max_dma_segs = 1;
     mmcsd_host0->max_blk_size = 512;
