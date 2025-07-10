@@ -27,7 +27,6 @@
     // wlan basic
     #define IOCTRL_WM_GET_AUTO_RECONNECT    _IOWR('N', 0x00, void *)
     #define IOCTRL_WM_SET_AUTO_RECONNECT    _IOWR('N', 0x01, void *)
-    #define IOCTRL_WM_GET_ISACTIVE          _IOWR('N', 0x02, void *)
 
     // wlan sta
     #define IOCTRL_WM_STA_CONNECT           _IOWR('N', 0x10, void *)
@@ -53,18 +52,17 @@
 #ifdef CONFIG_ENABLE_NETWORK_RT_LAN
     // lan
     #define IOCTRL_LAN_GET_ISCONNECTED      _IOWR('N', 0x80, void *)
-    #define IOCTRL_LAN_GET_ISACTIVE         _IOWR('N', 0x81, void *)
-    #define IOCTRL_LAN_GET_STATUS           _IOWR('N', 0x82, void *)
-    #define IOCTRL_LAN_GET_MAC              _IOWR('N', 0x83, void *)
-    #define IOCTRL_LAN_SET_MAC              _IOWR('N', 0x84, void *)
+    #define IOCTRL_LAN_GET_LINK_STATUS      _IOWR('N', 0x81, void *)
+    #define IOCTRL_LAN_GET_MAC              _IOWR('N', 0x82, void *)
+    #define IOCTRL_LAN_SET_MAC              _IOWR('N', 0x83, void *)
 #endif // CONFIG_ENABLE_NETWORK_RT_LAN
 
 // network util
 #define IOCTRL_NET_IFCONFIG                 _IOWR('N', 0x100, void *)
-#define IOCTRL_NET_GETHOSTBYNAME            _IOWR('N', 0x101, void *)
-#define IOCTRL_NET_SET_DEV_DEFAULT          _IOWR('N', 0x102, void *)
-#define IOCTRL_NET_GET_DEV_DEFAULT          _IOWR('N', 0x103, void *)
-#define IOCTRL_NET_GET_DEV_LIST             _IOWR('N', 0x104, void *)
+#define IOCTRL_NET_SET_DEV_DEFAULT          _IOWR('N', 0x101, void *)
+#define IOCTRL_NET_GET_DEV_DEFAULT          _IOWR('N', 0x102, void *)
+#define IOCTRL_NET_GET_DEV_LIST             _IOWR('N', 0x103, void *)
+#define IOCTRL_NET_PROBE                    _IOWR('N', 0x104, void *)
 
 struct rt_net_mgmt_device
 {
@@ -72,6 +70,12 @@ struct rt_net_mgmt_device
     // struct rt_mutex lock;
 };
 static struct rt_net_mgmt_device net_mgmt_device;
+
+enum rt_netif_t {
+    RT_NET_DEV_WLAN_STA = 0,
+    RT_NET_DEV_WLAN_AP  = 1,
+    RT_NET_DEV_USB      = 2,
+};
 
 /* WLAN CMD HANDLE ***********************************************************/
 #ifdef CONFIG_ENABLE_NETWORK_RT_WLAN
@@ -356,7 +360,7 @@ _failed:
     return RT_EOK;
 }
 
-static rt_err_t _lan_mgmt_cmd_get_status(void *mgmt_dev, void *args)
+static rt_err_t _lan_mgmt_cmd_get_link_status(void *mgmt_dev, void *args)
 {
     int status = 0;
     bool connect_status;
@@ -436,34 +440,11 @@ _failed:
 #endif // CONFIG_ENABLE_NETWORK_RT_LAN
 
 /* UTIL CMD HANDLE ***********************************************************/
-static rt_err_t _net_mgmt_cmd_get_isactive(void *mgmt_dev, void *args)
-{
-    int itf = -1;
-    int isactive = 0;
-    rt_device_t net_dev;
-    const char *dev_name;
-
-    lwp_get_from_user(&itf, args, sizeof(itf));
-
-    if(0x00 == itf) { /* wlan station */
-        net_dev = rt_device_find(RT_WLAN_DEVICE_STA_NAME);
-    } else if(0x01 == itf) { /* wlan ap */
-        net_dev = rt_device_find(RT_WLAN_DEVICE_AP_NAME);
-    } else if(0x02 == itf) { /* eth usb */
-        net_dev = rt_device_find(CANMV_USB_HOST_NET_RTL8152_DEV_NAME);
-    }
-
-    isactive = (NULL == net_dev) ? 0 : 1;
-    lwp_put_to_user(args, &isactive, sizeof(isactive));
-
-    return RT_EOK;
-}
-
 static rt_err_t _net_mgmt_dev_cmd_net_ifconfig(void *mgmt_dev, void *args)
 {
     struct ifconfig {
-        uint16_t net_if;            /* 0: sta, 1: ap, 2:... */
-        uint16_t set;               /* 0: get ip info, 1: disable dhcp, set static ip, 2: enable dhcp */
+        enum rt_netif_t net_if;     /* 0: sta, 1: ap, 2:... */
+        uint16_t func;              /* 0: get ip info, 1: disable dhcp, set static ip, 2: enable dhcp */
         ip_addr_t ip;               /* IP address */
         ip_addr_t gw;               /* gateway */
         ip_addr_t netmask;          /* subnet mask */
@@ -477,21 +458,21 @@ static rt_err_t _net_mgmt_dev_cmd_net_ifconfig(void *mgmt_dev, void *args)
 
     lwp_get_from_user(&ifconfig, args, sizeof(struct ifconfig));
 
-    if(0x00 == ifconfig.net_if) { /* wlan station */
+    if(RT_NET_DEV_WLAN_STA == ifconfig.net_if) { /* wlan station */
         wlan_dev = (struct rt_wlan_device *)rt_device_find(RT_WLAN_DEVICE_STA_NAME);
         if(NULL == wlan_dev) {
             LOG_E("Can't find netif %s\n", RT_WLAN_DEVICE_STA_NAME);
             return -RT_ERROR;
         }
         netdev = wlan_dev->netdev;
-    } else if(0x01 == ifconfig.net_if) { /* wlan ap */
+    } else if(RT_NET_DEV_WLAN_AP == ifconfig.net_if) { /* wlan ap */
         wlan_dev = (struct rt_wlan_device *)rt_device_find(RT_WLAN_DEVICE_AP_NAME);
         if(NULL == wlan_dev) {
             LOG_E("Can't find netif %s\n", RT_WLAN_DEVICE_STA_NAME);
             return -RT_ERROR;
         }
         netdev = wlan_dev->netdev;
-    } else if(0x02 == ifconfig.net_if) { /* eth usb */
+    } else if(RT_NET_DEV_USB == ifconfig.net_if) { /* eth usb */
         /* eth rtl8152 device and netdev name is same */
         netdev = netdev_get_by_name(CANMV_USB_HOST_NET_RTL8152_DEV_NAME);
         if(NULL == netdev) {
@@ -508,12 +489,12 @@ static rt_err_t _net_mgmt_dev_cmd_net_ifconfig(void *mgmt_dev, void *args)
         return -RT_ERROR;
     }
 
-    if(0x00 == ifconfig.set) { /* get */
+    if(0x00 == ifconfig.func) { /* get */
         lwp_put_to_user(&out->ip, &netdev->ip_addr, sizeof(ip_addr_t));
         lwp_put_to_user(&out->gw, &netdev->gw, sizeof(ip_addr_t));
         lwp_put_to_user(&out->netmask, &netdev->netmask, sizeof(ip_addr_t));
         lwp_put_to_user(&out->dns, &netdev->dns_servers[0], sizeof(ip_addr_t));
-    } else if (0x01 == ifconfig.set){ /* set static ip */
+    } else if (0x01 == ifconfig.func){ /* set static ip */
         if(0x00 != netdev_dhcp_enabled(netdev, RT_FALSE)) {
             LOG_E("Set itf %s disable dhcp failed\n", netdev->name);
             return -RT_ERROR;
@@ -535,7 +516,7 @@ static rt_err_t _net_mgmt_dev_cmd_net_ifconfig(void *mgmt_dev, void *args)
             LOG_E("Set itf %s dns failed\n", netdev->name);
             return -RT_ERROR;
         }
-    } else if(0x02 == ifconfig.set) {
+    } else if(0x02 == ifconfig.func) {
         if(0x00 != netdev_dhcp_enabled(netdev, RT_TRUE)) {
             LOG_E("Set itf %s enable dhcp failed\n", netdev->name);
             return -RT_ERROR;
@@ -545,41 +526,41 @@ static rt_err_t _net_mgmt_dev_cmd_net_ifconfig(void *mgmt_dev, void *args)
     return RT_EOK;
 }
 
-static rt_err_t _net_mgmt_dev_cmd_net_gethostbyname(void *mgmt_dev, void *args)
-{
-    struct result {
-        uint8_t ip[4];
-        int name_len; // max 256
-        char name[0];
-    };
+// static rt_err_t _net_mgmt_dev_cmd_net_gethostbyname(void *mgmt_dev, void *args)
+// {
+//     struct result {
+//         uint8_t ip[4];
+//         int name_len; // max 256
+//         char name[0];
+//     };
 
-    uint64_t buffer[(sizeof(struct result) + 256) / sizeof(uint64_t) + 1];
-    struct result *request = (struct result *)args;
-    struct result *result = (struct result *)buffer;
-    struct hostent *host = NULL;
+//     uint64_t buffer[(sizeof(struct result) + 256) / sizeof(uint64_t) + 1];
+//     struct result *request = (struct result *)args;
+//     struct result *result = (struct result *)buffer;
+//     struct hostent *host = NULL;
 
-    lwp_get_from_user(&result->name_len, &request->name_len, sizeof(int));
-    if(256 < result->name_len) {
-        LOG_E("Host name too long\n");
-        return -1;
-    }
+//     lwp_get_from_user(&result->name_len, &request->name_len, sizeof(int));
+//     if(256 < result->name_len) {
+//         LOG_E("Host name too long\n");
+//         return -1;
+//     }
 
-    lwp_get_from_user(&result->name[0], &request->name[0], result->name_len);
-    result->name[result->name_len] = '\0';
-    if(NULL == (host = gethostbyname(result->name))) {
-        LOG_W("get host failed1, %s\n", result->name);
-        return -2;
-    }
+//     lwp_get_from_user(&result->name[0], &request->name[0], result->name_len);
+//     result->name[result->name_len] = '\0';
+//     if(NULL == (host = gethostbyname(result->name))) {
+//         LOG_W("get host failed1, %s\n", result->name);
+//         return -2;
+//     }
 
-    if(NULL == host->h_addr_list) {
-        LOG_W("get host failed2, %s\n", result->name);
-        return -2;
-    }
+//     if(NULL == host->h_addr_list) {
+//         LOG_W("get host failed2, %s\n", result->name);
+//         return -2;
+//     }
 
-    lwp_put_to_user(request->ip, host->h_addr_list[0], sizeof(request->ip));
+//     lwp_put_to_user(request->ip, host->h_addr_list[0], sizeof(request->ip));
 
-    return 0;
-}
+//     return 0;
+// }
 
 static rt_err_t _net_mgmt_dev_cmd_set_default(void* mgmt_dev, void* args)
 {
@@ -672,6 +653,29 @@ static rt_err_t _net_mgmt_dev_cmd_get_dev_list(void* mgmt_dev, void* args)
 #undef NET_DEV_MAX_CNT
 }
 
+static rt_err_t _net_mgmt_cmd_get_isactive(void *mgmt_dev, void *args)
+{
+    int itf = -1;
+    int isactive = 0;
+    rt_device_t net_dev = NULL;
+    const char *dev_name;
+
+    lwp_get_from_user(&itf, args, sizeof(itf));
+
+    if(RT_NET_DEV_WLAN_STA == itf) { /* wlan station */
+        net_dev = rt_device_find(RT_WLAN_DEVICE_STA_NAME);
+    } else if(RT_NET_DEV_WLAN_AP == itf) { /* wlan ap */
+        net_dev = rt_device_find(RT_WLAN_DEVICE_AP_NAME);
+    } else if(RT_NET_DEV_USB == itf) { /* eth usb */
+        net_dev = rt_device_find(CANMV_USB_HOST_NET_RTL8152_DEV_NAME);
+    }
+
+    isactive = (NULL == net_dev) ? 0 : 1;
+    lwp_put_to_user(args, &isactive, sizeof(isactive));
+
+    return RT_EOK;
+}
+
 struct rt_net_mgmt_device_cmd_handle {
     int cmd;
     rt_err_t (*func)(void *mgmt_dev, void *args);
@@ -687,10 +691,6 @@ static struct rt_net_mgmt_device_cmd_handle cmd_handles[] = {
     {
         .cmd = IOCTRL_WM_SET_AUTO_RECONNECT,
         .func = _wlan_mgmt_cmd_basic_set_auto_reconnect,
-    },
-    {
-        .cmd = IOCTRL_WM_GET_ISACTIVE,
-        .func = _net_mgmt_cmd_get_isactive,
     },
 
     // station
@@ -769,12 +769,8 @@ static struct rt_net_mgmt_device_cmd_handle cmd_handles[] = {
         .func = _lan_mgmt_cmd_get_isconnected,
     },
     {
-        .cmd = IOCTRL_LAN_GET_ISACTIVE,
-        .func = _net_mgmt_cmd_get_isactive,
-    },
-    {
-        .cmd = IOCTRL_LAN_GET_STATUS,
-        .func = _lan_mgmt_cmd_get_status,
+        .cmd = IOCTRL_LAN_GET_LINK_STATUS,
+        .func = _lan_mgmt_cmd_get_link_status,
     },
     {
         .cmd = IOCTRL_LAN_GET_MAC,
@@ -792,10 +788,6 @@ static struct rt_net_mgmt_device_cmd_handle cmd_handles[] = {
         .func = _net_mgmt_dev_cmd_net_ifconfig,
     },
     {
-        .cmd = IOCTRL_NET_GETHOSTBYNAME,
-        .func = _net_mgmt_dev_cmd_net_gethostbyname,
-    },
-    {
         .cmd = IOCTRL_NET_SET_DEV_DEFAULT,
         .func = _net_mgmt_dev_cmd_set_default,
     },
@@ -806,6 +798,10 @@ static struct rt_net_mgmt_device_cmd_handle cmd_handles[] = {
     {
         .cmd = IOCTRL_NET_GET_DEV_LIST,
         .func = _net_mgmt_dev_cmd_get_dev_list,
+    },
+    {
+        .cmd = IOCTRL_NET_PROBE,
+        .func = _net_mgmt_cmd_get_isactive,
     },
 };
 
@@ -873,7 +869,7 @@ static int net_mgmt_dev_init(void)
 
         // rt_mutex_init(&net_mgmt_device.lock, "wlan_mgmt_dev", RT_IPC_FLAG_FIFO);
 
-        if(RT_EOK != (err = rt_device_register(&net_mgmt_device.device, "canmv_net_mgmt", RT_DEVICE_FLAG_RDWR))) {
+        if(RT_EOK != (err = rt_device_register(&net_mgmt_device.device, "netmgmt", RT_DEVICE_FLAG_RDWR))) {
             LOG_E("net_mgmt_device register failed, %d\n", errno);
         }
     }
@@ -881,25 +877,47 @@ static int net_mgmt_dev_init(void)
 }
 INIT_APP_EXPORT(net_mgmt_dev_init);
 
-void netdev_change_resolv_conf(const ip_addr_t *dns_server)
+void netdev_change_resolv_conf(int dns_cnt, const ip_addr_t *dns_servers)
 {
     struct dfs_fd fd;
+    char content[64] = {0};
+    int content_len = 0;
 
-    int content_size;
-    char content[128], ip[64];
+    if (dns_cnt <= 0 || dns_servers == NULL) {
+        LOG_E("No DNS servers provided.\n");
+        return;
+    }
 
-    if(0x00 != dfs_file_open(&fd, "/etc/resolv.conf", O_CREAT | O_TRUNC)) {
+    if (dfs_file_open(&fd, "/etc/resolv.conf", O_CREAT | O_TRUNC) != 0) {
         LOG_E("Open /etc/resolv.conf failed.\n");
         return;
     }
 
-    struct in_addr addr;
-    addr.s_addr = dns_server->addr;  // assuming ipv4
-    inet_ntoa_r(addr, ip, sizeof(ip));
+    rt_memset(content, 0x00, sizeof(content));
+    if (dfs_file_write(&fd, content, sizeof(content)) != sizeof(content)) {
+        LOG_E("Clear /etc/resolv.conf failed.\n");
+    }
+    dfs_file_lseek(&fd, SEEK_SET);
 
-    content_size = snprintf(content, sizeof(content), "nameserver %s", ip);
+    for (int i = 0; i < dns_cnt; ++i) {
+        char ip[32] = {0};
+        struct in_addr addr;
+        addr.s_addr = dns_servers[i].addr;
 
-    if(content_size != dfs_file_write(&fd, content, content_size)) {
+        inet_ntoa_r(addr, ip, sizeof(ip));
+        int len = rt_snprintf(content + content_len,
+                              sizeof(content) - content_len,
+                              "nameserver %s\n", ip);
+
+        if (len < 0 || len >= (int)(sizeof(content) - content_len)) {
+            LOG_E("DNS entry too long or truncated.\n");
+            break;
+        }
+
+        content_len += len;
+    }
+
+    if (dfs_file_write(&fd, content, content_len) != content_len) {
         LOG_E("Write /etc/resolv.conf failed.\n");
     }
 

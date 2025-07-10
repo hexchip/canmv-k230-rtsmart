@@ -3035,6 +3035,11 @@ int sys_recvfrom(int socket, void *mem, size_t len, int flags,
         return -EINVAL;
     }
 
+    if (from && !fromlen)
+    {
+        return -EINVAL;
+    }
+
     if (!lwp_user_accessable((void *)mem, len))
     {
         return -EFAULT;
@@ -3053,10 +3058,32 @@ int sys_recvfrom(int socket, void *mem, size_t len, int flags,
 
     if (from)
     {
-        struct sockaddr sa;
+        struct sockaddr kfrom;
+        struct musl_sockaddr kmusladdr;
+        socklen_t ufromlen = 0, kfromlen = 0;
 
-        ret = recvfrom(socket, kmem, len, flgs, &sa, fromlen);
-        sockaddr_tomusl(&sa, from);
+        lwp_get_from_user(&ufromlen, fromlen, sizeof (socklen_t));
+        if (!ufromlen) {
+            kmem_put(kmem);
+            return -EINVAL;
+        }
+
+        if (!lwp_user_accessable(from, ufromlen)) {
+            kmem_put(kmem);
+            return -EFAULT;
+        }
+
+        kfromlen = sizeof(struct sockaddr);
+        ret = recvfrom(socket, kmem, len, flgs, &kfrom, &kfromlen);
+
+        if (ret > 0) {
+            sockaddr_tomusl(&kfrom, &kmusladdr);
+            if (ufromlen > sizeof(struct musl_sockaddr)) {
+                ufromlen = sizeof(struct musl_sockaddr);
+            }
+            lwp_put_to_user(from, &kmusladdr, ufromlen);
+            lwp_put_to_user(fromlen, &ufromlen, sizeof (socklen_t));
+        }
     }
     else
     {

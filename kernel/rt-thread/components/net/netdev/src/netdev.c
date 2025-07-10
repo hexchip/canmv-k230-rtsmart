@@ -369,12 +369,7 @@ void netdev_set_default(struct netdev *netdev)
     {
         if (0x00 != rt_memcmp(netdev, netdev_default, sizeof(struct netdev))) {
             /* change the default netdev, update dns server */
-            for(int i = 0; i < NETDEV_DNS_SERVERS_NUM; i++) {
-                const ip_addr_t *dns = &netdev->dns_servers[i];
-                if(IPADDR_ANY != dns->addr) {
-                    netdev_change_resolv_conf(dns);
-                }
-            }
+            netdev_change_resolv_conf(NETDEV_DNS_SERVERS_NUM, netdev->dns_servers);
         }
 
         netdev_default = netdev;
@@ -716,7 +711,7 @@ void netdev_low_level_set_gw(struct netdev *netdev, const ip_addr_t *gw)
     }
 }
 
-RT_WEAK void netdev_change_resolv_conf(const ip_addr_t *dns_server)
+RT_WEAK void netdev_change_resolv_conf(int dns_cnt, const ip_addr_t *dns_servers)
 {
 
 }
@@ -759,7 +754,7 @@ void netdev_low_level_set_dns_server(struct netdev *netdev, uint8_t dns_num, con
         }
 
         if (0x00 == rt_memcmp(netdev, netdev_default, sizeof(struct netdev))) {
-            netdev_change_resolv_conf(dns_server);
+            netdev_change_resolv_conf(1, dns_server);
         }
     }
 }

@@ -191,7 +191,7 @@ void netdev_low_level_set_status(struct netdev *netdev, rt_bool_t is_up);
 void netdev_low_level_set_link_status(struct netdev *netdev, rt_bool_t is_up);
 void netdev_low_level_set_dhcp_status(struct netdev *netdev, rt_bool_t is_enable);
 
-void netdev_change_resolv_conf(const ip_addr_t *dns_server);
+void netdev_change_resolv_conf(int dns_cnt, const ip_addr_t *dns_servers);
 
 #ifdef __cplusplus
 }
