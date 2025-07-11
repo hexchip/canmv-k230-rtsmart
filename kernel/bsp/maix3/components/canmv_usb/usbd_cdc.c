@@ -7,6 +7,8 @@
 
 #include "ipc/waitqueue.h"
 #include "rtthread.h"
+#include <lwp.h>
+#include <lwp_user_mm.h>
 
 #define CDC_MAX_MPS USB_DEVICE_MAX_MPS
 
@@ -18,6 +20,8 @@ static USB_MEM_ALIGNX uint8_t usb_read_buffer[4096];
 
 static struct rt_device cdc_device;
 static struct rt_semaphore cdc_read_sem, cdc_write_sem;
+static struct rt_completion cdc_write_done;
+static int cdc_dtr = 0;
 
 static int cdc_open(struct dfs_fd *fd)
 {
@@ -59,18 +63,52 @@ static int cdc_read(struct dfs_fd *fd, void *buf, size_t count) {
 
 static int cdc_write(struct dfs_fd *fd, const void *buf, size_t count) {
     rt_err_t error = RT_ERROR;
+    rt_int32_t timeout = RT_WAITING_FOREVER;
 
     if (count == 0 || (false == g_usb_device_connected)) {
         return -1; /* error */
     }
 
-    if (RT_EOK == (error = rt_sem_take(&cdc_write_sem, rt_tick_from_millisecond(10)))) {
+    if (RT_EOK != (error = rt_sem_take(&cdc_write_sem, timeout))) {
+        if (error == -RT_ETIMEOUT) {
+            rt_kprintf("sem timeout len = %d\n", count);
+        } else {
+            rt_kprintf("sem error %d\n", error);
+        }
+    } else {
         usbd_ep_start_write(USB_DEVICE_BUS_ID, CDC_IN_EP, buf, count);
+        if (RT_EOK != (error = rt_completion_wait(&cdc_write_done, timeout))) {
+            if (error == -RT_ETIMEOUT) {
+                rt_kprintf("completion timeout len = %d\n", count);
+            } else {
+                rt_kprintf("completion error %d\n", error);
+            }
+        } else {
+            return count;
+        }
+     }
 
-        return count;
+    return 0;
+}
+
+static int cdc_ioctl(struct dfs_fd *fd, int cmd, void *args)
+{
+    int ret = RT_EOK;
+
+    switch (cmd) {
+    case CDC_GET_DTR:
+        if (sizeof(int) != lwp_put_to_user(args, &cdc_dtr, sizeof(int))) {
+            USB_LOG_ERR("lwp put error size\n");
+            ret = -RT_EINVAL;
+        }
+        break;
+    default:
+        USB_LOG_ERR("Unsupport cmd %d in %s\n", cmd, __func__);
+        ret = -RT_ERROR;
+        break;
     }
 
-    return 0; /* try again */
+    return ret;
 }
 
 static int cdc_poll(struct dfs_fd *fd, struct rt_pollreq *req)
@@ -86,6 +124,7 @@ static const struct dfs_file_ops cdc_ops = {
     .close = cdc_close,
     .read = cdc_read,
     .write = cdc_write,
+    .ioctl = cdc_ioctl,
     .poll = cdc_poll
 };
 
@@ -99,6 +138,7 @@ static void cdc_device_init(void)
     cdc_device.fops = &cdc_ops;
     rt_sem_init(&cdc_read_sem, "cdc_read", 0, RT_IPC_FLAG_FIFO);
     rt_sem_init(&cdc_write_sem, "cdc_write", 1, RT_IPC_FLAG_FIFO);
+    rt_completion_init(&cdc_write_done);
 }
 
 /*****************************************************************************/
@@ -115,6 +155,7 @@ static void usbd_cdc_acm_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
     if (nbytes && (0x00 == (nbytes % CDC_MAX_MPS))) {
         usbd_ep_start_write(USB_DEVICE_BUS_ID, CDC_IN_EP, NULL, 0);
     } else {
+        rt_completion_done(&cdc_write_done);
         rt_sem_release(&cdc_write_sem);
     }
 }
@@ -136,7 +177,11 @@ void canmv_usb_device_cdc_on_connected(void)
 {
     rt_sem_control(&cdc_read_sem, RT_IPC_CMD_RESET, (void *)0);
     rt_sem_control(&cdc_write_sem, RT_IPC_CMD_RESET, (void *)1);
+    //TODO
+    rt_completion_done(&cdc_write_done);
+    rt_completion_init(&cdc_write_done);
 
+    cdc_dtr = 0;
     usbd_ep_start_read(USB_DEVICE_BUS_ID, CDC_OUT_EP, usb_read_buffer, sizeof(usb_read_buffer));
 }
 
@@ -167,6 +212,8 @@ void usbd_cdc_acm_get_line_coding(uint8_t busid, uint8_t intf, struct cdc_line_c
 void usbd_cdc_acm_set_dtr(uint8_t busid, uint8_t intf, bool dtr)
 {
     cdc_poll_flag |= POLLERR;
+
+    cdc_dtr = (int)dtr;
     rt_wqueue_wakeup(&cdc_device.wait_queue, (void*)POLLERR);
 }
 
