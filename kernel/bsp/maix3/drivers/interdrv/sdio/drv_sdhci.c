@@ -860,16 +860,9 @@ rt_int32_t kd_sdhci_init(void)
     mmcsd_host0->freq_max = 50000000;
 
     strncpy(mmcsd_host0->name, "sd0", sizeof(mmcsd_host0->name) - 1);
-#ifdef RT_SDIO0_EMMC
-    mmcsd_host0->flags = MMCSD_BUSWIDTH_8 | MMCSD_MUTBLKWRITE | MMCSD_SUP_HIGHSPEED | MMCSD_SUP_SDIO_IRQ;
-#else
-    mmcsd_host0->flags = MMCSD_BUSWIDTH_4 | MMCSD_MUTBLKWRITE | MMCSD_SUP_HIGHSPEED | MMCSD_SUP_SDIO_IRQ;
-#endif
-    mmcsd_host0->valid_ocr = sdhci_host0->io_fixed_1v8 ? VDD_165_195 : VDD_32_33 | VDD_33_34;
 
-#if defined(RT_USING_CYW43XX) && defined(CYW43XX_SDIO_DEV0)
-    mmcsd_host0->valid_ocr = VDD_32_33 | VDD_33_34;
-#endif
+    mmcsd_host0->flags = SDIO0_BUS_WIDTH | MMCSD_MUTBLKWRITE | MMCSD_SUP_HIGHSPEED | MMCSD_SUP_SDIO_IRQ; /* enable 8bit and 4bit support */
+    mmcsd_host0->valid_ocr = sdhci_host0->io_fixed_1v8 ? VDD_165_195 : VDD_32_33 | VDD_33_34;
 
     mmcsd_host0->max_seg_size = 512 * 512;
     mmcsd_host0->max_dma_segs = 1;

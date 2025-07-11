@@ -181,12 +181,24 @@ menu "InterDriver"
                 default n
 
             if RT_USING_SDIO0
-                config RT_SDIO0_EMMC
-                    bool "SDIO0 device is eMMC Card"
-                    default n
                 config RT_SDIO0_1V8
                     bool "SDIO0 device is 1.8V"
                     default n
+
+                choice
+                    bool "SDIO0 Bus Max Width"
+                    default SDIO0_BUS_WIDTH_4BIT
+
+                    config SDIO0_BUS_WIDTH_4BIT
+                        bool "4Bit"
+                    config SDIO0_BUS_WIDTH_8BIT
+                        bool "8Bit"
+                endchoice
+
+                config SDIO0_BUS_WIDTH
+                    int
+                    default 1 if SDIO0_BUS_WIDTH_4BIT
+                    default 2 if SDIO0_BUS_WIDTH_8BIT
             endif
 
             config RT_USING_SDIO1
