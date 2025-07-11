@@ -11,6 +11,8 @@
 #define VO_MEMORY_SIZE 0x400
 #define MAP_SIZE    PAGE_SIZE
 #define MAP_MASK    (MAP_SIZE - 1)
+#define BITS_PER_LONG                                               64
+#define BIT_MASK(nr)                                                (1ul << ((nr) % BITS_PER_LONG))
 
 static void print_video_layer_info(int i, const rt_uint32_t read_result[]){
     int j = 0;
@@ -217,7 +219,7 @@ static void dump_buffer(const char *cmd){
         rt_kprintf("格式错误, 正确格式:dump layer1~3/osd0~6\n");
         return;
     }
-    rt_kprintf("param %s\n", param);
+
     if (strcmp(param, "layer1") == 0){
         if(!((read_result[0x118/4] >> 1) & 0x1) || !(read_result[0xA20/4] & 0x1)){
             rt_kprintf("layer1 is not enabled\n");
@@ -258,7 +260,7 @@ static void dump_buffer(const char *cmd){
                 return;
             }
         }
-        rt_kprintf("osd num %d\n", osd_num);
+
         if(!(read_result[0x118/4] >> (osd_num+4)) & 0x1){
             rt_kprintf("%s is not enabled\n", param);
             return;
@@ -266,7 +268,7 @@ static void dump_buffer(const char *cmd){
         dump_address = read_result[(0x288+osd_num*0x40)/4];
         dump_size = (read_result[(0x29C+osd_num*0x40)/4]&0xFFFF) * ((read_result[(0x284+osd_num*0x40)/4] >> 16) & 0xFFFF) * 8;
     }
-    rt_kprintf("dump_address 0x%x, dump_size 0x%x\n", dump_address, dump_size);
+
     if(dump_address != 0){
         sprintf(file_save_name, "./dump_%s.txt", param);
         save_data_to_file(dump_address, dump_size, file_save_name);
@@ -274,6 +276,73 @@ static void dump_buffer(const char *cmd){
     else{
         rt_kprintf("格式错误, 正确格式:dump layer1~3/osd0~6\n");
     }
+}
+
+static void set_layer_onoff(const char *cmd){
+    char param[10] = {0};
+    int param2 = 0;
+    void *map_base = RT_NULL;
+    int bit_num = 0;
+    volatile rt_uint32_t read_result[VO_MEMORY_READ_LEN/4];
+    volatile rt_uint64_t writeval;
+    volatile void *virt_addr = RT_NULL;
+
+    if (sscanf(cmd, "set %9s %d", param, &param2) == 2) {
+        rt_kprintf("set %s %d\n", param, param2); // 实际应用中查询真实值
+    } else {
+        rt_kprintf("格式错误, 正确格式:set [layer1~3/osd0~6] [0/1]\n");
+        return;
+    }
+
+    map_base = rt_ioremap_nocache((void *)(VO_MEMORY_ADDR_START & ~VO_MEMORY_READ_LEN), VO_MEMORY_READ_LEN);
+    memcpy(read_result, map_base, sizeof(read_result));
+    
+
+    if(strcmp(param, "layer1") == 0)
+        bit_num = 1;
+    else if(strcmp(param, "layer2") == 0)
+        bit_num = 2;
+    else if(strcmp(param, "layer3") == 0)
+        bit_num = 3;
+    else if(strcmp(param, "osd0") == 0)
+        bit_num = 4;
+    else if(strcmp(param, "osd1") == 0)
+        bit_num = 5;
+    else if(strcmp(param, "osd2") == 0)
+        bit_num = 6;
+    else if(strcmp(param, "osd3") == 0)
+        bit_num = 7;
+    else if(strcmp(param, "osd4") == 0)
+        bit_num = 8;
+    else if(strcmp(param, "osd5") == 0)
+        bit_num = 9;
+    else if(strcmp(param, "osd6") == 0)
+        bit_num = 10;
+    else if(strcmp(param, "osd7") == 0)
+        bit_num = 11;
+
+        
+    if((!((read_result[0x118/4] >> bit_num) & 0x1)) && (param2==0)){
+        rt_kprintf("%s is already disabled\n", param);
+        rt_iounmap(map_base);
+        return;
+    }
+
+    if(((read_result[0x118/4] >> bit_num) & 0x1) && (param2==1)){
+        rt_kprintf("%s is already enabled\n", param);
+        rt_iounmap(map_base);
+        return;
+    }
+
+    virt_addr = map_base + 0x118;
+    writeval = (read_result[0x118/4] & ~(BIT_MASK(bit_num))) | (param2 << bit_num);
+     *((rt_uint8_t *) virt_addr) = writeval;
+    rt_kprintf("set 0x%x 0x%x\n", virt_addr, writeval);
+    virt_addr = map_base + 0x4;
+    *((rt_uint8_t *) virt_addr) = 0x11;
+    rt_kprintf("set 0x%x 0x11\n", virt_addr);
+    rt_iounmap(map_base);
+    return;
 }
 
 static void handle_command(const char *cmd) {
@@ -286,6 +355,11 @@ static void handle_command(const char *cmd) {
         dump_buffer(cmd);
         return;
     }
+
+    if (strstr(cmd, "set") == cmd) {
+        set_layer_onoff(cmd);
+        return;
+    }
 }
 
 int canmv_vo_debug(int argc, char **argv) {
@@ -294,8 +368,8 @@ int canmv_vo_debug(int argc, char **argv) {
     rt_kprintf("============= canmv_vo_debug =========================\n");
     rt_kprintf("支持命令：\n");
     rt_kprintf("  q                   - 查询vo状态\n");
-    rt_kprintf("  set <参数名> <数值>  - 打开/关闭某一层layer或者OSD(例如:set osd 1 0)\n");
-    rt_kprintf("  dump <参数名>        - 保存cdlayer的数据(例如:dump layer1~3/osd0~7)\n");
+    rt_kprintf("  set <参数名> <数值>  - 打开/关闭某一层layer或者OSD(例如:set osd0 0/1)\n");
+    rt_kprintf("  dump <参数名>        - 保存layer的数据(例如:dump layer1~3/osd0~7)\n");
     rt_kprintf("  exit                 - 退出命令\n");
     rt_kprintf("请输入命令：\n");
 
@@ -307,6 +381,10 @@ int canmv_vo_debug(int argc, char **argv) {
             continue;
         }
         cmd[strcspn(cmd, "\r\n")] = '\0';
+
+        if (strlen(cmd) > 0) {  // 输入不为空时才显示
+            rt_kprintf("你输入的命令：%s\n", cmd);  // 直接通过rt_kprintf输出到串口
+        }
 
         if (cmd == NULL || strlen(cmd) == 0) {
             rt_kprintf("输入为空，请重新输入\n");
