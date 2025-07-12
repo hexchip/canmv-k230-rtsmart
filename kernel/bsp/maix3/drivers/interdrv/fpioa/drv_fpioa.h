@@ -298,7 +298,9 @@ int drv_fpioa_get_func_name(fpioa_func_t func, char* buf, size_t buf_size);
 
 int drv_fpioa_get_pin_func_name(int pin, char* buf, size_t buf_size);
 int drv_fpioa_get_pin_alt_func_names(int pin, char* buf, size_t buf_size);
-int drv_fpioa_get_func_assigned_pin(fpioa_func_t func);
+
+int drv_fpioa_find_pin_by_func(fpioa_func_t func);
+int drv_fpioa_is_func_supported_by_pin(int pin, fpioa_func_t func);
 
 /* for fpioa configure generator. */
 typedef struct _fpioa_func_cfg {

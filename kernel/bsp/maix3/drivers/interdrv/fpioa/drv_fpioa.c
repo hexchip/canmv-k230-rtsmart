@@ -499,7 +499,7 @@ int drv_fpioa_get_pin_alt_func_names(int pin, char* buf, size_t buf_size)
     return 0;
 }
 
-int drv_fpioa_get_func_assigned_pin(fpioa_func_t func)
+int drv_fpioa_find_pin_by_func(fpioa_func_t func)
 {
     fpioa_func_t curr_func;
 
@@ -518,6 +518,23 @@ int drv_fpioa_get_func_assigned_pin(fpioa_func_t func)
     }
 
     return -1;
+}
+
+int drv_fpioa_is_func_supported_by_pin(int pin, fpioa_func_t func)
+{
+    fpioa_func_t funcs[FPIOA_PIN_MAX_FUNCS];
+
+    if (drv_fpioa_pin_supported_funcs(pin, funcs) != 0) {
+        return 0;
+    }
+
+    for (int i = 0; i < FPIOA_PIN_MAX_FUNCS; i++) {
+        if (funcs[i] == func) {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 #if defined(RT_USING_MSH) && defined(RT_FPIOA_ENABLE_BUILTIN_CMD)

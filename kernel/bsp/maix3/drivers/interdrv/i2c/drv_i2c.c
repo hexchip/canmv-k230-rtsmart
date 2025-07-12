@@ -18,7 +18,15 @@
 #include <rthw.h>
 #include <rtthread.h>
 #include <stdlib.h>
-#define DRV_DEBUG
+
+#ifdef RT_DEBUG
+#define DBG_LVL DBG_LOG
+#else
+#define DBG_LVL DBG_WARNING
+#endif
+
+#define DBG_COLOR
+#define DBG_TAG "i2c"
 #include <rtdbg.h>
 
 #if defined RT_USING_I2C0_SLAVE || defined RT_USING_I2C1_SLAVE || defined RT_USING_I2C2_SLAVE                          \
