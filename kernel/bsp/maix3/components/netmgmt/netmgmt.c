@@ -49,13 +49,13 @@
     #define IOCTRL_WM_AP_SET_COUNTRY        _IOWR('N', 0x27, void *)
 #endif // CONFIG_ENABLE_NETWORK_RT_WLAN
 
-#ifdef CONFIG_ENABLE_NETWORK_RT_LAN
+#ifdef CONFIG_ENABLE_NETWORK_RT_LAN_OVER_USB
     // lan
     #define IOCTRL_LAN_GET_ISCONNECTED      _IOWR('N', 0x80, void *)
     #define IOCTRL_LAN_GET_LINK_STATUS      _IOWR('N', 0x81, void *)
     #define IOCTRL_LAN_GET_MAC              _IOWR('N', 0x82, void *)
     #define IOCTRL_LAN_SET_MAC              _IOWR('N', 0x83, void *)
-#endif // CONFIG_ENABLE_NETWORK_RT_LAN
+#endif // CONFIG_ENABLE_NETWORK_RT_LAN_OVER_USB
 
 // network util
 #define IOCTRL_NET_IFCONFIG                 _IOWR('N', 0x100, void *)
@@ -317,7 +317,7 @@ static rt_err_t _wlan_mgmt_cmd_ap_set_country(void *mgmt_dev, void *args)
 }
 #endif // CONFIG_ENABLE_NETWORK_RT_WLAN
 
-#ifdef CONFIG_ENABLE_NETWORK_RT_LAN
+#ifdef CONFIG_ENABLE_NETWORK_RT_LAN_OVER_USB
 /* LAN CMD HANDLE ************************************************************/
 static rt_err_t _lan_mgmt_cmd_get_isconnected(void *mgmt_dev, void *args)
 {
@@ -437,7 +437,7 @@ _failed:
 
     return RT_ERROR;
 }
-#endif // CONFIG_ENABLE_NETWORK_RT_LAN
+#endif // CONFIG_ENABLE_NETWORK_RT_LAN_OVER_USB
 
 /* UTIL CMD HANDLE ***********************************************************/
 static rt_err_t _net_mgmt_dev_cmd_net_ifconfig(void *mgmt_dev, void *args)
@@ -472,14 +472,18 @@ static rt_err_t _net_mgmt_dev_cmd_net_ifconfig(void *mgmt_dev, void *args)
             return -RT_ERROR;
         }
         netdev = wlan_dev->netdev;
-    } else if(RT_NET_DEV_USB == ifconfig.net_if) { /* eth usb */
+    }
+#if defined (CONFIG_ENABLE_NETWORK_RT_LAN_OVER_USB)
+    else if(RT_NET_DEV_USB == ifconfig.net_if) { /* eth usb */
         /* eth rtl8152 device and netdev name is same */
         netdev = netdev_get_by_name(CANMV_USB_HOST_NET_RTL8152_DEV_NAME);
         if(NULL == netdev) {
             LOG_E("Can't find netif %s\n", CANMV_USB_HOST_NET_RTL8152_DEV_NAME);
             return -RT_ERROR;
         }
-    } else {
+    } 
+#endif
+    else {
         LOG_E("Unsupport netif %d\n", ifconfig.net_if);
         return -RT_ERROR;
     }
@@ -666,9 +670,12 @@ static rt_err_t _net_mgmt_cmd_get_isactive(void *mgmt_dev, void *args)
         net_dev = rt_device_find(RT_WLAN_DEVICE_STA_NAME);
     } else if(RT_NET_DEV_WLAN_AP == itf) { /* wlan ap */
         net_dev = rt_device_find(RT_WLAN_DEVICE_AP_NAME);
-    } else if(RT_NET_DEV_USB == itf) { /* eth usb */
+    } 
+#ifdef CONFIG_ENABLE_NETWORK_RT_LAN_OVER_USB
+    else if(RT_NET_DEV_USB == itf) { /* eth usb */
         net_dev = rt_device_find(CANMV_USB_HOST_NET_RTL8152_DEV_NAME);
     }
+#endif
 
     isactive = (NULL == net_dev) ? 0 : 1;
     lwp_put_to_user(args, &isactive, sizeof(isactive));
@@ -762,7 +769,7 @@ static struct rt_net_mgmt_device_cmd_handle cmd_handles[] = {
     },
 #endif // CONFIG_ENABLE_NETWORK_RT_WLAN
 
-#ifdef CONFIG_ENABLE_NETWORK_RT_LAN
+#ifdef CONFIG_ENABLE_NETWORK_RT_LAN_OVER_USB
     // lan
     {
         .cmd = IOCTRL_LAN_GET_ISCONNECTED,
@@ -780,7 +787,7 @@ static struct rt_net_mgmt_device_cmd_handle cmd_handles[] = {
         .cmd = IOCTRL_LAN_SET_MAC,
         .func = _lan_mgmt_cmd_set_mac,
     },
-#endif // CONFIG_ENABLE_NETWORK_RT_LAN
+#endif // CONFIG_ENABLE_NETWORK_RT_LAN_OVER_USB
 
     // network
     {
