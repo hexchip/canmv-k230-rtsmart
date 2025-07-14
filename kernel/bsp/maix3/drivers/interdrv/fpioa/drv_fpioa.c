@@ -367,7 +367,7 @@ int drv_fpioa_set_pin_func(int pin, fpioa_func_t func)
 
     if (0 < (alt_pins_cnt = drv_fpioa_func_available_pins(func, &alt_pins[0]))) {
         for (int i = 0; i < alt_pins_cnt; i++) {
-            if (0 != drv_fpioa_get_pin_func(alt_pins[i], &alt_pin_curr_func)) {
+            if (0 == drv_fpioa_get_pin_func(alt_pins[i], &alt_pin_curr_func)) {
                 if (alt_pin_curr_func == func) {
                     if (0x00 != drv_fpioa_get_pin_cfg(alt_pins[i], &cfg_tmp.u.value)) {
                         rt_kprintf("[hal_fpioa]: get pin %d cfg failed.\n", alt_pins[i]);
