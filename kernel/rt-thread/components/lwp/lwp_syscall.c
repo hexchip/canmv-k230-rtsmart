@@ -4428,6 +4428,82 @@ int sys_fsync(int fd)
     return res;
 }
 
+int sys_statfs(const char* path, struct statfs* buf)
+{
+    int ret = -1;
+
+#ifdef RT_USING_USERSPACE
+    struct ustatfs {
+        unsigned long      f_type;
+        unsigned long      f_bsize;
+        unsigned long long f_blocks;
+        unsigned long long f_bfree;
+        unsigned long long f_bavail;
+        unsigned long long f_files;
+        unsigned long long f_ffree;
+        struct {
+            int __val[2];
+        } f_fsid;
+        unsigned long f_namelen;
+        unsigned long f_frsize;
+        unsigned long f_flags;
+        unsigned long f_spare[4];
+    };
+
+    int            err   = 0;
+    char*          kpath = NULL;
+    size_t         len, k_len;
+    struct statfs  kbuf;
+    struct ustatfs _ustatfs;
+
+    if (!lwp_user_accessable((void*)buf, sizeof(struct ustatfs))) {
+        return -EFAULT;
+    }
+
+    len = lwp_user_strlen(path, &err);
+    if (err || len == 0 || len >= PATH_MAX) {
+        return -EFAULT;
+    }
+
+    kpath = (char*)kmem_get(len + 1);
+    if (!kpath) {
+        return -ENOMEM;
+    }
+
+    k_len = lwp_get_from_user(kpath, (void*)path, len);
+    if (k_len != len) {
+        kmem_put(kpath);
+        return -EFAULT;
+    }
+    kpath[k_len] = '\0';
+
+    ret = statfs(kpath, &kbuf);
+    kmem_put(kpath);
+    if (ret < 0) {
+        return -GET_ERRNO();
+    }
+
+    memset(&_ustatfs, 0, sizeof(_ustatfs));
+    _ustatfs.f_bsize   = kbuf.f_bsize;
+    _ustatfs.f_blocks  = kbuf.f_blocks;
+    _ustatfs.f_bfree   = kbuf.f_bfree;
+    _ustatfs.f_bavail  = kbuf.f_bfree;
+    _ustatfs.f_frsize  = kbuf.f_bsize;
+    _ustatfs.f_type    = 0;
+    _ustatfs.f_namelen = 255;
+
+    lwp_put_to_user(buf, &_ustatfs, sizeof(_ustatfs));
+    return 0;
+#else
+    ret = statfs(path, buf);
+    if (ret < 0) {
+        return -GET_ERRNO();
+    }
+#endif /* RT_USING_USERSPACE */
+
+    return ret;
+}
+
 const static void* func_table[] =
 {
     SYSCALL_SIGN(sys_exit),            /* 01 */
@@ -4618,21 +4694,24 @@ const static void* func_table[] =
     SYSCALL_USPACE(SYSCALL_SIGN(sys_madvise)),
     SYSCALL_SIGN(sys_sched_setparam),
     SYSCALL_SIGN(sys_sched_getparam),
-    SYSCALL_SIGN(sys_sched_get_priority_max),
+    SYSCALL_SIGN(sys_sched_get_priority_max),   /* 150 */
     SYSCALL_SIGN(sys_sched_get_priority_min),
     SYSCALL_SIGN(sys_sched_setscheduler),
     SYSCALL_SIGN(sys_sched_getscheduler),
     SYSCALL_SIGN(sys_setaffinity),
-    SYSCALL_SIGN(sys_fsync),
+    SYSCALL_SIGN(sys_fsync),    /* 155 */
     SYSCALL_SIGN(sys_clock_nanosleep),
     SYSCALL_SIGN(sys_timer_create),
     SYSCALL_SIGN(sys_timer_delete),
     SYSCALL_SIGN(sys_timer_settime),
-    SYSCALL_SIGN(sys_timer_gettime),
+    SYSCALL_SIGN(sys_timer_gettime),    /* 160 */
     SYSCALL_SIGN(sys_timer_getoverrun),
 
     SYSCALL_SIGN(sys_hw_interrupt_disable),
     SYSCALL_SIGN(sys_hw_interrupt_enable),
+
+    SYSCALL_SIGN(sys_statfs),
+
 };
 
 const void *lwp_get_sys_api(rt_uint32_t number)

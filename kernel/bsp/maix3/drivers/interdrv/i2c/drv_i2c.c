@@ -19,13 +19,8 @@
 #include <rtthread.h>
 #include <stdlib.h>
 
-#ifdef RT_DEBUG
-#define DBG_LVL DBG_LOG
-#else
-#define DBG_LVL DBG_WARNING
-#endif
-
 #define DBG_COLOR
+#define DBG_LVL DBG_WARNING
 #define DBG_TAG "i2c"
 #include <rtdbg.h>
 
