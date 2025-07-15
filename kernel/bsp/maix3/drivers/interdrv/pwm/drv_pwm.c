@@ -31,6 +31,8 @@
 
 #include "board.h"
 #include "ioremap.h"
+#include "lwp.h"
+#include "lwp_user_mm.h"
 #include "riscv_io.h"
 
 #include "drv_pwm.h"
@@ -289,23 +291,34 @@ static rt_err_t kd_pwm_control(struct rt_device_pwm* device, int cmd, void* arg)
         return -RT_EINVAL;
     }
 
-    struct rt_pwm_configuration* config = (struct rt_pwm_configuration*)arg;
-    struct pwm_inst_wrap*        wrap   = (struct pwm_inst_wrap*)(device->parent.user_data);
+    struct rt_pwm_configuration config;
+    struct pwm_inst_wrap*       wrap = (struct pwm_inst_wrap*)(device->parent.user_data);
 
     /* Validate instance type */
     if (&_pwm_dev_inst_type != wrap->inst_type) {
         return -RT_EINVAL;
     }
 
+    int pid = lwp_getpid();
+
+    if (0x00 != pid) {
+        if (sizeof(struct rt_pwm_configuration) != lwp_get_from_user(&config, arg, sizeof(struct rt_pwm_configuration))) {
+            LOG_E("Failed to copy configuration from user space");
+            return -RT_ERROR;
+        }
+    } else {
+        rt_memcpy(&config, arg, sizeof(struct rt_pwm_configuration));
+    }
+
     /* Validate channel number */
-    if (config->channel < 0 || config->channel > 5) {
-        LOG_E("Invalid channel %d", config->channel);
+    if (config.channel < 0 || config.channel > 5) {
+        LOG_E("Invalid channel %d", config.channel);
         return -RT_EINVAL;
     }
 
     /* Map channel to instance and sub-channel */
-    uint32_t         inst_idx = PWM_CHANNEL_TO_INST(config->channel);
-    uint32_t         sub_ch   = PWM_CHANNEL_TO_SUBCH(config->channel);
+    uint32_t         inst_idx = PWM_CHANNEL_TO_INST(config.channel);
+    uint32_t         sub_ch   = PWM_CHANNEL_TO_SUBCH(config.channel);
     struct pwm_inst* pwm_inst = &wrap->pwm[inst_idx];
 
     /* Execute command */
@@ -318,10 +331,22 @@ static rt_err_t kd_pwm_control(struct rt_device_pwm* device, int cmd, void* arg)
         return pwm_stop(pwm_inst, sub_ch);
     case PWM_CMD_SET:
     case KD_PWM_CMD_SET_CFG:
-        return kd_pwm_set(pwm_inst, sub_ch, config);
+        return kd_pwm_set(pwm_inst, sub_ch, &config);
     case PWM_CMD_GET:
     case KD_PWM_CMD_GET_CFG:
-        return kd_pwm_get(pwm_inst, sub_ch, config);
+        if (kd_pwm_get(pwm_inst, sub_ch, &config) != RT_EOK) {
+            LOG_E("Failed to get PWM configuration for channel %d", config.channel);
+            return -RT_ERROR;
+        }
+        if (0x00 != pid) {
+            if (lwp_put_to_user(arg, &config, sizeof(struct rt_pwm_configuration)) != sizeof(struct rt_pwm_configuration)) {
+                LOG_E("Failed to copy configuration to user space");
+                return -RT_ERROR;
+            }
+        } else {
+            rt_memcpy(arg, &config, sizeof(struct rt_pwm_configuration));
+        }
+        return RT_EOK;
     case KD_PWM_CMD_GET_STAT:
         return kd_pwm_get_state(pwm_inst, sub_ch);
     default:
