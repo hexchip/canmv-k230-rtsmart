@@ -134,7 +134,6 @@ static int misc_close(struct dfs_fd *file) { return 0; }
 #define MISC_DEV_CMD_CPU_USAGE                _IOWR('M', 0x03, void *)
 #define MISC_DEV_CMD_CREATE_SOFT_I2C          _IOWR('M', 0x04, void *)
 #define MISC_DEV_CMD_DELETE_SOFT_I2C          _IOWR('M', 0x05, void *)
-#define MISC_DEV_CMD_GET_FS_STAT              _IOWR('M', 0x06, void *)
 #define MISC_DEV_CMD_NTP_SYNC                 _IOWR('M', 0x07, void *)
 #define MISC_DEV_CMD_GET_UTC_TIMESTAMP        _IOWR('M', 0x08, void *)
 #define MISC_DEV_CMD_SET_UTC_TIMESTAMP        _IOWR('M', 0x09, void *)
@@ -349,35 +348,6 @@ static int misc_delete_soft_i2c_device(void *args) {
 
   return -1;
 #endif // RT_USING_SOFT_I2C
-}
-
-static int misc_get_fs_stat(void *args) {
-#define FS_STAT_PATH_LENGTH 32
-
-  struct statfs_wrap {
-      char path[FS_STAT_PATH_LENGTH];
-
-      struct statfs stat;
-  };
-
-  int ret = 0;
-  struct statfs_wrap wrap;
-
-  if(sizeof(wrap) != lwp_get_from_user(&wrap, args, sizeof(wrap))) {
-    rt_kprintf("%s get_frome_user failed\n", __func__);
-    return -1;
-  }
-
-  wrap.path[FS_STAT_PATH_LENGTH - 1] = 0;
-
-  if(0x00 == (ret = statfs(&wrap.path[0], &wrap.stat))) {
-    if(sizeof(wrap) != lwp_put_to_user(args, &wrap, sizeof(wrap))) {
-      rt_kprintf("%s put_to_user failed\n", __func__);
-      return -1;
-    }
-  }
-
-  return ret;
 }
 
 static int misc_get_local_time(void *args) {
@@ -595,10 +565,6 @@ static const struct misc_dev_handle misc_handles[] = {
   {
     .cmd = MISC_DEV_CMD_DELETE_SOFT_I2C,
     .func = misc_delete_soft_i2c_device,
-  },
-  {
-    .cmd = MISC_DEV_CMD_GET_FS_STAT,
-    .func = misc_get_fs_stat,
   },
   {
     .cmd = MISC_DEV_CMD_GET_LOCAL_TIME,
