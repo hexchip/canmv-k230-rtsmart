@@ -25,7 +25,6 @@ extern "C" {
 #define RT_I2C_IGNORE_NACK      (1u << 5)
 #define RT_I2C_NO_READ_ACK      (1u << 6)  /* when I2C reading, we do not ACK */
 #define RT_I2C_NO_STOP          (1u << 7)
-#define RT_I2C_STOP              0x8000
 
 struct rt_i2c_msg
 {

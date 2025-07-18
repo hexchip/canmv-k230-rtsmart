@@ -65,18 +65,18 @@ struct chip_i2c_bus {
 #endif
     };
     struct i2c_regs* regs;
-    char* device_name;
-    uint8_t index;
-    uint8_t irq;
-    uint8_t slave;
-    struct rt_event event;
-    uint32_t tx_abrt;
-    struct rt_i2c_msg* msgs;
-    uint32_t msgs_num;
-    uint32_t msg_wr_idx;
-    uint32_t buf_wr_idx;
-    uint32_t msg_rd_idx;
-    uint32_t buf_rd_idx;
+    char*            device_name;
+    uint8_t          index;
+    uint8_t          irq;
+    uint8_t          slave;
+    struct rt_event  event;
+    uint32_t         tx_abrt;
+    uint32_t         slave_addr;
+    uint32_t         send_len;
+    uint32_t         recvcmd_len;
+    uint32_t         recv_len;
+    uint8_t*         send_buf;
+    uint8_t*         recv_buf;
 };
 
 static struct chip_i2c_bus i2c_buses[] = {
@@ -187,7 +187,7 @@ static void dw_i2c_isr(int irq, void* param)
 {
     struct chip_i2c_bus* bus      = (struct chip_i2c_bus*)param;
     struct i2c_regs*     i2c_base = bus->regs;
-    uint32_t             stat;
+    uint32_t             stat, spare;
 
     stat = readl(&i2c_base->ic_intr_stat);
     if (stat & IC_TX_ABRT) {
@@ -197,63 +197,35 @@ static void dw_i2c_isr(int irq, void* param)
         return;
     }
     if (stat & IC_TX_EMPTY) {
-        uint32_t spare = IC_FIFO_DEPTH - readl(&i2c_base->ic_txflr);
-        uint32_t rx_spare = IC_FIFO_DEPTH - readl(&i2c_base->ic_rxflr);
-        if (spare > rx_spare)
-            spare = rx_spare;
-        for (; bus->msg_wr_idx < bus->msgs_num;) {
-            int i = bus->msg_wr_idx;
-            int j = bus->buf_wr_idx;
-            if (bus->msgs[i].flags & RT_I2C_RD) {
-                for (; j < bus->msgs[i].len && spare; j++, spare--)
-                    writel(DW_IC_DATA_CMD_READ, &i2c_base->ic_cmd_data);
+        if (bus->send_len == 0 && bus->recvcmd_len == 0) {
+            if (bus->recv_len) {
+                writel(IC_TX_ABRT | IC_RX_FULL, &i2c_base->ic_intr_mask);
             } else {
-                uint8_t *buf = &bus->msgs[i].buf[j];
-                for (; j < bus->msgs[i].len && spare; j++, spare--)
-                    writel(*buf++, &i2c_base->ic_cmd_data);
+                writel(0, &i2c_base->ic_intr_mask);
+                bus->tx_abrt = 0;
+                rt_event_send(&bus->event, 1);
+                return;
             }
-            bus->buf_wr_idx = j;
-            if (bus->buf_wr_idx == bus->msgs[i].len) {
-                bus->buf_wr_idx = 0;
-                bus->msg_wr_idx++;
-                if ((bus->msgs[i].flags & RT_I2C_STOP) || (bus->msg_wr_idx == bus->msgs_num)) {
-                    writel(IC_TX_ABRT | IC_RX_FULL | IC_STOP_DET, &i2c_base->ic_intr_mask);
-                    break;
-                }
-            }
-            if (spare == 0)
-                break;
         }
+        spare = IC_FIFO_DEPTH - readl(&i2c_base->ic_txflr);
+        for (; bus->send_len && spare; bus->send_len--, spare--)
+            writel(*bus->send_buf++, &i2c_base->ic_cmd_data);
+        for (; bus->recvcmd_len && spare; bus->recvcmd_len--, spare--)
+            writel(DW_IC_DATA_CMD_READ, &i2c_base->ic_cmd_data);
+        if (bus->send_len == 0 && bus->recvcmd_len == 0)
+            writel(0, &i2c_base->ic_tx_tl);
     }
-    if (stat & (IC_RX_FULL | IC_STOP_DET)) {
-        uint32_t valid = readl(&i2c_base->ic_rxflr);
-        for (; bus->msg_rd_idx < bus->msg_wr_idx;) {
-            int i = bus->msg_rd_idx;
-            if ((bus->msgs[i].flags & RT_I2C_RD) == 0) {
-                bus->msg_rd_idx++;
-                continue;
-            }
-            int j = bus->buf_rd_idx;
-            uint8_t *buf = &bus->msgs[i].buf[j];
-            for (; j < bus->msgs[i].len && valid; j++, valid--)
-                *buf++ = readl(&i2c_base->ic_cmd_data);
-            bus->buf_rd_idx = j;
-            if (bus->buf_rd_idx == bus->msgs[i].len) {
-                bus->buf_rd_idx = 0;
-                bus->msg_rd_idx++;
-            }
-            if (valid == 0)
-                break;
-        }
-    }
-    if (stat & IC_STOP_DET) {
-        if (bus->msg_wr_idx == bus->msgs_num) {
+    if (stat & IC_RX_FULL) {
+        spare = readl(&i2c_base->ic_rxflr);
+        for (; bus->recv_len && spare; bus->recv_len--, spare--)
+            *bus->recv_buf++ = readl(&i2c_base->ic_cmd_data);
+        if (bus->recv_len) {
+            writel(bus->recv_len - 1 > IC_FIFO_DEPTH - 1 ? IC_FIFO_DEPTH - 1 : bus->recv_len - 1, &i2c_base->ic_rx_tl);
+        } else {
             writel(0, &i2c_base->ic_intr_mask);
             bus->tx_abrt = 0;
             rt_event_send(&bus->event, 1);
-        } else {
-            writel(IC_TX_ABRT | IC_TX_EMPTY | IC_RX_FULL | IC_STOP_DET, &i2c_base->ic_intr_mask);
-            readl(&i2c_base->ic_clr_stop_det);
+            return;
         }
     }
 }
@@ -263,11 +235,9 @@ static int dw_i2c_init(struct chip_i2c_bus* bus)
     struct i2c_regs* i2c_base = bus->regs;
 
     writel(0, &i2c_base->ic_enable);
+    writel(IC_CON_SD | IC_CON_RE | IC_CON_SPD_FS | IC_CON_MM | DW_IC_CON_TX_EMPTY_CTRL, &i2c_base->ic_con);
     writel(0, &i2c_base->ic_intr_mask);
     readl(&i2c_base->ic_clr_intr);
-    writel(IC_CON_SD | IC_CON_RE | IC_CON_SPD_FS | IC_CON_MM | DW_IC_CON_STOP_DET_IFADDRESSED | DW_IC_CON_TX_EMPTY_CTRL, &i2c_base->ic_con);
-    writel(IC_FIFO_DEPTH / 2 - 1, &i2c_base->ic_rx_tl);
-    writel(IC_FIFO_DEPTH / 2 - 1, &i2c_base->ic_tx_tl);
 
     dw_i2c_set_bus_speed(bus, I2C_FAST_SPEED);
 
@@ -282,42 +252,67 @@ static int dw_i2c_init(struct chip_i2c_bus* bus)
 static int dw_i2c_xfer(struct chip_i2c_bus* bus)
 {
     struct i2c_regs* i2c_base = bus->regs;
-    int ret;
-    uint32_t value;
+    uint8_t *        send_buf, *recv_buf;
+    uint8_t *        send_buf_ext, *recv_buf_ext;
+    uint32_t         recv_len, to;
+    int              ret;
 
-    value = 1000;
+    recv_len         = bus->recv_len;
+    bus->recvcmd_len = bus->recv_len;
+    send_buf_ext     = bus->send_buf;
+    recv_buf_ext     = bus->recv_buf;
+    send_buf         = 0;
+    recv_buf         = 0;
+    if (bus->send_len) {
+        send_buf = rt_malloc(bus->send_len);
+        if (!send_buf) {
+            LOG_E("i2c xfer malloc fail");
+            return -RT_ENOMEM;
+        }
+        rt_memcpy(send_buf, send_buf_ext, bus->send_len);
+    }
+    if (bus->recv_len) {
+        recv_buf = rt_malloc(bus->recv_len);
+        if (!recv_buf) {
+            rt_free(send_buf);
+            LOG_E("i2c xfer malloc fail");
+            return -RT_ENOMEM;
+        }
+    }
+    bus->send_buf = send_buf;
+    bus->recv_buf = recv_buf;
+
+    to = 1000;
     while (readl(&i2c_base->ic_enable_status) & IC_ENABLE_0B) {
-        if (value-- == 0) {
+        if (to-- == 0) {
+            rt_free(send_buf);
+            rt_free(recv_buf);
             LOG_E("i2c xfer busy");
             return -RT_EBUSY;
         }
     }
-
-    bus->msg_wr_idx = 0;
-    bus->buf_wr_idx = 0;
-    bus->msg_rd_idx = 0;
-    bus->buf_rd_idx = 0;
-    value = bus->msgs[0].addr & 0x3FFUL;
-    if (bus->msgs[0].flags & RT_I2C_ADDR_10BIT)
-        value |= DW_IC_TAR_10BITADDR_MASTER;
-    writel(value, &i2c_base->ic_tar);
+    writel(bus->slave_addr, &i2c_base->ic_tar);
+    writel(bus->recv_len - 1 > IC_FIFO_DEPTH - 1 ? IC_FIFO_DEPTH - 1 : bus->recv_len - 1, &i2c_base->ic_rx_tl);
+    writel(IC_FIFO_DEPTH / 2 - 1, &i2c_base->ic_tx_tl);
     readl(&i2c_base->ic_clr_intr);
-    writel(IC_TX_ABRT | IC_TX_EMPTY | IC_RX_FULL | IC_STOP_DET, &i2c_base->ic_intr_mask);
+    writel(IC_TX_ABRT | IC_TX_EMPTY | IC_RX_FULL, &i2c_base->ic_intr_mask);
     writel(1, &i2c_base->ic_enable);
-
-    ret = rt_event_recv(&bus->event, 1, RT_EVENT_FLAG_OR | RT_EVENT_FLAG_CLEAR, 1000000, 0);
+    ret = rt_event_recv(&bus->event, 1, RT_EVENT_FLAG_OR | RT_EVENT_FLAG_CLEAR, 1000, 0);
     if (ret == RT_EOK) {
         if (bus->tx_abrt) {
             LOG_D("i2c xfer abort: 0x%x", bus->tx_abrt);
             ret = -RT_EIO;
+        } else if (recv_len) {
+            rt_memcpy(recv_buf_ext, recv_buf, recv_len);
         }
     } else if (ret == -RT_ETIMEOUT) {
         LOG_E("i2c xfer timeout");
     } else {
         LOG_E("i2c xfer error: %d", ret);
     }
-
     writel(0, &i2c_base->ic_enable);
+    rt_free(send_buf);
+    rt_free(recv_buf);
 
     return ret;
 }
@@ -326,51 +321,32 @@ static rt_size_t chip_i2c_master_xfer(struct rt_i2c_bus_device* bus, struct rt_i
 {
     struct chip_i2c_bus* i2c_bus = (struct chip_i2c_bus*)bus;
 
-    if (num == 0 || msgs == 0) {
-        LOG_E("i2c xfer num is zero or msgs is NULL");
-        return -RT_EINVAL;
-    }
+    for (int i = 0, s; i < num; i += s) {
+        if (msgs[i].len == 0)
+            continue;
 
-    if (lwp_self()) {
-        i2c_bus->msgs = rt_malloc(sizeof(struct rt_i2c_msg) * num);
-        if (!i2c_bus->msgs) {
-            LOG_E("i2c xfer malloc fail");
-            return -RT_ENOMEM;
-        }
-        rt_memset(i2c_bus->msgs, 0, sizeof(struct rt_i2c_msg) * num);
-        for (int i = 0; i < num; i++) {
-            i2c_bus->msgs[i].addr = msgs[i].addr;
-            i2c_bus->msgs[i].flags = msgs[i].flags;
-            i2c_bus->msgs[i].len = msgs[i].len;
-            i2c_bus->msgs[i].buf = rt_malloc(msgs[i].len);
-            if (!i2c_bus->msgs[i].buf) {
-                LOG_E("i2c xfer malloc fail");
-                for (int j = 0; j < i; j++)
-                    rt_free(i2c_bus->msgs[j].buf);
-                rt_free(i2c_bus->msgs);
-                return -RT_ENOMEM;
-            }
-            if ((msgs[i].flags & RT_I2C_RD) == 0)
-                lwp_get_from_user(i2c_bus->msgs[i].buf, msgs[i].buf, msgs[i].len);
-        }
-        i2c_bus->msgs_num = num;
-
-        if (dw_i2c_xfer(i2c_bus)) {
-            for (int i = 0; i < num; i++)
-                rt_free(i2c_bus->msgs[i].buf);
-            rt_free(i2c_bus->msgs);
-            return -RT_EIO;
+        s = 1;
+        if (msgs[i].flags & RT_I2C_RD) {
+            i2c_bus->send_len = 0;
+            i2c_bus->send_buf = 0;
+            i2c_bus->recv_len = msgs[i].len;
+            i2c_bus->recv_buf = msgs[i].buf;
+        } else if ((i + 1 < num) && (msgs[i + 1].flags & RT_I2C_RD)) {
+            i2c_bus->send_len = msgs[i].len;
+            i2c_bus->send_buf = msgs[i].buf;
+            i2c_bus->recv_len = msgs[i + 1].len;
+            i2c_bus->recv_buf = msgs[i + 1].buf;
+            s                 = 2;
+        } else {
+            i2c_bus->send_len = msgs[i].len;
+            i2c_bus->send_buf = msgs[i].buf;
+            i2c_bus->recv_len = 0;
+            i2c_bus->recv_buf = 0;
         }
 
-        for (int i = 0; i < num; i++) {
-            if (msgs[i].flags & RT_I2C_RD)
-                lwp_put_to_user(msgs[i].buf, i2c_bus->msgs[i].buf, msgs[i].len);
-            rt_free(i2c_bus->msgs[i].buf);
-        }
-        rt_free(i2c_bus->msgs);
-    } else {
-        i2c_bus->msgs = msgs;
-        i2c_bus->msgs_num = num;
+        i2c_bus->slave_addr = msgs[i].addr & 0x3FFUL;
+        if (msgs[i].flags & RT_I2C_ADDR_10BIT)
+            i2c_bus->slave_addr |= DW_IC_TAR_10BITADDR_MASTER;
 
         if (dw_i2c_xfer(i2c_bus))
             return -RT_EIO;
