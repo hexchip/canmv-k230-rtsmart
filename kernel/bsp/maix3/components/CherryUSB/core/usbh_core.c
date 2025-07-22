@@ -844,12 +844,21 @@ int lsusb(int argc, char **argv)
                     hport = &hub->child[port];
                     if (hport->connected) {
                         for (uint8_t i = 0; i < hport->config.config_desc.bNumInterfaces; i++) {
-                            if (hport->config.intf[i].class_driver->driver_name) {
-                                USB_LOG_RAW("\t|__Port %u, dev addr:0x%02x, If %u, ClassDriver=%s\r\n",
+                            if (hport->config.intf[i].class_driver && hport->config.intf[i].class_driver->driver_name) {
+                                USB_LOG_RAW("\t|__Port %u, pid,vid = (0x%x, 0x%x), dev addr:0x%02x, If %u, ClassDriver=%s\r\n",
                                             hport->port,
+                                            hport->device_desc.idProduct,
+                                            hport->device_desc.idVendor,
                                             hport->dev_addr,
                                             i,
                                             hport->config.intf[i].class_driver->driver_name);
+                            } else if (!hport->config.intf[i].class_driver) {
+                                USB_LOG_RAW("\t|__Port %u, pid,vid = (0x%x, 0x%x), dev addr:0x%02x, If %u, ClassDriver=NULL\r\n",
+                                            hport->port,
+                                            hport->device_desc.idProduct,
+                                            hport->device_desc.idVendor,
+                                            hport->dev_addr,
+                                            i);
                             }
                         }
                     }
