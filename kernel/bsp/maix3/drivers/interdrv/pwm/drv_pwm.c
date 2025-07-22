@@ -191,12 +191,13 @@ static rt_err_t kd_pwm_get(struct pwm_inst* inst, rt_uint8_t channel, struct rt_
     uint64_t pulse, period;
     uint32_t pwm_pclock = sysctl_clk_get_leaf_freq(SYSCTL_CLK_PWM_PCLK_GATE);
 
-    if (inst->enable[channel]) {
-        uint32_t scale = read32(&inst->reg->pwmcfg) & 0x0f;
-        pwm_pclock >>= scale;
-        period = read32(&inst->reg->pwmcmp0);
-        pulse  = period - read32(&inst->reg->pwm_chn_pulse[channel]);
-    } else {
+    // if (inst->enable[channel]) {
+    //     uint32_t scale = read32(&inst->reg->pwmcfg) & 0x0f;
+    //     pwm_pclock >>= scale;
+    //     period = read32(&inst->reg->pwmcmp0);
+    //     pulse  = period - read32(&inst->reg->pwm_chn_pulse[channel]);
+    // } else 
+    {
         period = inst->period;
         pulse  = inst->pulses[channel];
     }
