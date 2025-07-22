@@ -36,6 +36,11 @@
 #define LDSO_LOAD_VADDR     0x200000000
 #endif
 
+rt_inline rt_bool_t lwp_in_user_space(const char *addr)
+{
+    return (addr >= (char *)USER_VADDR_START && addr < (char *)USER_VADDR_TOP);
+}
+
 /* this attribution is cpu specified, and it should be defined in riscv_mmu.h */
 #ifndef MMU_MAP_U_RWCB
 #define MMU_MAP_U_RWCB 0
