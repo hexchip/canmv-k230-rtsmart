@@ -58,11 +58,6 @@ rt_err_t ws2812_stream_over_gpio(struct ws2812_stream* stream)
         return -RT_ERROR;
     }
 
-    if (stream_len > WS2812_OVER_GPIO_MAX_LEN) {
-        LOG_W("Stream length exceeds maximum allowed length: %ld > %d", stream_len, WS2812_OVER_GPIO_MAX_LEN);
-        stream_len = WS2812_OVER_GPIO_MAX_LEN;
-    }
-
     // Convert timing from ns to ticks
     uint32_t timing_ticks[4]; // [bit0_hi, bit0_total], [bit1_hi, bit1_total]
     for (int i = 0; i < 2; ++i) {

@@ -33,8 +33,6 @@
 
 #define WS2812_STREAM_OVER_GPIO 0x00
 
-#define WS2812_OVER_GPIO_MAX_LEN (10 * 3) // 10 pixels
-
 #define WS2812_IOCTL_STREAM _IOW('W', 0x00, void*)
 
 struct ws2812_stream {
