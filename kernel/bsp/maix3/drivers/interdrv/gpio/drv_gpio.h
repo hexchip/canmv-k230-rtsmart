@@ -78,4 +78,16 @@ rt_err_t kd_pin_mode_get(rt_base_t pin, rt_base_t* mode);
 rt_err_t kd_pin_write(rt_base_t pin, rt_base_t value);
 rt_err_t kd_pin_read(rt_base_t pin);
 
+/* fast api */
+
+/* gpio output or input */
+uint32_t kd_pin_get_ddr(rt_base_t pin);
+/* set output or input */
+void kd_pin_set_dr(rt_base_t pin, int value);
+
+/* get gpio input value */
+uint32_t kd_pin_get_dr(rt_base_t pin);
+/* set gpio output value */
+void kd_pin_set_dr(rt_base_t pin, int value);
+
 #endif

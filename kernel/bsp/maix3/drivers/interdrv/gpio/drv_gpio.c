@@ -39,8 +39,6 @@
 
 #include "board.h"
 #include "lwp_pid.h"
-#include "rtconfig.h"
-#include "rtservice.h"
 #include "tick.h"
 #include <riscv_io.h>
 
@@ -167,7 +165,7 @@ static inline __attribute__((always_inline)) void kd_pin_write_reg(volatile uint
     write32(reg, reg_val);
 }
 
-static inline __attribute__((always_inline)) void kd_pin_set_ddr(rt_base_t pin, int value)
+void kd_pin_set_ddr(rt_base_t pin, int value)
 {
     /* Magic pin mapping: 0-31:gpio0, 32-63:gpio1[0], 64-71:gpio1[1] */
     volatile kd_gpio_t* gpio     = _gpio_inst.reg[pin >= 32];
@@ -177,6 +175,46 @@ static inline __attribute__((always_inline)) void kd_pin_set_ddr(rt_base_t pin, 
     /* Set GPIO direction */
     volatile uint32_t* ddr = &gpio->port[port_idx].ddr;
     kd_pin_write_reg(ddr, port_pin, value);
+}
+
+uint32_t kd_pin_get_ddr(rt_base_t pin)
+{
+    /* Magic pin mapping: 0-31:gpio0, 32-63:gpio1[0], 64-71:gpio1[1] */
+    volatile kd_gpio_t* gpio     = _gpio_inst.reg[pin >= 32];
+    uint8_t             port_idx = (pin >= 64);
+    uint8_t             port_pin = pin & 0x1F;
+
+    /* Set GPIO direction */
+    volatile uint32_t* ddr = &gpio->port[port_idx].ddr;
+
+    /* Read pin state */
+    uint32_t input_val = read32(ddr);
+    return (input_val & BIT(port_pin));
+}
+
+uint32_t kd_pin_get_dr(rt_base_t pin)
+{
+    /* Magic pin mapping: 0-31:gpio0, 32-63:gpio1[0], 64-71:gpio1[1] */
+    volatile kd_gpio_t* gpio      = _gpio_inst.reg[pin >= 32];
+    uint8_t             port_idx  = (pin >= 64);
+    uint8_t             port_pin  = pin & 0x1F;
+    volatile uint32_t*  input_reg = &gpio->input[port_idx];
+
+    /* Read pin state */
+    uint32_t input_val = read32(input_reg);
+    return (input_val & BIT(port_pin)) ? GPIO_PV_HIGH : GPIO_PV_LOW;
+}
+
+void kd_pin_set_dr(rt_base_t pin, int value)
+{
+    /* Magic pin mapping: 0-31:gpio0, 32-63:gpio1[0], 64-71:gpio1[1] */
+    volatile kd_gpio_t* gpio     = _gpio_inst.reg[pin >= 32];
+    uint8_t             port_idx = (pin >= 64);
+    uint8_t             port_pin = pin & 0x1F;
+
+    /* Set GPIO Ouput Value */
+    volatile uint32_t* dr = &gpio->port[port_idx].dr;
+    kd_pin_write_reg(dr, port_pin, value);
 }
 
 rt_err_t kd_pin_mode(rt_base_t pin, rt_base_t mode)
@@ -299,13 +337,7 @@ rt_err_t kd_pin_write(rt_base_t pin, rt_base_t value)
         return -RT_EINVAL;
     }
 
-    /* Magic pin mapping: 0-31:gpio0, 32-63:gpio1[0], 64-71:gpio1[1] */
-    volatile kd_gpio_t* gpio     = _gpio_inst.reg[pin >= 32];
-    uint8_t             port_idx = (pin >= 64);
-    uint8_t             port_pin = pin & 0x1F;
-    volatile uint32_t*  dr       = &gpio->port[port_idx].dr;
-
-    kd_pin_write_reg(dr, port_pin, value);
+    kd_pin_set_dr(pin, value);
 
     return RT_EOK;
 }
@@ -337,15 +369,7 @@ rt_err_t kd_pin_read(rt_base_t pin)
         }
     }
 
-    /* Magic pin mapping: 0-31:gpio0, 32-63:gpio1[0], 64-71:gpio1[1] */
-    volatile kd_gpio_t* gpio      = _gpio_inst.reg[pin >= 32];
-    uint8_t             port_idx  = (pin >= 64);
-    uint8_t             port_pin  = pin & 0x1F;
-    volatile uint32_t*  input_reg = &gpio->input[port_idx];
-
-    /* Read pin state */
-    uint32_t input_val = read32(input_reg);
-    return (input_val & BIT(port_pin)) ? GPIO_PV_HIGH : GPIO_PV_LOW;
+    return kd_pin_get_dr(pin);
 }
 
 static void kd_pin_irq_handler(int vector, void* param)

@@ -1,144 +1,117 @@
-#include <rtthread.h>
-#include <rtdevice.h>
-#include <rthw.h>
-#include "tick.h"
+/* Copyright (c) 2023, Canaan Bright Sight Co., Ltd
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 1. Redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 
 #include <stdint.h>
 
-#include <riscv_io.h>
+#include <rthw.h>
+#include <rtthread.h>
+
+#include "tick.h"
+
 #include "drv_gpio.h"
-#include "board.h"
-#include "ioremap.h"
-#include <lwp_user_mm.h>
 
-#if defined (WS2812_USE_DRV_GPIO)
-/**
- * 因为使用gpio驱动，很多代码考虑极致的性能场景，无法实现配置通用
- */
-#define WS2812_GPIO_PIN             (WS2812_GPIO_PIN_NUM)
+#include "ws2812.h"
 
-#if WS2812_GPIO_PIN_NUM > 32
-    #undef WS2812_GPIO_PIN
-    #define WS2812_GPIO_PIN             (WS2812_GPIO_PIN_NUM - 32) /// >32则-32
-#endif
+#define DBG_TAG "ws2812_gpio"
+#define DBG_LVL DBG_INFO
+#include <rtdbg.h>
 
-#define IOCTRL_WS2812_SET_RGB_VALUE     0x00
+#if defined(WS2812_USE_DRV_GPIO)
 
-typedef union
+// Convert nanoseconds to timer ticks (rounded)
+static inline uint32_t ns_to_ticks(uint32_t ns) { return (uint64_t)ns * TIMER_CLK_FREQ / 1000000000ULL; }
+
+rt_err_t ws2812_stream_over_gpio(struct ws2812_stream* stream)
 {
-    uint32_t value;
-    struct
-    {
-        uint8_t b;
-        uint8_t r;
-        uint8_t g;
-        uint8_t none;
-    };
-} ws2812_value;
+    uint32_t pin = stream->pin;
 
-static char *gpio1_reg = NULL;
-struct rt_device ws2812_dev;
-
-static inline void ws2812_out0(void)
-{
-    volatile uint64_t tick;
-    uint32_t gpio_val;
-
-    gpio_val = readl(gpio1_reg);
-
-    gpio_val |= (1 << WS2812_GPIO_PIN);
-    writel(gpio_val, gpio1_reg);
-
-    tick = cpu_ticks();
-    while (cpu_ticks() - tick < 7);
-
-    gpio_val &= ~(1 << WS2812_GPIO_PIN);
-    writel(gpio_val, gpio1_reg);
-
-    tick = cpu_ticks();
-    while (cpu_ticks() - tick < 17);
-}
-
-static inline  void ws2812_out1(void)
-{
-    volatile uint64_t tick;
-    uint32_t gpio_val;
-
-    gpio_val = readl(gpio1_reg);
-
-    gpio_val |= (1 << WS2812_GPIO_PIN);
-    writel(gpio_val, gpio1_reg);
-
-    tick = cpu_ticks();
-    while (cpu_ticks() - tick < 17);
-
-    gpio_val &= ~(1 << WS2812_GPIO_PIN);
-    writel(gpio_val, gpio1_reg);
-
-    tick = cpu_ticks();
-    while (cpu_ticks() - tick < 17);
-}
-
-void ws2812_set_value(ws2812_value data)
-{
-    data.value &= 0x00ffffff;
-    data.value = data.value << 8;
-
-    rt_enter_critical();
-    rt_base_t it = rt_hw_interrupt_disable();
-
-    for (size_t i = 0; i < 24; i++)
-    {
-        if (data.value & 0x80000000)
-        {
-            ws2812_out1();
-        }
-        else
-        {
-            ws2812_out0();
-        }
-        data.value = data.value << 1;
+    size_t stream_len = stream->len;
+    if (stream_len == 0) {
+        LOG_E("Invalid stream length");
+        return -RT_ERROR;
     }
 
-    rt_hw_interrupt_enable(it);
-    rt_exit_critical();
-}
-
-static rt_err_t _ws2812_dev_control(rt_device_t dev, int cmd, void *args)
-{
-    if (cmd == IOCTRL_WS2812_SET_RGB_VALUE)
-    {
-        ws2812_value data;
-        lwp_get_from_user(&data,args,sizeof(ws2812_value));
-        ws2812_set_value(data);
-        return RT_EOK;
+    if (kd_pin_mode(pin, GPIO_DM_OUTPUT) != RT_EOK) {
+        LOG_E("Failed to set pin %d to output mode", pin);
+        return -RT_ERROR;
     }
-    return RT_EINVAL;
+
+    if (stream_len > WS2812_OVER_GPIO_MAX_LEN) {
+        LOG_W("Stream length exceeds maximum allowed length: %ld > %d", stream_len, WS2812_OVER_GPIO_MAX_LEN);
+        stream_len = WS2812_OVER_GPIO_MAX_LEN;
+    }
+
+    // Convert timing from ns to ticks
+    uint32_t timing_ticks[4]; // [bit0_hi, bit0_total], [bit1_hi, bit1_total]
+    for (int i = 0; i < 2; ++i) {
+        uint32_t hi             = ns_to_ticks(stream->timing_ns[i * 2]);
+        uint32_t lo             = ns_to_ticks(stream->timing_ns[i * 2 + 1]);
+        timing_ticks[i * 2 + 0] = hi;
+        timing_ticks[i * 2 + 1] = hi + lo;
+    }
+
+    const uint8_t* stream_data = stream->data;
+    const uint8_t* stream_end  = stream_data + stream_len;
+
+    // uint64_t ticks_start = cpu_ticks_us(); // For logging duration
+
+    // Disable IRQs to ensure accurate timing
+    rt_base_t level = rt_hw_interrupt_disable();
+
+    while (stream_data < stream_end) {
+        uint8_t byte = *stream_data++;
+
+        for (int i = 0; i < 8; ++i) {
+            uint64_t start = cpu_ticks();
+
+            kd_pin_set_dr(pin, 1);
+
+            int      bit     = (byte & 0x80) ? 1 : 0;
+            uint32_t t_hi    = timing_ticks[bit * 2 + 0];
+            uint32_t t_total = timing_ticks[bit * 2 + 1];
+
+            // Delay for high time
+            while ((uint32_t)(cpu_ticks() - start) < t_hi) {
+                __asm__ volatile("nop");
+            }
+
+            kd_pin_set_dr(pin, 0);
+            byte <<= 1;
+
+            // Delay for remainder of bit period
+            while ((uint32_t)(cpu_ticks() - start) < t_total) {
+                __asm__ volatile("nop");
+            }
+        }
+    }
+
+    rt_hw_interrupt_enable(level);
+
+    // LOG_D("Stream sent in %lu us", (uint32_t)(cpu_ticks_us() - ticks_start));
+
+    return RT_EOK;
 }
 
-const static struct rt_device_ops ws2812_dev_ops =
-{
-    RT_NULL,
-    RT_NULL,
-    RT_NULL,
-    RT_NULL,
-    RT_NULL,
-    _ws2812_dev_control
-};
-
-int ws2812_regulator_init(void)
-{
-    rt_err_t ret;
-    gpio1_reg = rt_ioremap((void *)GPIO1_BASE_ADDR, GPIO1_IO_SIZE);
-    kd_pin_mode(WS2812_GPIO_PIN_NUM, GPIO_DM_OUTPUT);
-    ws2812_out0();
-
-    ws2812_dev.ops = &ws2812_dev_ops;
-    ws2812_dev.user_data = NULL;
-    ws2812_dev.type = RT_Device_Class_Char;
-    RT_ASSERT(rt_device_register(&ws2812_dev,"ws2812",RT_DEVICE_FLAG_RDWR) == RT_EOK);
-    return 0;
-}
-INIT_COMPONENT_EXPORT(ws2812_regulator_init);
-
-#endif // WS2812_USE_DRV_GPIO
+#endif /* WS2812_USE_DRV_GPIO */

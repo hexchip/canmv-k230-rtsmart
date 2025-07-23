@@ -12,10 +12,4 @@ menuconfig RT_USING_WS2812
             config WS2812_USE_DRV_I2S
                 bool "Using I2S"
         endchoice
-
-        if WS2812_USE_DRV_GPIO
-            config WS2812_GPIO_PIN_NUM
-                int "WS2812 GPIO Output Pin"
-                default 35
-        endif
     endif
