@@ -72,11 +72,13 @@ rt_err_t ws2812_stream_over_gpio(struct ws2812_stream* stream)
 
     // uint64_t ticks_start = cpu_ticks_us(); // For logging duration
 
-    // Disable IRQs to ensure accurate timing
-    rt_base_t level = rt_hw_interrupt_disable();
+    rt_enter_critical();
 
     while (stream_data < stream_end) {
         uint8_t byte = *stream_data++;
+
+        // Disable IRQs to ensure accurate timing
+        rt_base_t level = rt_hw_interrupt_disable();
 
         for (int i = 0; i < 8; ++i) {
             uint64_t start = cpu_ticks();
@@ -100,9 +102,11 @@ rt_err_t ws2812_stream_over_gpio(struct ws2812_stream* stream)
                 __asm__ volatile("nop");
             }
         }
+
+        rt_hw_interrupt_enable(level);
     }
 
-    rt_hw_interrupt_enable(level);
+    rt_exit_critical();
 
     // LOG_D("Stream sent in %lu us", (uint32_t)(cpu_ticks_us() - ticks_start));
 
