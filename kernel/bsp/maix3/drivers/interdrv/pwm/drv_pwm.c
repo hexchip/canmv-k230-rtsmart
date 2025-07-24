@@ -196,15 +196,15 @@ static rt_err_t kd_pwm_get(struct pwm_inst* inst, rt_uint8_t channel, struct rt_
     //     pwm_pclock >>= scale;
     //     period = read32(&inst->reg->pwmcmp0);
     //     pulse  = period - read32(&inst->reg->pwm_chn_pulse[channel]);
-    // } else 
+    // } else
     {
         period = inst->period;
         pulse  = inst->pulses[channel];
     }
 
     /* Convert to nanoseconds */
-    configuration->period = period * NSEC_PER_SEC / pwm_pclock;
-    configuration->pulse  = pulse * NSEC_PER_SEC / pwm_pclock;
+    configuration->period = period ? (uint64_t)period * NSEC_PER_SEC / pwm_pclock : 0;
+    configuration->pulse  = pulse ? (uint64_t)pulse * NSEC_PER_SEC / pwm_pclock : 0;
 
     return RT_EOK;
 }
@@ -227,13 +227,18 @@ static int kd_pwm_set(struct pwm_inst* inst, int channel, struct rt_pwm_configur
     uint32_t pwmscale   = 0;
 
     /* Convert from nanoseconds to clock cycles */
-    pulse  = (uint64_t)configuration->pulse * pwm_pclock / NSEC_PER_SEC;
-    period = (uint64_t)configuration->period * pwm_pclock / NSEC_PER_SEC;
+    pulse  = configuration->pulse ? (uint64_t)configuration->pulse * pwm_pclock / NSEC_PER_SEC : 0;
+    period = configuration->period ? (uint64_t)configuration->period * pwm_pclock / NSEC_PER_SEC : 0;
 
     /* Validate parameters */
     if (pulse > period || period > ((1 << (15 + 16)) - 1LL)) {
         LOG_E("Invalid config for channel %d (pulse=%llu, period=%llu)", channel, pulse, period);
         return -RT_EINVAL;
+    }
+
+    if ((0x00 == pulse) && configuration->pulse) {
+        pulse = 1;
+        LOG_W("Setting pulse width to 1 clock cycle for channel %d", channel);
     }
 
     /* Calculate appropriate scale factor */
@@ -253,7 +258,14 @@ static int kd_pwm_set(struct pwm_inst* inst, int channel, struct rt_pwm_configur
             write32(&inst->reg->pwmcfg, (read32(&inst->reg->pwmcfg) & (~0x0F)) | pwmscale);
             write32(&inst->reg->pwmcmp0, period >> pwmscale);
         }
-        write32(&inst->reg->pwm_chn_pulse[channel], (period - pulse) >> pwmscale);
+
+        if (0x00 == pulse) { /* duty 0 */
+            write32(&inst->reg->pwm_chn_pulse[channel], UINT32_MAX);
+        } else if (pulse >= period) { /* duty 100 */
+            write32(&inst->reg->pwm_chn_pulse[channel], 0);
+        } else { /* duty 0 ~ 100 */
+            write32(&inst->reg->pwm_chn_pulse[channel], (period - pulse) >> pwmscale);
+        }
     }
 
     /* Store current settings */
