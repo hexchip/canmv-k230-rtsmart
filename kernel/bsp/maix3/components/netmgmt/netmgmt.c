@@ -129,9 +129,22 @@ static rt_err_t _wlan_mgmt_cmd_sta_disconnect(void *mgmt_dev, void *args)
     return rt_wlan_disconnect();
 }
 
-static rt_err_t _wlan_mgmt_cmd_sta_isconnected(void *mgmt_dev, void *args)
+static rt_err_t _wlan_mgmt_cmd_sta_isconnected(void* mgmt_dev, void* args)
 {
     int status = (int)rt_wlan_is_connected();
+
+    if (status) {
+        status = 0;
+
+        struct rt_wlan_device* wlan_dev = (struct rt_wlan_device*)rt_device_find(RT_WLAN_DEVICE_STA_NAME);
+
+        if (wlan_dev) {
+            struct netdev* netdev = wlan_dev->netdev;
+            if (netdev && netdev->ip_addr.addr) {
+                status = 1;
+            }
+        }
+    }
 
     lwp_put_to_user(args, &status, sizeof(int));
 
@@ -468,7 +481,7 @@ static rt_err_t _net_mgmt_dev_cmd_net_ifconfig(void *mgmt_dev, void *args)
     } else if(RT_NET_DEV_WLAN_AP == ifconfig.net_if) { /* wlan ap */
         wlan_dev = (struct rt_wlan_device *)rt_device_find(RT_WLAN_DEVICE_AP_NAME);
         if(NULL == wlan_dev) {
-            LOG_E("Can't find netif %s\n", RT_WLAN_DEVICE_STA_NAME);
+            LOG_E("Can't find netif %s\n", RT_WLAN_DEVICE_AP_NAME);
             return -RT_ERROR;
         }
         netdev = wlan_dev->netdev;
