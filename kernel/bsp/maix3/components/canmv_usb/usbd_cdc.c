@@ -41,7 +41,7 @@ static int cdc_read(struct dfs_fd *fd, void *buf, size_t count) {
         read_count = actual_read;
         actual_read = 0;
 
-        if(read_count) {
+        if(0 < read_count) {
             memcpy(buf, usb_read_buffer, read_count);
         }
     } else {
@@ -175,7 +175,8 @@ static struct usbd_endpoint cdc_in_ep = {
 
 void canmv_usb_device_cdc_on_connected(void)
 {
-    rt_sem_control(&cdc_read_sem, RT_IPC_CMD_RESET, (void *)0);
+    actual_read = -1;
+    rt_sem_control(&cdc_read_sem, RT_IPC_CMD_RESET, (void *)1);
     rt_sem_control(&cdc_write_sem, RT_IPC_CMD_RESET, (void *)1);
     //TODO
     rt_completion_done(&cdc_write_done);
