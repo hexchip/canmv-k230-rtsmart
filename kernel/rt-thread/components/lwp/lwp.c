@@ -1006,7 +1006,15 @@ RT_WEAK int lwp_load(const char *filename, struct rt_lwp *lwp, uint8_t *load_add
     fd_tmp = -1;
     temp = NULL;
 
+    char *file_path = dfs_normalize_path(NULL, filename);
+
+    /* files in /rom not use fast load */
+    if((NULL == file_path) || (0x00 == rt_strncmp("/rom", file_path, 4))) {
+        goto _temp_failed;
+    }
+
     if(CONFIG_MEM_RTSMART_HEAP_SIZE < (len * 3)) {
+        LOG_W("not use fast load, out of memory %d < %d", CONFIG_MEM_RTSMART_HEAP_SIZE, len * 3);
         goto _temp_failed;
     }
 
@@ -1064,6 +1072,10 @@ RT_WEAK int lwp_load(const char *filename, struct rt_lwp *lwp, uint8_t *load_add
         LOG_I("LWP use fast load\n");
     }
 _temp_failed:
+    if(file_path) {
+        rt_free(file_path);
+    }
+
     if(temp) {
         rt_free(temp);
     }

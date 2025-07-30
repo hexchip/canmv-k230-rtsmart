@@ -4,6 +4,10 @@
 #include <dfs_fs.h>
 #include <dfs_romfs.h>
 
+#if defined (CONFIG_RTSMART_ENABLE_ROMFS)  && CONFIG_RTSMART_ENABLE_ROMFS
+#include "../romfs.c"
+#endif
+
 const struct romfs_dirent _root_dirent[] = {
     {ROMFS_DIRENT_DIR, "bin",     RT_NULL, 0},
     {ROMFS_DIRENT_DIR, "sdcard",  RT_NULL, 0},
@@ -21,6 +25,10 @@ const struct romfs_dirent _root_dirent[] = {
 #ifdef RT_USING_DFS_TMPFS
     {ROMFS_DIRENT_DIR, "etc",     RT_NULL, 0},
     {ROMFS_DIRENT_DIR, "tmp",     RT_NULL, 0},
+#endif
+
+#if defined (CONFIG_RTSMART_ENABLE_ROMFS)  && CONFIG_RTSMART_ENABLE_ROMFS
+    {ROMFS_DIRENT_DIR, "rom", (rt_uint8_t *)_romfs_root, sizeof(_romfs_root) / sizeof(_romfs_root[0])},
 #endif
 };
 
