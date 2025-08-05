@@ -222,6 +222,9 @@ struct i2c_regs
 #define IC_STOP         0x0200
 
 /* i2c interrupt status register definitions */
+#define IC_SCL_STUCK_AT_LOW BIT(14)
+#define IC_MASTER_ON_HOLD BIT(13)
+#define IC_RESTART_DET BIT(12)
 #define IC_GEN_CALL     0x0800
 #define IC_START_DET    0x0400
 #define IC_STOP_DET     0x0200

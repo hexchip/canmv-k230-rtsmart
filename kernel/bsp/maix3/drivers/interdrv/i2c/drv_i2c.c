@@ -306,14 +306,14 @@ static int dw_i2c_xfer(struct chip_i2c_bus* bus)
     writel(IC_TX_ABRT | IC_TX_EMPTY | IC_RX_FULL | IC_STOP_DET, &i2c_base->ic_intr_mask);
     writel(1, &i2c_base->ic_enable);
 
-    ret = rt_event_recv(&bus->event, 1, RT_EVENT_FLAG_OR | RT_EVENT_FLAG_CLEAR, 1000000, 0);
+    ret = rt_event_recv(&bus->event, 1, RT_EVENT_FLAG_OR | RT_EVENT_FLAG_CLEAR, 1000, 0);
     if (ret == RT_EOK) {
         if (bus->tx_abrt) {
             LOG_D("i2c xfer abort: 0x%x", bus->tx_abrt);
             ret = -RT_EIO;
         }
     } else if (ret == -RT_ETIMEOUT) {
-        LOG_E("i2c xfer timeout");
+        LOG_E("i2c xfer timeout, slv 0x%02X", value);
     } else {
         LOG_E("i2c xfer error: %d", ret);
     }
