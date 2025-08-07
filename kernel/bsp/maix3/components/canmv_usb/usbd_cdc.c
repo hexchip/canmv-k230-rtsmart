@@ -1,14 +1,221 @@
+#include <lwp.h>
+#include <lwp_user_mm.h>
+#include <rtthread.h>
+#include <rtdevice.h>
 #include "canmv_usb.h"
-
 #include "usbd_cdc.h"
+
+#ifdef RT_SERIAL_USING_DMA
+
+#include "usbd_core.h"
+#include <dfs_posix.h>
+#include <drivers/serial.h>
+
+struct cdc_device {
+    struct rt_serial_device serial;
+    uint8_t busid;
+    uint8_t in_ep;
+    uint8_t out_ep;
+    struct usbd_interface intf_ctrl;
+    struct usbd_interface intf_data;
+    int cdc_dtr;
+    bool is_open;
+};
+
+#define CDC_MAX_MPS USB_DEVICE_MAX_MPS
+#define CDC_READ_BUFFER_SIZE (4096)
+
+static struct cdc_device g_usbd_serial_cdc_acm;
+
+static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_usbd_serial_cdc_acm_rx_buf[USB_ALIGN_UP(CDC_READ_BUFFER_SIZE, CONFIG_USB_ALIGN_SIZE)];
+
+static rt_err_t cdc_configure(struct rt_serial_device *serial, struct serial_configure* cfg)
+{
+    return RT_EOK;
+}
+
+static rt_err_t cdc_control(struct rt_serial_device *serial, int cmd, void* arg)
+{
+    int ret = RT_EOK;
+    struct cdc_device *cdc;
+
+    cdc = (struct cdc_device *)serial->parent.user_data;
+
+    switch (cmd)
+    {
+    case RT_DEVICE_CTRL_CONFIG: {
+        if (arg == (void *)RT_DEVICE_FLAG_DMA_RX) {
+            cdc->is_open = RT_TRUE;
+            cdc->cdc_dtr = 0;
+        }
+        break;
+    }
+    case CDC_GET_DTR: {
+        if (sizeof(int) != lwp_put_to_user(arg, &cdc->cdc_dtr, sizeof(int))) {
+            USB_LOG_ERR("lwp put error size\n");
+            ret = -RT_EINVAL;
+        }
+        break;
+    }
+    case RT_DEVICE_CTRL_CLOSE: {
+        cdc->is_open = RT_FALSE;
+        break;
+    }
+    case RT_DEVICE_CTRL_CLR_INT:
+        break;
+    default:
+        USB_LOG_ERR("%s: unsupport cmd %d\n", __func__, cmd);
+        ret = RT_EINVAL;
+        break;
+    }
+
+    return ret;
+}
+
+static rt_size_t cdc_transmit(struct rt_serial_device *serial, rt_uint8_t *buf, rt_size_t size, int dir)
+{
+    struct cdc_device *cdc;
+
+    cdc = (struct cdc_device *)serial->parent.user_data;
+
+    if (dir == RT_SERIAL_DMA_TX) {
+        usbd_ep_start_write(cdc->busid, cdc->in_ep, buf, size);
+        return size;
+    }
+
+    return 0;
+}
+
+void usbd_cdc_acm_bulk_out(uint8_t busid, uint8_t ep, uint32_t nbytes)
+{
+    struct cdc_device *cdc;
+
+    cdc = &g_usbd_serial_cdc_acm;
+    if (cdc->is_open) {
+        rt_serial_put_rxfifo(&cdc->serial, g_usbd_serial_cdc_acm_rx_buf, nbytes);
+        rt_hw_serial_isr(&cdc->serial, RT_SERIAL_EVENT_RX_DMADONE);
+    }
+    usbd_ep_start_read(cdc->busid, cdc->out_ep, g_usbd_serial_cdc_acm_rx_buf, CDC_READ_BUFFER_SIZE);
+}
+
+void usbd_cdc_acm_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
+{
+    struct cdc_device *cdc;
+
+    if ((nbytes % CDC_MAX_MPS) == 0 && nbytes) {
+        /* send zlp */
+        usbd_ep_start_write(busid, ep, NULL, 0);
+    } else {
+        cdc = &g_usbd_serial_cdc_acm;
+        rt_hw_serial_isr(&cdc->serial, RT_SERIAL_EVENT_TX_DMADONE);
+    }
+}
+
+void usbd_cdc_acm_set_line_coding(uint8_t busid, uint8_t intf, struct cdc_line_coding *line_coding)
+{
+
+}
+
+void usbd_cdc_acm_get_line_coding(uint8_t busid, uint8_t intf, struct cdc_line_coding *line_coding)
+{
+    line_coding->dwDTERate = 2000000;
+    line_coding->bDataBits = 8;
+    line_coding->bParityType = 0;
+    line_coding->bCharFormat = 0;
+}
+
+void usbd_cdc_acm_set_dtr(uint8_t busid, uint8_t intf, bool dtr)
+{
+    struct cdc_device *cdc;
+
+    cdc = &g_usbd_serial_cdc_acm;
+    cdc->cdc_dtr = (int)dtr;
+    rt_hw_serial_isr(&cdc->serial, RT_SERIAL_EVENT_HOTPLUG);
+}
+
+void usbd_cdc_acm_set_rts(uint8_t busid, uint8_t intf, bool rts)
+{
+
+}
+
+void usbd_cdc_acm_send_break(uint8_t busid, uint8_t intf)
+{
+
+}
+
+void canmv_usb_device_cdc_on_connected(void)
+{
+    struct cdc_device *cdc;
+
+    cdc = &g_usbd_serial_cdc_acm;
+    cdc->cdc_dtr = 0;
+    if (cdc->is_open) {
+        rt_hw_serial_isr(&cdc->serial, RT_SERIAL_EVENT_TX_DMADONE);
+        rt_hw_serial_isr(&cdc->serial, RT_SERIAL_EVENT_HOTPLUG);
+    }
+    usbd_ep_start_read(cdc->busid, cdc->out_ep, g_usbd_serial_cdc_acm_rx_buf, CDC_READ_BUFFER_SIZE);
+}
+
+static const struct rt_uart_ops cdc_ops =
+{
+    .configure = cdc_configure,
+    .control = cdc_control,
+    .dma_transmit = cdc_transmit
+};
+
+rt_err_t usbd_serial_register(struct cdc_device *cdc, void *data)
+{
+    int ret;
+    struct serial_configure config;
+
+    config.bufsz        = CDC_READ_BUFFER_SIZE * 4;
+
+    cdc->serial.ops        = &cdc_ops;
+    cdc->serial.config     = config;
+
+    ret = rt_hw_serial_register(&cdc->serial, "ttyUSB", RT_DEVICE_FLAG_RDWR | RT_DEVICE_FLAG_DMA_RX | RT_DEVICE_FLAG_DMA_TX, cdc);
+
+    return ret;
+}
+
+void canmv_usb_device_cdc_init(void)
+{
+    struct cdc_device *cdc;
+    uint8_t busid = USB_DEVICE_BUS_ID;
+    uint8_t in_ep = CDC_IN_EP, out_ep = CDC_OUT_EP;
+
+    struct usbd_endpoint cdc_out_ep = {
+        .ep_addr = out_ep,
+        .ep_cb = usbd_cdc_acm_bulk_out
+    };
+
+    struct usbd_endpoint cdc_in_ep = {
+        .ep_addr = in_ep,
+        .ep_cb = usbd_cdc_acm_bulk_in
+    };
+
+    cdc = &g_usbd_serial_cdc_acm;
+
+    cdc->is_open = RT_FALSE;
+    cdc->busid = busid;
+    cdc->in_ep = in_ep;
+    cdc->out_ep = out_ep;
+
+    usbd_add_interface(busid, usbd_cdc_acm_init_intf(busid, &cdc->intf_ctrl));
+    usbd_add_interface(busid, usbd_cdc_acm_init_intf(busid, &cdc->intf_data));
+    usbd_add_endpoint(busid, &cdc_out_ep);
+    usbd_add_endpoint(busid, &cdc_in_ep);
+
+    if (usbd_serial_register(cdc, NULL) != RT_EOK) {
+        USB_LOG_ERR("Failed to register usb_serial device\n");
+    }
+}
+
+#else
 
 #include "dfs_poll.h"
 #include "dfs_file.h"
-
 #include "ipc/waitqueue.h"
-#include "rtthread.h"
-#include <lwp.h>
-#include <lwp_user_mm.h>
 
 #define CDC_MAX_MPS USB_DEVICE_MAX_MPS
 
@@ -227,3 +434,4 @@ void usbd_cdc_acm_send_break(uint8_t busid, uint8_t intf)
 {
 
 }
+#endif
