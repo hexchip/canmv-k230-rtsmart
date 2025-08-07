@@ -63,6 +63,8 @@
 #define RT_SERIAL_EVENT_RX_DMADONE      0x03    /* Rx DMA transfer done */
 #define RT_SERIAL_EVENT_TX_DMADONE      0x04    /* Tx DMA transfer done */
 #define RT_SERIAL_EVENT_RX_TIMEOUT      0x05    /* Rx timeout    */
+#define RT_SERIAL_EVENT_HOTPLUG         0x06    /* For gadget hotplug */
+#define RT_SERIAL_EVENT_DISCONNECT      0x07    /* For usb device disconnect */
 
 #define RT_SERIAL_DMA_RX                0x01
 #define RT_SERIAL_DMA_TX                0x02
@@ -132,7 +134,7 @@ struct rt_serial_rx_dma
 struct rt_serial_tx_dma
 {
     rt_bool_t activated;
-    struct rt_data_queue data_queue;
+    struct rt_semaphore tx_done;
 };
 
 struct rt_serial_device
@@ -164,10 +166,12 @@ struct rt_uart_ops
 };
 
 void rt_hw_serial_isr(struct rt_serial_device *serial, int event);
+void rt_serial_put_rxfifo(struct rt_serial_device *serial, const rt_uint8_t *ptr, rt_size_t len);
 
 rt_err_t rt_hw_serial_register(struct rt_serial_device *serial,
                                const char              *name,
                                rt_uint32_t              flag,
                                void                    *data);
+rt_err_t rt_hw_serial_unregister(struct rt_serial_device *serial);
 
 #endif

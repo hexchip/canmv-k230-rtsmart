@@ -74,6 +74,46 @@ void rt_wqueue_wakeup(rt_wqueue_t *queue, void *key)
         rt_schedule();
 }
 
+void rt_wqueue_wakeup_all(rt_wqueue_t *queue, void *key)
+{
+    rt_base_t level;
+    int need_schedule = 0;
+
+    rt_list_t *queue_list;
+    struct rt_list_node *node;
+    struct rt_wqueue_node *entry;
+
+    queue_list = &(queue->waiting_list);
+
+    level = rt_hw_interrupt_disable();
+    /* set wakeup flag in the queue */
+    queue->flag = RT_WQ_FLAG_WAKEUP;
+
+    if (!(rt_list_isempty(queue_list)))
+    {
+        for (node = queue_list->next; node != queue_list; node = node->next)
+        {
+            entry = rt_list_entry(node, struct rt_wqueue_node, list);
+            if (entry->wakeup(entry, key) == 0)
+            {
+                if (!rt_thread_resume(entry->polling_thread))
+                {
+                    need_schedule = 1;
+                }
+                else
+                {
+                    rt_kprintf("%s: Thread resume failed", __func__);
+                }
+            }
+        }
+    }
+    rt_hw_interrupt_enable(level);
+    if (need_schedule)
+        rt_schedule();
+
+    return;
+}
+
 static int _rt_wqueue_wait(rt_wqueue_t *queue, int condition, int msec, int suspend_flag)
 {
     int tick;
