@@ -202,9 +202,9 @@ static uint32_t drv_uart_calc_baud_divisor(struct uart_inst* inst, uint32_t baud
     // Store timeout in inst
     float char_time_s = (float)bits_per_char / actual_baud;
 
-    uint32_t char_time_ticks = rt_tick_from_millisecond((uint32_t)(char_time_s * 1000.f + 0.5f)) * 2;
-    if (char_time_ticks < 2) {
-        char_time_ticks = 2;
+    uint32_t char_time_ticks = rt_tick_from_millisecond((uint32_t)(char_time_s * 1000.f + 0.5f)) * 4;
+    if (char_time_ticks < 3) {
+        char_time_ticks = 3;
     }
     inst->char_tmo_ticks = char_time_ticks;
 
