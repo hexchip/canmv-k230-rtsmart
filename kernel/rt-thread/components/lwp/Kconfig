@@ -20,7 +20,7 @@ if RT_USING_LWP
 
     config LWP_TASK_STACK_SIZE
         int "The lwp thread kernel stack size"
-        default 16384
+        default CONFIG_RTSMART_LWP_APP_STACK_SIZE
 
     config RT_CH_MSG_MAX_NR
         int "The maximum number of channel messages"
