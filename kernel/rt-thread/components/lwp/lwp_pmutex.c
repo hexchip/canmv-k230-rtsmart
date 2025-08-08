@@ -187,6 +187,7 @@ static int _pthread_mutex_init(void *umutex)
         if (lwp_user_object_add(lwp, pmutex->custom_obj) != 0)
         {
             rt_custom_object_destroy(pmutex->custom_obj);
+            rt_mutex_release(&_pmutex_lock);
             rt_set_errno(ENOMEM);
             return -ENOMEM;
         }
