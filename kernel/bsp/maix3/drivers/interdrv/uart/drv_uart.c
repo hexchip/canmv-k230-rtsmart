@@ -437,7 +437,7 @@ static int drv_uart_putc(struct rt_serial_device* serial, char c)
             }
 
             // Timeout occurred
-            rt_kprintf("uart%d putc timeout\n", inst->uart.index);
+            rt_kprintf("urt%d ptc tmo\n", inst->uart.index);
 
             return -RT_ETIMEOUT;
         }
