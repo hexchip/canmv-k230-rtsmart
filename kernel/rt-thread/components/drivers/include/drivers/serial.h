@@ -79,6 +79,11 @@
 #define RT_SERIAL_TX_DATAQUEUE_SIZE     2048
 #define RT_SERIAL_TX_DATAQUEUE_LWM      30
 
+#define UART_IOCTL_SET_CONFIG   _IOW('U', 0, void*)
+#define UART_IOCTL_GET_CONFIG   _IOR('U', 1, void*)
+#define UART_IOCTL_SEND_BREAK   _IOR('U', 2, void*)
+#define UART_IOCTL_GET_DTR      _IOR('U', 3, void*)
+
 /* Default config for serial_configure structure */
 #define RT_SERIAL_CONFIG_DEFAULT           \
 {                                          \

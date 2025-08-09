@@ -12,8 +12,6 @@
 extern "C" {
 #endif
 
-#define CDC_GET_DTR                 _IOR('c', 1, int)
-
 /* Init cdc acm interface driver */
 struct usbd_interface *usbd_cdc_acm_init_intf(uint8_t busid, struct usbd_interface *intf);
 

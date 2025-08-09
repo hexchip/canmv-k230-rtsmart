@@ -50,19 +50,50 @@ static rt_err_t cdc_control(struct rt_serial_device *serial, int cmd, void* arg)
         }
         break;
     }
-    case CDC_GET_DTR: {
-        if (sizeof(int) != lwp_put_to_user(arg, &cdc->cdc_dtr, sizeof(int))) {
-            USB_LOG_ERR("lwp put error size\n");
-            ret = -RT_EINVAL;
-        }
-        break;
-    }
     case RT_DEVICE_CTRL_CLOSE: {
         cdc->is_open = RT_FALSE;
         break;
     }
-    case RT_DEVICE_CTRL_CLR_INT:
-        break;
+    case RT_DEVICE_CTRL_CLR_INT: {
+
+    } break;
+    /* Added*/
+    case UART_IOCTL_SET_CONFIG: {
+
+    } break;
+    case UART_IOCTL_GET_CONFIG: {
+        if (!arg) {
+            USB_LOG_ERR("arg is NULL");
+            return -RT_EINVAL;
+        }
+
+        if (lwp_in_user_space(arg)) {
+            if (sizeof(serial->config) != lwp_put_to_user(arg, &serial->config, sizeof(serial->config))) {
+                USB_LOG_ERR("lwp put error size");
+                return -RT_EINVAL;
+            }
+        } else {
+            rt_memcpy(arg, &serial->config, sizeof(serial->config));
+        }
+    } break;
+    case UART_IOCTL_SEND_BREAK: {
+        return RT_EOK;
+    } break;
+    case UART_IOCTL_GET_DTR: {
+        if(!arg) {
+            USB_LOG_ERR("arg is NULL");
+            return -RT_EINVAL;
+        }
+
+        if(lwp_in_user_space(arg)) {
+            if (sizeof(int) != lwp_put_to_user(arg, &cdc->cdc_dtr, sizeof(int))) {
+                USB_LOG_ERR("lwp put error size\n");
+                ret = -RT_EINVAL;
+            }
+        } else {
+            *((int *)arg) = cdc->cdc_dtr;
+        }
+    } break;
     default:
         USB_LOG_ERR("%s: unsupport cmd %d\n", __func__, cmd);
         ret = RT_EINVAL;
@@ -303,7 +334,7 @@ static int cdc_ioctl(struct dfs_fd *fd, int cmd, void *args)
     int ret = RT_EOK;
 
     switch (cmd) {
-    case CDC_GET_DTR:
+    case UART_IOCTL_GET_DTR:
         if (sizeof(int) != lwp_put_to_user(args, &cdc_dtr, sizeof(int))) {
             USB_LOG_ERR("lwp put error size\n");
             ret = -RT_EINVAL;

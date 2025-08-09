@@ -108,10 +108,6 @@
 #define write32(addr, value) writel(value, addr)
 #define read32(addr)         readl(addr)
 
-#define UART_IOCTL_SET_CONFIG _IOW('U', 0, void*)
-#define UART_IOCTL_GET_CONFIG _IOR('U', 1, void*)
-#define UART_IOCTL_SEND_BREK  _IOR('U', 2, void*)
-
 typedef enum _uart_receive_trigger {
     UART_RECEIVE_FIFO_1,
     UART_RECEIVE_FIFO_8,
@@ -376,15 +372,27 @@ static rt_err_t drv_uart_control(struct rt_serial_device* serial, int cmd, void*
     } break;
     case UART_IOCTL_SET_CONFIG: {
         if (arg) {
-            struct serial_configure* pconfig = (struct serial_configure*)arg;
-            if (pconfig->bufsz != serial->config.bufsz && serial->parent.ref_count) {
+            struct serial_configure _config;
+
+            if (lwp_in_user_space(arg)) {
+                if (sizeof(_config) != lwp_get_from_user(&_config, arg, sizeof(_config))) {
+                    LOG_E("lwp get error size");
+                    return -RT_EINVAL;
+                }
+            } else {
+                rt_memcpy(&_config, arg, sizeof(_config));
+            }
+
+            if (_config.bufsz != serial->config.bufsz && serial->parent.ref_count) {
                 /*can not change buffer size*/
                 LOG_W("Can not change uart%d configure", inst->uart.index);
 
                 return RT_EBUSY;
             }
+
             /* set serial configure */
-            rt_memcpy(&serial->config, arg, sizeof(serial->config));
+            rt_memcpy(&serial->config, &_config, sizeof(serial->config));
+
             if (serial->parent.ref_count) {
                 /* serial device has been opened, to configure it */
                 drv_uart_configure(serial, (struct serial_configure*)&serial->config);
@@ -392,11 +400,21 @@ static rt_err_t drv_uart_control(struct rt_serial_device* serial, int cmd, void*
         }
     } break;
     case UART_IOCTL_GET_CONFIG: {
-        if (arg) {
+        if (!arg) {
+            LOG_W("arg is NULL");
+            return -RT_EINVAL;
+        }
+
+        if (lwp_in_user_space(arg)) {
+            if (sizeof(serial->config) != lwp_put_to_user(arg, &serial->config, sizeof(serial->config))) {
+                LOG_E("lwp put error size");
+                return -RT_EINVAL;
+            }
+        } else {
             rt_memcpy(arg, &serial->config, sizeof(serial->config));
         }
     } break;
-    case UART_IOCTL_SEND_BREK: {
+    case UART_IOCTL_SEND_BREAK: {
         // Wait for TX to become idle
         while (!(read32(uart_base + UART_LSR) & UART_LSR_TEMT)) { }
 
@@ -407,6 +425,23 @@ static rt_err_t drv_uart_control(struct rt_serial_device* serial, int cmd, void*
 
         // Clear break
         write32(uart_base + UART_LCR, lcr & ~UART_LCR_SBRK);
+    } break;
+    case UART_IOCTL_GET_DTR: {
+        if (!arg) {
+            LOG_W("arg is NULL");
+            return -RT_EINVAL;
+        }
+
+        if (lwp_in_user_space(arg)) {
+            int dtr = 1;
+
+            if (sizeof(int) != lwp_put_to_user(arg, &dtr, sizeof(int))) {
+                LOG_E("lwp put error size");
+                return -RT_EINVAL;
+            }
+        } else {
+            *((int*)arg) = 1; // DTR is always set
+        }
     } break;
     default:
         LOG_E("Invalid cmd 0x%x\n", cmd);
