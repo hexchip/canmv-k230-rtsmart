@@ -383,11 +383,16 @@ static rt_err_t drv_uart_control(struct rt_serial_device* serial, int cmd, void*
                 rt_memcpy(&_config, arg, sizeof(_config));
             }
 
-            if (_config.bufsz != serial->config.bufsz && serial->parent.ref_count) {
-                /*can not change buffer size*/
-                LOG_W("Can not change uart%d configure", inst->uart.index);
+            if (0x00 == _config.bufsz) {
+                // Use default buffer size if not specified
+                _config.bufsz = serial->config.bufsz;
+            } else {
+                if (_config.bufsz != serial->config.bufsz && serial->parent.ref_count) {
+                    /*can not change buffer size*/
+                    LOG_W("Can not change uart%d configure", inst->uart.index);
 
-                return RT_EBUSY;
+                    return RT_EBUSY;
+                }
             }
 
             /* set serial configure */
