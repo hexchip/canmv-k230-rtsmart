@@ -99,7 +99,8 @@ static int usb_control_msg(struct usbh_hubport *hport, uint8_t request, uint8_t 
 
 static struct uvc_buffer *get_uvc_buf()
 {
-    struct uvc_buffer *uvc_buf = &uvc_queue.buffer[uvc_queue.count];
+    struct uvc_buffer *_uvc_buf = &uvc_queue.buffer[uvc_queue.count];
+    struct uvc_buffer *uvc_buf = _uvc_buf;
 
     rt_base_t level;
     level = rt_hw_interrupt_disable();
@@ -110,6 +111,9 @@ static struct uvc_buffer *get_uvc_buf()
 
     if (!rt_list_isempty(&uvc_queue.irq_queue)) {
         uvc_buf = rt_list_first_entry(&uvc_queue.irq_queue, struct uvc_buffer, irq);
+        if (vb_inquire_user_cnt(uvc_buf->handle) != 1) {
+            uvc_buf = _uvc_buf;
+        }
     }
 #if 0
     else {
