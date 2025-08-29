@@ -269,7 +269,6 @@ static int dw_i2c_init(struct chip_i2c_bus* bus)
     writel(IC_CON_SD | IC_CON_RE | IC_CON_SPD_FS | IC_CON_MM | DW_IC_CON_STOP_DET_IFADDRESSED | DW_IC_CON_TX_EMPTY_CTRL, &i2c_base->ic_con);
     writel(IC_FIFO_DEPTH / 2 - 1, &i2c_base->ic_rx_tl);
     writel(IC_FIFO_DEPTH / 2 - 1, &i2c_base->ic_tx_tl);
-
     dw_i2c_set_bus_speed(bus, I2C_FAST_SPEED);
 
     rt_event_init(&bus->event, "i2c_event", RT_IPC_FLAG_PRIO);
@@ -752,6 +751,9 @@ int rt_hw_i2c_init(void)
             rt_i2c_bus_device_register(&i2c_buses[i].parent, i2c_buses[i].device_name);
         }
     }
+#ifdef CONFIG_BOARD_K230_LABPLUS_1956
+    dw_i2c_set_bus_speed(&i2c_buses[4], I2C_STANDARD_SPEED);
+#endif
 
     return 0;
 }
