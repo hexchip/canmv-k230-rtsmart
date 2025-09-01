@@ -548,9 +548,13 @@ static rt_uint32_t drv_spi_xfer(struct rt_spi_device* device, struct rt_spi_mess
         spi->txftlr = ((SSIC_TX_ABW / 2) << 16) | (SSIC_TX_ABW / 2);
         spi->rxftlr = count >= (SSIC_RX_ABW / 2) ? (SSIC_RX_ABW / 2 - 1) : count - 1;
         spi->dmacr = 0;
-        spi->imr = (1 << 4) | (1 << 0);
+        if (tmod == SPI_TMOD_TO)
+            spi->imr = (1 << 0);
+        else if (tmod == SPI_TMOD_RO)
+            spi->imr = (1 << 4);
+        else
+            spi->imr = (1 << 4) | (1 << 0);
         rt_event_control(&spi_bus->event, RT_IPC_CMD_RESET, 0);
-
         // must set ser
         if(0x00 == (cfg->parent.hard_cs & 0x7F)) {
             spi->ser = BIT(0); // default select cs0
@@ -558,8 +562,10 @@ static rt_uint32_t drv_spi_xfer(struct rt_spi_device* device, struct rt_spi_mess
             spi->ser = cfg->parent.hard_cs & 0x7F;
         }
         spi->ssienr = 1;
-        if (tmod == SPI_TMOD_RO)
+        if (tmod == SPI_TMOD_RO) {
+            spi->txftlr = 0;
             spi->dr[0] = 0;
+        }
         rt_uint32_t event;
         rt_err_t err;
     loop:
@@ -606,7 +612,6 @@ static rt_uint32_t drv_spi_xfer(struct rt_spi_device* device, struct rt_spi_mess
                 spi->ctrlr1 = count - 1;
                 spi->ssienr = 1;
                 spi->dr[0] = 0;
-                spi->dr[0] = 0;
             }
         }
         goto loop;
@@ -641,6 +646,8 @@ static void spi_irq(int vector, void* param)
     if (vector == SSI_TXE) {
         if (spi_bus->send_buf == NULL) {
             spi->imr &= ~1;
+            LOG_E("spi%d send_buf is null", spi_bus->idx);
+            return;
         } else if (spi_bus->cell_size == 1) {
             while ((spi_bus->send_length) && (spi->sr & 2)) {
                 spi->dr[0] = *((uint8_t *)spi_bus->send_buf);
@@ -660,13 +667,11 @@ static void spi_irq(int vector, void* param)
                 spi_bus->send_length--;
             }
         } else {
+            spi->imr &= ~1;
             LOG_E("spi%d datawidth error", spi_bus->idx);
+            return;
         }
         if (spi_bus->send_length == 0) {
-            if ((spi->ctrlr0 >> 10) & SPI_TMOD_EPROMREAD == SPI_TMOD_TO) {
-                if (spi->txftlr)
-                    return;
-            }
             spi->txftlr = 0;
             spi->imr &= ~1;
             rt_event_send(&spi_bus->event, BIT(SSI_TXE));
@@ -674,6 +679,8 @@ static void spi_irq(int vector, void* param)
     } else if (vector == SSI_RXF) {
         if (spi_bus->recv_buf == NULL) {
             spi->imr &= ~0x10;
+            LOG_E("spi%d recv_buf is null", spi_bus->idx);
+            return;
         } else if (spi_bus->cell_size == 1) {
             while ((spi_bus->recv_length) && (spi->sr & 8)) {
                 *((uint8_t *)spi_bus->recv_buf) = spi->dr[0];
@@ -693,7 +700,9 @@ static void spi_irq(int vector, void* param)
                 spi_bus->recv_length--;
             }
         } else {
+            spi->imr &= ~0x10;
             LOG_E("spi%d datawidth error", spi_bus->idx);
+            return;
         }
         if (spi_bus->recv_length == 0) {
             spi->imr &= ~0x10;
