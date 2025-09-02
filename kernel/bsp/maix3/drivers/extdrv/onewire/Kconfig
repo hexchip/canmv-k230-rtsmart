@@ -1,0 +1,3 @@
+menuconfig RT_USING_ONEWIRE
+    bool "Enable OneWire"
+    default n
