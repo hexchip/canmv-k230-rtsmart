@@ -272,21 +272,18 @@ static rt_size_t drv_touch_read(struct rt_touch_device *touch, void *buf, rt_siz
     rt_size_t req_finger_num = len / sizeof(struct rt_touch_data);
     struct rt_touch_data *req_point = (struct rt_touch_data *)buf;
 
+    // This is the single source of truth for the touch state
     static int last_finger_num = 0;
     static struct rt_touch_data last_point[TOUCH_MAX_POINT_NUMBER];
 
-    rt_tick_t timestamp = 0;
-
-    int return_point_num = 0;
-    struct rt_touch_data *current_point;
-
     while(1) {
-        // if we can't recv reg buffer from mq, return 0 as no touch data
         if(RT_EOK != rt_mq_recv(&dev->thr.read_mq, &reg, sizeof(reg), rt_tick_from_millisecond(3))) {
+            // No touch data, but we might need to generate an UP event
+            if (last_finger_num > 0) {
+                break;
+            }
             return 0;
         }
-
-        // if the reg data is push to queue 1s before, we use it
         time = rt_tick_get() - reg.time;
         if(one_sec_tick > time) {
             break;
@@ -294,74 +291,67 @@ static rt_size_t drv_touch_read(struct rt_touch_device *touch, void *buf, rt_siz
     }
 
     if(dev->dev.parse_register) {
+        // When finger is lifted, parse_register might return 0 points. This is expected.
         if(0x00 != dev->dev.parse_register(dev, &reg, &point)) {
             LOG_E("Touch parse register failed.");
             return 0;
         }
 
-        current_point = &point.point[0];
-        return_point_num = point.point_num;
-        timestamp =  rt_tick_get();
+        int current_finger_num = point.point_num;
+        // Temporary buffer to hold all generated events (down, move, up)
+        struct rt_touch_data all_events[TOUCH_MAX_POINT_NUMBER];
+        int total_events = 0;
+        rt_tick_t timestamp = rt_tick_get();
 
-        // Process the current touch point
-        for (int i = 0; i < return_point_num; i++) {
-            rt_bool_t is_new_finger = RT_TRUE;
-            struct rt_touch_data *new_touch = &current_point[i];
+        // PART 1: Determine DOWN and MOVE events
+        for (int i = 0; i < current_finger_num; i++) {
+            struct rt_touch_data *current_touch = &point.point[i];
+            rt_bool_t is_new = RT_TRUE;
             
-            // Check if it is a new finger (event down)
             for (int j = 0; j < last_finger_num; j++) {
-                if (last_point[j].track_id == new_touch->track_id) {
-                    is_new_finger = RT_FALSE;
+                if (current_touch->track_id == last_point[j].track_id) {
+                    current_touch->event = RT_TOUCH_EVENT_MOVE;
+                    is_new = RT_FALSE;
                     break;
                 }
             }
-            
-            // Set the event type
-            if (is_new_finger) {
-                new_touch->event = RT_TOUCH_EVENT_DOWN;  // new finger: down event
-                LOG_D("Finger %d: Down, Timestamp = %ld", 
-                      new_touch->track_id, timestamp);
-            } else {
-                new_touch->event = RT_TOUCH_EVENT_MOVE;  // old finger: move event
+            if (is_new) {
+                current_touch->event = RT_TOUCH_EVENT_DOWN;
             }
+            current_touch->timestamp = timestamp;
+            rt_memcpy(&all_events[total_events++], current_touch, sizeof(struct rt_touch_data));
         }
 
-        // up event
+        // PART 2: Determine UP events
         for (int i = 0; i < last_finger_num; i++) {
-            struct rt_touch_data *last_touch = &last_point[i];
-            rt_bool_t finger_lifted = RT_TRUE;
-            
-            // Check if the finger still exists
-            for (int j = 0; j < return_point_num; j++) {
-                if (current_point[j].track_id == last_touch->track_id) {
-                    finger_lifted = RT_FALSE;
+            rt_bool_t is_lifted = RT_TRUE;
+            for (int j = 0; j < current_finger_num; j++) {
+                if (last_point[i].track_id == point.point[j].track_id) {
+                    is_lifted = RT_FALSE;
                     break;
                 }
             }
-            
-            // if not exist. Generate a up event
-            if (finger_lifted) {
-                if (return_point_num < TOUCH_MAX_POINT_NUMBER) {
-                    struct rt_touch_data *up_event = &current_point[return_point_num];
-                    rt_memcpy(up_event, last_touch, sizeof(struct rt_touch_data));
-                    up_event->event = RT_TOUCH_EVENT_UP;
-                    up_event->timestamp = timestamp;
-                    return_point_num++;
+            if (is_lifted) {
+                if (total_events < TOUCH_MAX_POINT_NUMBER) {
+                    rt_memcpy(&all_events[total_events], &last_point[i], sizeof(struct rt_touch_data));
+                    all_events[total_events].event = RT_TOUCH_EVENT_UP;
+                    all_events[total_events].timestamp = timestamp;
+                    total_events++;
                 }
             }
         }
 
-        // update last point data
-        last_finger_num = point.point_num;
-        rt_memcpy(last_point, current_point, sizeof(struct rt_touch_data) * point.point_num);
-        
-        // copy data to user buffer
-        req_finger_num = (req_finger_num > return_point_num) ? return_point_num : req_finger_num;
-        req_buffer_size = req_finger_num * sizeof(struct rt_touch_data);
+        // PART 3: Update state for the next cycle
+        last_finger_num = current_finger_num;
+        rt_memcpy(last_point, &point.point[0], current_finger_num * sizeof(struct rt_touch_data));
 
-        memcpy(req_point, current_point, req_buffer_size);
-
-        return req_buffer_size;
+        // PART 4: Copy final event list to user buffer
+        if (total_events > 0) {
+            req_finger_num = (req_finger_num > total_events) ? total_events : req_finger_num;
+            req_buffer_size = req_finger_num * sizeof(struct rt_touch_data);
+            memcpy(req_point, all_events, req_buffer_size);
+            return req_buffer_size;
+        }
     } else {
         LOG_W("Touch device not impl parse_register.");
     }
