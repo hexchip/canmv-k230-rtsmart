@@ -103,12 +103,12 @@ static rt_err_t onewire_reset(struct onewire_rdwr_t* cfg)
         }
     }
 
-    kd_pin_set_dr(pin, 0);
+    kd_pin_write(pin, 0);
     level = rt_hw_interrupt_disable();
     cpu_ticks_delay_us(timing1);
-    kd_pin_set_dr(pin, 1);
+    kd_pin_write(pin, 1);
     cpu_ticks_delay_us(timing2);
-    status = kd_pin_get_dr(pin);
+    status = kd_pin_read(pin);
     rt_hw_interrupt_enable(level);
     cpu_ticks_delay_us(timing3);
 
@@ -123,13 +123,13 @@ static inline void onewire_write_bit(int pin, uint16_t timing1, uint16_t timing2
 
     level = rt_hw_interrupt_disable();
 
-    kd_pin_set_dr(pin, 0);
+    kd_pin_write(pin, 0);
     cpu_ticks_delay_us(timing1);
     if (value) {
-        kd_pin_set_dr(pin, 1);
+        kd_pin_write(pin, 1);
     }
     cpu_ticks_delay_us(timing2);
-    kd_pin_set_dr(pin, 1);
+    kd_pin_write(pin, 1);
     cpu_ticks_delay_us(timing3);
     rt_hw_interrupt_enable(level);
 }
@@ -144,7 +144,7 @@ static rt_err_t onewire_write_byte(struct onewire_rdwr_t* cfg)
     int value = cfg->data & 0xFF;
 
     rt_enter_critical();
-    kd_pin_set_dr(pin, 1);
+    kd_pin_write(pin, 1);
     for (int i = 0; i < 8; i++) {
         onewire_write_bit(pin, timing1, timing2, timing3, value & 0x01);
         value >>= 1;
@@ -159,13 +159,13 @@ static inline int onewire_read_bit(int pin, uint16_t timing1, uint16_t timing2, 
     rt_base_t level;
     int       value;
 
-    kd_pin_set_dr(pin, 1);
+    kd_pin_write(pin, 1);
     level = rt_hw_interrupt_disable();
-    kd_pin_set_dr(pin, 0);
+    kd_pin_write(pin, 0);
     cpu_ticks_delay_us(timing1);
-    kd_pin_set_dr(pin, 1);
+    kd_pin_write(pin, 1);
     cpu_ticks_delay_us(timing2);
-    value = kd_pin_get_dr(pin);
+    value = kd_pin_read(pin);
     rt_hw_interrupt_enable(level);
     cpu_ticks_delay_us(timing3);
 
@@ -207,7 +207,7 @@ static rt_err_t onewire_search_rom(struct onwwire_search_rom_t* cfg)
     cpu_ticks_delay_us(1);
 
     /* write byte 0xF0 */
-    kd_pin_set_dr(pin, 1);
+    kd_pin_write(pin, 1);
     rt_enter_critical();
     for (int i = 0; i < 8; i++) {
         onewire_write_bit(pin, TIMING_WRITE1, TIMING_WRITE2, TIMING_WRITE3, (0xF0 >> i) & 0x01);
@@ -245,7 +245,7 @@ static rt_err_t onewire_search_rom(struct onwwire_search_rom_t* cfg)
                 }
             }
 
-            kd_pin_set_dr(pin, 1);
+            kd_pin_write(pin, 1);
             onewire_write_bit(pin, TIMING_WRITE1, TIMING_WRITE2, TIMING_WRITE3, b1);
 
             if (b1) {
@@ -275,7 +275,7 @@ static rt_err_t pin_pulse_us(struct pin_pulse_t* cfg)
 
     start = cpu_ticks_us();
 
-    while (kd_pin_get_dr(pin) != pulse_level) {
+    while (kd_pin_read(pin) != pulse_level) {
         if ((cpu_ticks_us() - start) >= timeout_us) {
             cfg->result = -2;
 
@@ -285,7 +285,7 @@ static rt_err_t pin_pulse_us(struct pin_pulse_t* cfg)
     }
 
     start = cpu_ticks_us();
-    while (kd_pin_get_dr(pin) == pulse_level) {
+    while (kd_pin_read(pin) == pulse_level) {
         if ((cpu_ticks_us() - start) >= timeout_us) {
             cfg->result = -1;
 
