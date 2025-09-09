@@ -1589,7 +1589,7 @@ int dwc2_hcd_init(struct dwc2_hsotg *hsotg)
     if (hsotg->params.dma_desc_enable ||
         hsotg->params.dma_desc_fs_enable) {
 
-        hsotg->desc_gen_cache = rt_mp_create_align("dwc2-gen-desc", 10,
+        hsotg->desc_gen_cache = rt_mp_create_align("dwc2-gen-desc", 40,
                                              sizeof(struct dwc2_dma_desc) *
                                              MAX_DMA_DESC_NUM_GENERIC, 0x1000);
         if (!hsotg->desc_gen_cache) {
@@ -3392,7 +3392,7 @@ int usbh_submit_urb(struct usbh_urb *urb)
     atomic_inc(&urb->use_count);
     ret = usbh_enqueue_urb(urb);
     if (ret != 0) {
-        USB_LOG_ERR("submit urb fail urb = %p\n", urb);
+        USB_LOG_ERR("submit urb fail urb = %p, ret = %d\n", urb, ret);
         atomic_dec(&urb->use_count);
         if (atomic_read(&urb->reject)) {
             rt_wqueue_wakeup(&kill_urb_queue, 0);

@@ -1047,6 +1047,7 @@ struct giveback_urb_bh {
         u16 periodic_usecs;
         DECLARE_BITMAP(hs_periodic_bitmap, DWC2_HS_SCHEDULE_US);
         u16 periodic_qh_count;
+        volatile int periodic_qh_inst_count;
         bool new_connection;
 
         u16 last_frame_num;

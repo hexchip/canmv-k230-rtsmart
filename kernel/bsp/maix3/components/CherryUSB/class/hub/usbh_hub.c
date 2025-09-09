@@ -317,13 +317,23 @@ static void hub_int_complete_callback(void *arg, int nbytes)
     if (nbytes > 0) {
         USB_LOG_DBG("wake hub\n");
         usbh_hub_thread_wakeup(hub);
-    } else if (nbytes == -USB_ERR_NAK) {
+    }
+#ifndef CHERRY_USB_HC_DRV_DWC2
+    else if (nbytes == -USB_ERR_NAK) {
         /* Restart timer to submit urb again */
         USB_LOG_DBG("Restart timer\r\n");
         usb_osal_timer_start(hub->int_timer);
     } else if (nbytes == -USB_ERR_DT) {
         usbh_submit_urb(&hub->intin_urb);
     }
+#else
+    else if (nbytes == -ECONNRESET){
+        USB_LOG_DBG("hub disconnect\r\n");
+    } else {
+        USB_LOG_ERR("%s: %d", __func__, nbytes);
+    }
+    usbh_submit_urb(&hub->intin_urb);
+#endif
 }
 
 static void hub_int_timeout(void *arg)
@@ -372,7 +382,7 @@ static int usbh_hub_connect(struct usbh_hubport *hport, uint8_t intf)
         break;
     case USB_HUB_PR_HS_MULTI_TT:
         ret = usbh_set_interface(hport, 0, 1);
-        if (ret == 0) {
+        if (ret > 0) {
             USB_LOG_INFO("TT per port\n");
             hub->tt.multi = 1;
         } else
@@ -736,10 +746,12 @@ static void usbh_hub_events(struct usbh_hub *hub)
         }
     }
 
+#ifndef CHERRY_USB_HC_DRV_DWC2
     /* Start next hub int transfer */
     if (!hub->is_roothub && hub->connected) {
         usb_osal_timer_start(hub->int_timer);
     }
+#endif
 }
 
 static void usbh_hub_thread(void *argument)

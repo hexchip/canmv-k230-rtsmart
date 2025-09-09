@@ -40,10 +40,34 @@ unsigned long gcd(unsigned long a, unsigned long b);
     (*(volatile typeof(*(ptr)) *)(ptr))--;                          \
     rt_hw_interrupt_enable(level);                                  \
  })
+
+#define atomic_dec_and_test(ptr)                                    \
+({                                                                  \
+    rt_base_t level;                                                \
+    typeof(*(ptr)) old_val;                                         \
+    level = rt_hw_interrupt_disable();                              \
+    old_val = (*(volatile typeof(*(ptr)) *)(ptr));                  \
+    (*(volatile typeof(*(ptr)) *)(ptr))--;                          \
+    rt_hw_interrupt_enable(level);                                  \
+    (old_val == 1);                                                 \
+})
+
+#define atomic_inc_and_test(ptr)                                    \
+({                                                                  \
+    rt_base_t level;                                                \
+    typeof(*(ptr)) old_val;                                         \
+    level = rt_hw_interrupt_disable();                              \
+    old_val = (*(volatile typeof(*(ptr)) *)(ptr));                  \
+    (*(volatile typeof(*(ptr)) *)(ptr))++;                          \
+    rt_hw_interrupt_enable(level);                                  \
+    (old_val == -1);                                                \
+})
 #else
 #define atomic_add(ptr, inc) __sync_fetch_and_add(ptr, inc)
 #define atomic_inc(ptr) atomic_add(ptr, 1)
 #define atomic_dec(ptr) atomic_add(ptr, -1)
+#define atomic_dec_and_test(ptr) (0 == __sync_sub_and_fetch(ptr, 1))
+#define atomic_inc_and_test(ptr) (0 == __sync_add_and_fetch(ptr, 1))
 #endif
 
 rt_mp_t rt_mp_create_align(const char *name, rt_size_t block_count, rt_size_t block_size,

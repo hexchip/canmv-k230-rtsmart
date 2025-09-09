@@ -713,6 +713,11 @@ static void dwc2_per_sched_disable(struct dwc2_hsotg *hsotg)
 
     level = rt_spin_lock_irqsave(&hsotg->lock);
 
+    if (atomic_read(&hsotg->periodic_qh_inst_count)) {
+        rt_spin_unlock_irqrestore(&hsotg->lock, level);
+        return;
+    }
+
     hcfg = dwc2_readl(hsotg, HCFG);
     if (!(hcfg & HCFG_PERSCHEDENA)) {
         /* already disabled */
@@ -733,7 +738,7 @@ static void dwc2_frame_list_free(struct dwc2_hsotg *hsotg)
 
     level = rt_spin_lock_irqsave(&hsotg->lock);
 
-    if (!hsotg->frame_list) {
+    if (!hsotg->frame_list || atomic_read(&hsotg->periodic_qh_inst_count)) {
         rt_spin_unlock_irqrestore(&hsotg->lock, level);
         return;
     }
@@ -776,7 +781,7 @@ void dwc2_hcd_qh_free_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh)
 
     if ((qh->ep_type == USB_ENDPOINT_XFER_ISOC ||
          qh->ep_type == USB_ENDPOINT_XFER_INT) &&
-        (hsotg->params.uframe_sched ||
+        ((hsotg->params.uframe_sched && atomic_dec_and_test(&hsotg->periodic_qh_inst_count)) ||
          !hsotg->periodic_channels) && hsotg->frame_list) {
         dwc2_per_sched_disable(hsotg);
         dwc2_frame_list_free(hsotg);
@@ -814,6 +819,7 @@ int dwc2_hcd_qh_init_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh,
 
     if (qh->ep_type == USB_ENDPOINT_XFER_ISOC ||
         qh->ep_type == USB_ENDPOINT_XFER_INT) {
+        atomic_inc(&hsotg->periodic_qh_inst_count);
         if (!hsotg->frame_list) {
             retval = dwc2_frame_list_alloc(hsotg, mem_flags);
             if (retval)
@@ -827,6 +833,7 @@ int dwc2_hcd_qh_init_ddma(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh,
     return 0;
 
 err1:
+    atomic_dec(&hsotg->periodic_qh_inst_count);
     dwc2_desc_list_free(hsotg, qh);
 err0:
     return retval;
