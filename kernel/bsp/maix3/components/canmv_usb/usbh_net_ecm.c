@@ -75,7 +75,7 @@ void usbh_cdc_ecm_run(struct usbh_cdc_ecm *cdc_ecm_class)
     cdc_ecm_dev.eth_tx = rt_usbh_cdc_ecm_eth_tx;
     cdc_ecm_dev.parent.user_data = cdc_ecm_class;
 
-    eth_device_init(&cdc_ecm_dev, "u0");
+    eth_device_init(&cdc_ecm_dev, CANMV_USB_HOST_NET_LTE_DEV_NAME);
     eth_device_linkchange(&cdc_ecm_dev, RT_TRUE);
 
     usb_osal_thread_create("usbh_cdc_ecm_rx", 4096, CONFIG_USBHOST_PSC_PRIO + 1, usbh_cdc_ecm_rx_thread, cdc_ecm_dev.netif);

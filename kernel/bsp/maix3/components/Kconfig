@@ -214,6 +214,10 @@ menu "Components Configuration"
                         string
                         default "u0"
 
+                    config CANMV_USB_HOST_NET_LTE_DEV_NAME
+                        string
+                        default "u1"
+
                         endif
         endif
 
