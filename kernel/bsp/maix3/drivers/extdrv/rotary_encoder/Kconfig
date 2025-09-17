@@ -1,0 +1,3 @@
+menuconfig RT_USING_ROTARY_ENCODER
+    bool "Enable Rotary Encoder"
+    default n
