@@ -27,33 +27,41 @@
 #define __DRV_ROTARY_ENCODER_H__
 
 #include <stdint.h>
-#include <rtdef.h>
 
 /* Encoder direction definitions */
-#define ENCODER_DIR_CW   1    /* Clockwise */
-#define ENCODER_DIR_CCW  0xFF /* Counter-clockwise */
-#define ENCODER_DIR_NONE 0    /* No movement */
+#define ENCODER_DIR_CW   1 /* Clockwise */
+#define ENCODER_DIR_CCW  2 /* Counter-clockwise */
+#define ENCODER_DIR_NONE 0 /* No movement */
 
 /* IOCTL commands */
-#define ENCODER_CMD_GET_DATA   _IOR('E', 1, struct encoder_data*)
-#define ENCODER_CMD_RESET      _IO('E', 2)
-#define ENCODER_CMD_SET_COUNT  _IOW('E', 3, int64_t*)
-#define ENCODER_CMD_CONFIG     _IOW('E', 4, struct encoder_config*)
-#define ENCODER_CMD_WAIT_DATA  _IOW('E', 5, int32_t*)
+#define ENCODER_CMD_GET_DATA  _IOR('E', 1, struct encoder_data*)
+#define ENCODER_CMD_RESET     _IO('E', 2)
+#define ENCODER_CMD_SET_COUNT _IOW('E', 3, int64_t*)
+#define ENCODER_CMD_CONFIG    _IOW('E', 4, struct encoder_dev_cfg_t*)
+#define ENCODER_CMD_WAIT_DATA _IOW('E', 5, int32_t*)
 
 /* Data structures */
 struct encoder_data {
-    int32_t  delta;        /* Change since last read */
-    int64_t  total_count;  /* Total count */
-    uint8_t  direction;    /* Last direction */
+    int32_t  delta; /* Change since last read */
+    int64_t  total_count; /* Total count */
+    uint8_t  direction; /* Last direction */
     uint8_t  button_state; /* Button pressed state */
-    uint32_t timestamp;    /* Tick timestamp */
+    uint32_t timestamp; /* Tick timestamp */
 };
 
-struct encoder_config {
-    int clk_pin;     /* Clock/A phase pin */
-    int dt_pin;      /* Data/B phase pin */
-    int sw_pin;      /* Switch/button pin (use -1 if not connected) */
+struct encoder_pin_cfg_t {
+    int clk_pin; /* Clock/A phase pin */
+    int dt_pin; /* Data/B phase pin */
+    int sw_pin; /* Switch/button pin (use -1 if not connected) */
 };
+
+struct encoder_dev_cfg_t {
+    int index;
+
+    struct encoder_pin_cfg_t cfg;
+};
+
+int encoder_dev_create(struct encoder_dev_cfg_t* cfg);
+int encoder_dev_delete(int index);
 
 #endif /* __DRV_ROTARY_ENCODER_H__ */

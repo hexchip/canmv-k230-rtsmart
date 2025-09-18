@@ -25,13 +25,17 @@ extern "C" {
 #define LWP_GET_FROM_USER(dst, src, type)                                                                                      \
     ({                                                                                                                         \
         int __ret = 0;                                                                                                         \
-        if (lwp_self() != NULL) {                                                                                              \
-            if (sizeof(type) != lwp_get_from_user((dst), (src), sizeof(type))) {                                               \
-                rt_kprintf("get from user failed, type %s\n", #type);                                                          \
-                __ret = -1;                                                                                                    \
-            }                                                                                                                  \
+        if (!(dst) || !(src)) {                                                                                                \
+            __ret = -2;                                                                                                        \
         } else {                                                                                                               \
-            memcpy((dst), (src), sizeof(type));                                                                                \
+            if ((lwp_self() != NULL) && lwp_user_accessable((src), sizeof(type))) {                                            \
+                if (sizeof(type) != lwp_get_from_user((dst), (src), sizeof(type))) {                                           \
+                    rt_kprintf("get from user failed, type %s\n", #type);                                                      \
+                    __ret = -1;                                                                                                \
+                }                                                                                                              \
+            } else {                                                                                                           \
+                memcpy((dst), (src), sizeof(type));                                                                            \
+            }                                                                                                                  \
         }                                                                                                                      \
         __ret;                                                                                                                 \
     })
@@ -39,13 +43,17 @@ extern "C" {
 #define LWP_PUT_TO_USER(dst, src, type)                                                                                        \
     ({                                                                                                                         \
         int __ret = 0;                                                                                                         \
-        if (lwp_self() != NULL) {                                                                                              \
-            if (sizeof(type) != lwp_put_to_user((dst), (src), sizeof(type))) {                                                 \
-                rt_kprintf("put to user failed, type %s\n", #type);                                                            \
-                __ret = -1;                                                                                                    \
-            }                                                                                                                  \
+        if (!(dst) || !(src)) {                                                                                                \
+            __ret = -2;                                                                                                        \
         } else {                                                                                                               \
-            memcpy((dst), (src), sizeof(type));                                                                                \
+            if ((lwp_self() != NULL) && lwp_user_accessable((dst), sizeof(type))) {                                            \
+                if (sizeof(type) != lwp_put_to_user((dst), (src), sizeof(type))) {                                             \
+                    rt_kprintf("put to user failed, type %s\n", #type);                                                        \
+                    __ret = -1;                                                                                                \
+                }                                                                                                              \
+            } else {                                                                                                           \
+                memcpy((dst), (src), sizeof(type));                                                                            \
+            }                                                                                                                  \
         }                                                                                                                      \
         __ret;                                                                                                                 \
     })
