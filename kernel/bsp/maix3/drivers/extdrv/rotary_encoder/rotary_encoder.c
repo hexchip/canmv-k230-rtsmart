@@ -355,6 +355,7 @@ static struct encoder_device* rotary_encoder_device_register(struct encoder_dev_
     dev->dt_pin     = cfg->cfg.dt_pin;
     dev->sw_pin     = cfg->cfg.sw_pin;
     dev->configured = 0;
+    dev->index = cfg->index;
     rt_memcpy(&dev->cfg, cfg, sizeof(struct encoder_dev_cfg_t));
 
     /* Initialize synchronization objects */
