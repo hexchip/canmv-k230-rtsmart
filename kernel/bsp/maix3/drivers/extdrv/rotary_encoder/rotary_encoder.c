@@ -57,6 +57,7 @@ struct encoder_device {
     struct encoder_pin_cfg_t cfg;
 
     rt_list_t list;
+    struct rt_work debounce;
 
     /* GPIO pins */
     rt_base_t clk_pin;
@@ -72,7 +73,6 @@ struct encoder_device {
     /* Button state */
     rt_uint8_t  button_pressed;
     rt_tick_t   button_press_time;
-    rt_uint64_t button_last_press_time;
 
     /* Synchronization */
     rt_base_t       level; /* For interrupt level */
@@ -98,36 +98,18 @@ static void encoder_clk_isr(void* args)
     clk_state = kd_pin_get_dr(dev->clk_pin);
 
     /* Detect CLK edge change (either rising or falling) */
-    if (clk_state != dev->last_clk_state) {
-        /* Determine rotation based on CLK and DT sequence */
-        if (clk_state == GPIO_PV_HIGH) {
-            /* Rising edge of CLK */
-            if (dt_state == GPIO_PV_LOW) {
-                /* Clockwise rotation */
-                dev->count++;
-                dev->pending_delta++;
-                dev->direction = ENCODER_DIR_CW;
-            } else {
-                /* Counter-clockwise rotation */
-                dev->count--;
-                dev->pending_delta--;
-                dev->direction = ENCODER_DIR_CCW;
-            }
+    if (clk_state != dev->last_clk_state && clk_state == GPIO_PV_HIGH) {
+        if (dt_state != clk_state) {
+            /* Clockwise rotation */
+            dev->count++;
+            dev->pending_delta++;
+            dev->direction = ENCODER_DIR_CW;
         } else {
-            /* Falling edge of CLK */
-            if (dt_state == GPIO_PV_HIGH) {
-                /* Clockwise rotation */
-                dev->count++;
-                dev->pending_delta++;
-                dev->direction = ENCODER_DIR_CW;
-            } else {
-                /* Counter-clockwise rotation */
-                dev->count--;
-                dev->pending_delta--;
-                dev->direction = ENCODER_DIR_CCW;
-            }
+            /* Counter-clockwise rotation */
+            dev->count--;
+            dev->pending_delta--;
+            dev->direction = ENCODER_DIR_CCW;
         }
-
         /* Signal data available */
         rt_event_send(&dev->data_evt, ENCODER_EVENT_DATA_FLAG);
     }
@@ -140,31 +122,42 @@ static void encoder_clk_isr(void* args)
 static void encoder_sw_isr(void* args)
 {
     struct encoder_device* dev = (struct encoder_device*)args;
-    rt_uint8_t             sw_state;
-    rt_uint64_t            sw_tick;
 
     if (!dev || !dev->configured)
         return;
 
-    sw_tick = cpu_ticks_ms();
-    if (3 > (sw_tick - dev->button_last_press_time)) {
-        return;
+    if (RT_EOK != rt_work_submit(&dev->debounce, rt_tick_from_millisecond(20))) {
+        rt_kprintf("%s: failed to submit work\n");
     }
-    dev->button_last_press_time = sw_tick;
+}
 
-    sw_state = kd_pin_get_dr(dev->sw_pin);
+void button_debounce_work(struct rt_work* work, void* work_data)
+{
+    struct encoder_device *dev = (struct encoder_device *)work_data;
+    rt_uint8_t current_state;
 
-    if (sw_state == GPIO_PV_LOW && !dev->button_pressed) {
-        /* Button pressed */
-        dev->button_pressed    = 1;
+    /* 读取当前按键状态 */
+    current_state = kd_pin_get_dr(dev->sw_pin);
+
+    /* 更新按键状态 */
+    rt_base_t level = rt_hw_interrupt_disable();
+
+    rt_uint8_t state_changed = 0;
+    if (current_state == GPIO_PV_LOW && !dev->button_pressed) {
+        dev->button_pressed = 1;
         dev->button_press_time = rt_tick_get();
-    } else if (sw_state == GPIO_PV_HIGH && dev->button_pressed) {
-        /* Button released */
+        state_changed = 1;
+    } else if (current_state == GPIO_PV_HIGH && dev->button_pressed) {
         dev->button_pressed = 0;
+        state_changed = 1;
     }
 
-    /* Signal button event */
-    rt_event_send(&dev->data_evt, ENCODER_EVENT_DATA_FLAG);
+    rt_hw_interrupt_enable(level);
+
+    /* 状态改变时发送事件 */
+    if (state_changed) {
+        rt_event_send(&dev->data_evt, ENCODER_EVENT_DATA_FLAG);
+    }
 }
 
 static rt_err_t _encoder_dev_control(rt_device_t dev, int cmd, void* args)
@@ -249,9 +242,13 @@ static rt_err_t _encoder_dev_control(rt_device_t dev, int cmd, void* args)
         /* Configure new pins */
         if (encoder->dt_pin != -1 && ret == RT_EOK) {
             kd_pin_mode(encoder->dt_pin, GPIO_DM_INPUT_PULLDOWN);
+            ret = kd_pin_attach_irq(encoder->dt_pin, GPIO_PE_BOTH, encoder_clk_isr, encoder);
+            if (ret == RT_EOK) {
+                ret = kd_pin_irq_enable(encoder->dt_pin, KD_GPIO_IRQ_ENABLE);
+            }
         }
 
-        if (encoder->clk_pin != -1) {
+        if (encoder->clk_pin != -1 && ret == RT_EOK) {
             kd_pin_mode(encoder->clk_pin, GPIO_DM_INPUT_PULLDOWN);
             ret = kd_pin_attach_irq(encoder->clk_pin, GPIO_PE_BOTH, encoder_clk_isr, encoder);
             if (ret == RT_EOK) {
@@ -372,6 +369,7 @@ static struct encoder_device* rotary_encoder_device_register(struct encoder_dev_
     dev->device.control = _encoder_dev_control;
 #endif
 
+    rt_work_init(&dev->debounce, button_debounce_work, dev);
     rt_snprintf(name, sizeof(name), "encoder%d", cfg->index);
     /* Register device */
     ret = rt_device_register(&dev->device, name, RT_DEVICE_FLAG_RDWR);
