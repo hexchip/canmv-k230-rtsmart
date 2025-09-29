@@ -225,6 +225,10 @@ static rt_err_t _encoder_dev_control(rt_device_t dev, int cmd, void* args)
 
         /* Detach old interrupts */
         if (encoder->configured) {
+            if (encoder->dt_pin != -1) {
+                kd_pin_detach_irq(encoder->dt_pin);
+            }
+
             if (encoder->clk_pin != -1) {
                 kd_pin_detach_irq(encoder->clk_pin);
             }
@@ -308,6 +312,9 @@ static rt_err_t _encoder_dev_close(rt_device_t dev)
 
     /* Detach interrupts on close */
     if (encoder->configured) {
+        if (encoder->dt_pin != -1) {
+            kd_pin_detach_irq(encoder->dt_pin);
+        }
         if (encoder->clk_pin != -1) {
             kd_pin_detach_irq(encoder->clk_pin);
         }
