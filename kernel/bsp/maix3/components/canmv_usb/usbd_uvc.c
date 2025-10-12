@@ -85,7 +85,7 @@ struct usbd_video_frame_t {
 
     uint32_t data_length;
 
-    rt_list_t frame, free, ready;
+    rt_list_t list;
 };
 
 struct usbd_video_inst_t {
@@ -102,7 +102,9 @@ struct usbd_video_inst_t {
 
     int stream_state; // 0: off, 1: on, 2: exit
 
-    rt_list_t frame_list, free_list, ready_list;
+    struct usbd_video_frame_t* frames;
+
+    rt_list_t free_list, ready_list;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -124,20 +126,22 @@ struct uvc_device_conf_t {
 
 static inline __attribute__((always_inline)) void _usbd_video_release_pool(struct usbd_video_inst_t* inst)
 {
-    struct usbd_video_frame_t *frame, *temp_frame;
+    struct usbd_video_frame_t* frame;
 
     k_u32 pool_id = inst->buffer_pool_id;
 
     // remove all frames, and destroy pool
-    rt_list_for_each_entry_safe(frame, temp_frame, &inst->frame_list, frame)
-    {
+    for (int i = 0; i < inst->buffer_cnt; i++) {
+        frame = &inst->frames[i];
+
         if (0x00 != vb_user_sub(frame->pool_id, frame->phys_addr, VB_UID_V_VI)) {
             LOG_E("Put vb block failed");
         }
 
-        rt_list_remove(&frame->frame); /* unlink from list */
-        rt_free(frame); /* release memory */
+        rt_list_remove(&frame->list); /* unlink from list */
     }
+    rt_free(inst->frames);
+    inst->frames = NULL;
 
     rt_list_init(&inst->free_list);
     rt_list_init(&inst->ready_list);
@@ -194,7 +198,7 @@ static inline __attribute__((always_inline)) rt_err_t _usbd_video_ioctl_create_p
         goto _exit;
     }
 
-    if (!rt_list_isempty(&inst->frame_list)) {
+    if (inst->frames) {
         LOG_E("frame list not empty");
 
         ret = RT_ERROR;
@@ -230,13 +234,16 @@ static inline __attribute__((always_inline)) rt_err_t _usbd_video_ioctl_create_p
         goto _exit;
     }
 
-    for (int i = 0; i < cfg.buffer_count; i++) {
-        if (NULL == (frame = malloc(sizeof(struct usbd_video_frame_t)))) {
-            LOG_E("No memory");
+    inst->frames = rt_malloc(sizeof(struct usbd_video_frame_t) * cfg.buffer_count);
+    if (!inst->frames) {
+        LOG_E("Can't malloc buffer");
 
-            ret = RT_ENOMEM;
-            goto _error;
-        }
+        ret = RT_ENOMEM;
+        goto _error;
+    }
+
+    for (int i = 0; i < cfg.buffer_count; i++) {
+        frame = &inst->frames[i];
 
         if (VB_INVALID_HANDLE == (frame->handle = vb_get_blk_by_size_and_pool_id(pool_id, pool_blk_size, VB_UID_V_VI))) {
             LOG_E("No blk");
@@ -254,12 +261,8 @@ static inline __attribute__((always_inline)) rt_err_t _usbd_video_ioctl_create_p
 
         LOG_D("phys_addr %p, k_addr %p\n", frame->phys_addr, frame->k_addr);
 
-        rt_list_init(&frame->frame);
-        rt_list_init(&frame->free);
-        rt_list_init(&frame->ready);
-
-        rt_list_insert_after(&inst->frame_list, &frame->frame);
-        rt_list_insert_after(&inst->free_list, &frame->free);
+        rt_list_init(&frame->list);
+        rt_list_insert_after(&inst->free_list, &frame->list);
     }
 
     inst->buffer_cnt     = cfg.buffer_count;
@@ -288,10 +291,9 @@ static inline __attribute__((always_inline)) rt_err_t _usbd_video_ioctl_get_buff
 
     rt_mutex_take(&inst->mutex, RT_WAITING_FOREVER);
 
-    if (!rt_list_isempty(&inst->free_list)) {
-        frame = rt_list_first_entry(&inst->free_list, struct usbd_video_frame_t, free);
-
-        rt_list_remove(&frame->free);
+    frame = rt_list_first_entry_or_null(&inst->free_list, struct usbd_video_frame_t, list);
+    if (frame) {
+        rt_list_remove(&frame->list);
 
         if (NULL != lwp_self()) {
             if (NULL == frame->u_addr) {
@@ -300,7 +302,7 @@ static inline __attribute__((always_inline)) rt_err_t _usbd_video_ioctl_get_buff
                     LOG_E("mmap failed");
                     ret = RT_ERROR;
 
-                    rt_list_insert_after(&inst->free_list, &frame->free);
+                    rt_list_insert_after(&inst->free_list, &frame->list);
                 }
             }
             buffer.user_buffer = frame->u_addr;
@@ -341,8 +343,9 @@ static inline __attribute__((always_inline)) rt_err_t _usbd_video_ioctl_put_buff
             buffer.buffer_size = 0;
         }
 
-        rt_list_for_each_entry(frame, &inst->frame_list, frame)
-        {
+        for (int i = 0; i < inst->buffer_cnt; i++) {
+            frame = &inst->frames[i];
+
             if (NULL != lwp_self()) {
                 if (frame->u_addr != buffer.user_buffer) {
                     continue;
@@ -355,9 +358,9 @@ static inline __attribute__((always_inline)) rt_err_t _usbd_video_ioctl_put_buff
 
             frame->data_length = buffer.buffer_size;
             if (buffer.buffer_size) {
-                rt_list_insert_after(&inst->ready_list, &frame->ready);
+                rt_list_insert_after(&inst->ready_list, &frame->list);
             } else {
-                rt_list_insert_after(&inst->free_list, &frame->free);
+                rt_list_insert_after(&inst->free_list, &frame->list);
             }
             break;
         }
@@ -530,9 +533,9 @@ static void _usbd_video_thread_entry(void* args)
                 break;
             }
 
-            if (!rt_list_isempty(&inst->ready_list)) {
-                frame = rt_list_first_entry(&inst->ready_list, struct usbd_video_frame_t, ready);
-                rt_list_remove(&frame->ready);
+            frame = rt_list_first_entry_or_null(&inst->ready_list, struct usbd_video_frame_t, list);
+            if (frame) {
+                rt_list_remove(&frame->list);
             } else {
                 rt_mutex_release(&inst->mutex);
                 rt_thread_mdelay(2); // Wait briefly for a new frame
@@ -613,7 +616,7 @@ static void _usbd_video_thread_entry(void* args)
 
             // Put the processed frame back into the free list
             rt_mutex_take(&inst->mutex, RT_WAITING_FOREVER);
-            rt_list_insert_after(&inst->free_list, &frame->free);
+            rt_list_insert_after(&inst->free_list, &frame->list);
             rt_mutex_release(&inst->mutex);
 
             if (frame_sleep_ms >= (uint32_t)frame_send_time_ms) {
@@ -670,8 +673,9 @@ static rt_err_t _usbd_video_dev_close(rt_device_t dev)
     rt_mutex_take(&inst->mutex, RT_WAITING_FOREVER);
 
     if (NULL != lwp_self()) {
-        rt_list_for_each_entry(frame, &inst->frame_list, frame)
-        {
+        for (int i = 0; i < inst->buffer_cnt; i++) {
+            frame = &inst->frames[i];
+
             if (NULL != frame->u_addr) {
                 addresses_to_unmap[count++] = frame->u_addr;
                 frame->u_addr               = NULL;
@@ -686,19 +690,7 @@ static rt_err_t _usbd_video_dev_close(rt_device_t dev)
 
     rt_mutex_take(&inst->mutex, RT_WAITING_FOREVER);
 
-    rt_list_for_each_entry_safe(frame, temp_frame, &inst->frame_list, frame)
-    {
-        vb_user_sub(inst->buffer_pool_id, frame->phys_addr, VB_UID_V_VI);
-
-        rt_list_remove(&frame->frame);
-        rt_list_remove(&frame->free);
-        rt_list_remove(&frame->ready);
-    }
-
-    if (VB_INVALID_POOLID != inst->buffer_pool_id) {
-        vb_destroy_pool(inst->buffer_pool_id);
-        inst->buffer_pool_id = VB_INVALID_POOLID;
-    }
+    _usbd_video_release_pool(inst);
 
     rt_mutex_release(&inst->mutex);
 
@@ -745,7 +737,6 @@ static void usbd_uvc_device_init(void)
 
         usbd_video_dev.stream_state = 0; // not stream on
 
-        rt_list_init(&usbd_video_dev.frame_list);
         rt_list_init(&usbd_video_dev.free_list);
         rt_list_init(&usbd_video_dev.ready_list);
 
