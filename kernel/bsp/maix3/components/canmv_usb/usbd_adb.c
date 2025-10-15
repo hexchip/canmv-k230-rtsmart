@@ -342,8 +342,29 @@ static rt_size_t usbd_adb_shell_write(struct rt_device *dev,
     }
 
     if (usbd_adb_can_write() && size) {
-        usb_osal_sem_reset(g_usbd_adb_shell.tx_done);
-        ret = usbd_adb_write(ADB_SHELL_LOALID, buffer, size);
+        /* Fast path: check if conversion needed */
+        if (memchr(buffer, '\n', size)) {
+            /* Slow path: need \n -> \r\n conversion */
+            static uint8_t tx_buffer[CONFIG_USBDEV_SHELL_RX_BUFSIZE * 2];
+            const uint8_t *data = (const uint8_t *)buffer;
+            rt_size_t tx_len = 0;
+            rt_size_t i;
+
+            for (i = 0; i < size && tx_len < sizeof(tx_buffer) - 1; i++) {
+                if (data[i] == '\n') {
+                    tx_buffer[tx_len++] = '\r';
+                }
+                tx_buffer[tx_len++] = data[i];
+            }
+
+            usb_osal_sem_reset(g_usbd_adb_shell.tx_done);
+            ret = usbd_adb_write(ADB_SHELL_LOALID, tx_buffer, tx_len);
+        } else {
+            /* Fast path: no \n found or STREAM disabled, send directly */
+            usb_osal_sem_reset(g_usbd_adb_shell.tx_done);
+            ret = usbd_adb_write(ADB_SHELL_LOALID, buffer, size);
+        }
+
         if (ret != 0) {
             rt_kprintf("[ADB] usbd_adb_write failed: %d\n", ret);
             rt_mutex_release(g_usbd_adb_shell.tx_lock);
