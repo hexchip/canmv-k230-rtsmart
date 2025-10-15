@@ -41,6 +41,10 @@
 #include "usbd_desc_cdc_mtp.h"
 #endif
 
+#ifdef CHERRY_USB_DEVICE_FUNC_CDC_ADB
+#include "usbd_desc_cdc_adb.h"
+#endif
+
 #ifdef CHERRY_USB_DEVICE_FUNC_UVC
 #include "usbd_desc_uvc.h"
 #endif
@@ -56,3 +60,5 @@ extern void canmv_usb_device_uvc_on_connected(void);
 extern void canmv_usb_device_uvc_init(void);
 
 extern void board_usb_device_init(void* usb_base);
+
+extern void canmv_usb_device_adb_init(void);

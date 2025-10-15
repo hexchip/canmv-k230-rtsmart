@@ -5,7 +5,7 @@
 
 #include "usbd_desc.h"
 
-#if defined(CHERRY_USB_DEVICE_FUNC_CDC) || defined (CHERRY_USB_DEVICE_FUNC_CDC_MTP)
+#if defined(CHERRY_USB_DEVICE_FUNC_CDC) || defined (CHERRY_USB_DEVICE_FUNC_CDC_MTP) || defined (CHERRY_USB_DEVICE_FUNC_CDC_ADB)
 
 #ifdef RT_SERIAL_USING_DMA
 

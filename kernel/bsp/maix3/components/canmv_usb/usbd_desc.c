@@ -14,7 +14,7 @@ static void event_handler(uint8_t busid, uint8_t event)
     } else if (event == USBD_EVENT_CONFIGURED) {
         g_usb_device_connected = true;
 
-#if defined(CHERRY_USB_DEVICE_FUNC_CDC) || defined(CHERRY_USB_DEVICE_FUNC_CDC_MTP)
+#if defined(CHERRY_USB_DEVICE_FUNC_CDC) || defined(CHERRY_USB_DEVICE_FUNC_CDC_MTP) || defined (CHERRY_USB_DEVICE_FUNC_CDC_ADB)
         canmv_usb_device_cdc_on_connected();
 #endif
 
@@ -31,7 +31,7 @@ void board_usb_device_init(void* usb_base)
 {
     usbd_desc_register(USB_DEVICE_BUS_ID, canmv_usb_descriptor);
 
-#if defined(CHERRY_USB_DEVICE_FUNC_CDC) || defined(CHERRY_USB_DEVICE_FUNC_CDC_MTP)
+#if defined(CHERRY_USB_DEVICE_FUNC_CDC) || defined(CHERRY_USB_DEVICE_FUNC_CDC_MTP) || defined (CHERRY_USB_DEVICE_FUNC_CDC_ADB)
     canmv_usb_device_cdc_init();
 #endif // CHERRY_USB_DEVICE_FUNC_CDC
 
@@ -41,6 +41,10 @@ void board_usb_device_init(void* usb_base)
 
 #if defined(CHERRY_USB_DEVICE_FUNC_UVC)
     canmv_usb_device_uvc_init();
+#endif
+
+#if defined(CHERRY_USB_DEVICE_FUNC_CDC_ADB)
+    canmv_usb_device_adb_init();
 #endif
 
     usbd_initialize(USB_DEVICE_BUS_ID, (uint32_t)(uint64_t)usb_base, event_handler);

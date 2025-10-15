@@ -78,7 +78,7 @@ struct finsh_shell
     rt_uint16_t line_position;
     rt_uint16_t line_curpos;
 
-#if !defined(RT_USING_POSIX) && defined(RT_USING_DEVICE)
+#if defined(CHERRY_USB_DEVICE_ENABLE_CLASS_ADB) && defined(RT_USING_DEVICE)
     rt_device_t device;
 #endif
 
