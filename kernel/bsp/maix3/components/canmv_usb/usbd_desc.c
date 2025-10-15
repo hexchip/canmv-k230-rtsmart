@@ -43,7 +43,7 @@ void board_usb_device_init(void* usb_base)
     canmv_usb_device_uvc_init();
 #endif
 
-#if defined(CHERRY_USB_DEVICE_FUNC_CDC_ADB)
+#if defined (CHERRY_USB_DEVICE_FUNC_ADB) || defined(CHERRY_USB_DEVICE_FUNC_CDC_ADB)
     canmv_usb_device_adb_init();
 #endif
 

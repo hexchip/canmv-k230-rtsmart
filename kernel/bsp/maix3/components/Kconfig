@@ -105,6 +105,9 @@ menu "Components Configuration"
                             bool "CDC + ADB"
                             select CHERRY_USB_DEVICE_ENABLE_CLASS_CDC_ACM
                             select CHERRY_USB_DEVICE_ENABLE_CLASS_ADB
+                        config CHERRY_USB_DEVICE_FUNC_ADB
+                            bool "ADB"
+                            select CHERRY_USB_DEVICE_ENABLE_CLASS_ADB
                         config CHERRY_USB_DEVICE_FUNC_UVC
                             bool "UVC"
                             select CHERRY_USB_DEVICE_ENABLE_CLASS_UVC

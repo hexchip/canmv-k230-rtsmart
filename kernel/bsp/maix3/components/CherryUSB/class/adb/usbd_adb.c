@@ -378,6 +378,18 @@ void adb_notify_handler(uint8_t busid, uint8_t event, void *arg)
         case USBD_EVENT_DEINIT:
             break;
         case USBD_EVENT_RESET:
+            /* Reset ADB client state when USB bus reset occurs */
+            extern void exit_adb_console(void);
+
+            void exit_adb_console(void);
+            adb_client.state = 0;
+            adb_client.write_state = 0;
+            adb_client.writable = false;
+            adb_client.is_open = false;
+            adb_client.localid = 0;
+            adb_client.shell_remoteid = 0;
+            adb_client.file_remoteid = 0;
+            adb_client.common_state = ADB_STATE_READ_MSG;
             break;
         case USBD_EVENT_CONFIGURED:
             adb_client.common_state = ADB_STATE_READ_MSG;
