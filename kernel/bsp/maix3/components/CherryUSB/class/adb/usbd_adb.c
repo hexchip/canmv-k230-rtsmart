@@ -53,7 +53,9 @@ struct usbd_adb {
     uint32_t localid;
     uint32_t shell_remoteid;
     uint32_t file_remoteid;
-    struct rt_work debounce;
+    rt_sem_t w_sem;
+    struct rt_work snd_okay;
+    struct rt_work snd_clse;
 } adb_client;
 
 static struct usbd_endpoint adb_ep_data[2];
@@ -95,6 +97,14 @@ static void adb_send_msg(struct adb_packet *packet)
 
 static void adb_send_okay(struct adb_packet *packet, uint32_t localid)
 {
+    if (RT_EOK != rt_sem_trytake(adb_client.w_sem)) {
+        if (RT_EOK != rt_work_submit(&adb_client.snd_okay, rt_tick_from_millisecond(5))) {
+            USB_LOG_ERR("%s: failed to submit snd_okay work\n", __func__);
+            return ;
+        }
+        return;
+    }
+
     packet->msg.command = A_OKAY;
     packet->msg.arg0 = localid;
     packet->msg.arg1 = usbd_adb_get_remoteid(localid);
@@ -105,6 +115,14 @@ static void adb_send_okay(struct adb_packet *packet, uint32_t localid)
 
 static void adb_send_close(struct adb_packet *packet, uint32_t localid, uint32_t remoteid)
 {
+    if (RT_EOK != rt_sem_trytake(adb_client.w_sem)) {
+        if (RT_EOK != rt_work_submit(&adb_client.snd_clse, rt_tick_from_millisecond(5))) {
+            USB_LOG_ERR("%s: failed to submit snd_clse work\n", __func__);
+            return ;
+        }
+        return;
+    }
+
     packet->msg.command = A_CLSE;
     packet->msg.arg0 = localid;
     packet->msg.arg1 = remoteid;
@@ -198,7 +216,7 @@ void usbd_adb_bulk_out(uint8_t busid, uint8_t ep, uint32_t nbytes)
                 adb_client.writable = false;
                 extern void exit_adb_console(void);
                 exit_adb_console();
-                usbd_adb_notify_write_done();
+                rt_sem_control(adb_client.w_sem, RT_IPC_CMD_RESET, (void *)1);
             }
             adb_client.common_state = ADB_STATE_READ_MSG;
             /* setup first out ep read transfer */
@@ -266,27 +284,7 @@ void usbd_adb_bulk_out(uint8_t busid, uint8_t ep, uint32_t nbytes)
                         rx_packet.msg.data_length = 6;
                     }
 
-                    adb_client.writable = true;
-
-                    /* Handle empty WRTE (Windows sends this after Ctrl+C in non-interactive mode) */
-                    if (rx_packet.msg.data_length == 0) {
-                        USB_LOG_DBG("[OUT] Empty shell WRTE (len=0), sending OKAY and continuing\r\n");
-                        /* Send OKAY and restart read to prevent endpoint halt */
-                    } else {
-                        /* Parse shell v2 payload and extract actual data */
-                        static uint8_t shell_data[MAX_PAYLOAD];  /* Static to save stack */
-                        uint32_t data_len = parse_shell_v2_payload(rx_packet.payload,
-                                                                   rx_packet.msg.data_length,
-                                                                   shell_data,
-                                                                   sizeof(shell_data));
-                        if (data_len > 0) {
-                            usbd_adb_notify_shell_read(shell_data, data_len);
-                        }
-                    }
-
-                    if (RT_EOK != rt_work_submit(&adb_client.debounce, rt_tick_from_millisecond(100))) {
-                        rt_kprintf("%s: failed to submit work\n");
-                    }
+                    adb_send_okay(&tx_packet, rx_packet.msg.arg1);
                 } else if ((rx_packet.msg.arg0 == adb_client.file_remoteid) && (rx_packet.msg.arg1 == ADB_FILE_LOALID)) {
                     USB_LOG_DBG("[OUT] File A_WRTE, sending OKAY (data_len=%d)\r\n", rx_packet.msg.data_length);
                     /* Flow control: only send OKAY if buffers available */
@@ -316,8 +314,8 @@ void usbd_adb_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
     (void)ep;
     (void)nbytes;
 
-    USB_LOG_DBG("[IN] state=%d, cmd=%x, localid=%d\r\n",
-                adb_client.common_state, rx_packet.msg.command, adb_client.localid);
+    USB_LOG_DBG("[IN] state=[%d,%d], cmd=[%x,%x]\r\n",
+                adb_client.common_state, adb_client.write_state, rx_packet.msg.command, tx_packet.msg.command);
 
     if (adb_client.common_state == ADB_STATE_WRITE_MSG) {
         if (tx_packet.msg.data_length) {
@@ -327,7 +325,17 @@ void usbd_adb_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
             if (rx_packet.msg.command == A_WRTE) {
                 adb_client.writable = true;
                 USB_LOG_DBG("[IN] A_WRTE done, localid=%d\r\n", adb_client.localid);
-                if (adb_client.localid == ADB_FILE_LOALID) {
+                if (adb_client.localid == ADB_SHELL_LOALID) {
+                    /* Parse shell v2 payload and extract actual data */
+                    static uint8_t shell_data[MAX_PAYLOAD];  /* Static to save stack */
+                    uint32_t data_len = parse_shell_v2_payload(rx_packet.payload,
+                                                               rx_packet.msg.data_length,
+                                                               shell_data,
+                                                               sizeof(shell_data));
+                    if (data_len > 0) {
+                        usbd_adb_notify_shell_read(shell_data, data_len);
+                    }
+                } else if (adb_client.localid == ADB_FILE_LOALID) {
                     usbd_adb_notify_file_read(rx_packet.payload, rx_packet.msg.data_length);
                 }
             } else if ((rx_packet.msg.command == A_OPEN) && (rx_packet.msg.data_length != 34)) {
@@ -341,6 +349,10 @@ void usbd_adb_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
             adb_client.common_state = ADB_STATE_READ_MSG;
             /* setup first out ep read transfer */
             usbd_ep_start_read(busid, adb_ep_data[ADB_OUT_EP_IDX].ep_addr, (uint8_t *)&rx_packet.msg, sizeof(struct adb_msg));
+
+            if ((tx_packet.msg.command == A_OKAY) || (tx_packet.msg.command == A_CLSE)) {
+                rt_sem_release(adb_client.w_sem);
+            }
         }
     } else if (adb_client.common_state == ADB_STATE_WRITE_DATA) {
         adb_client.common_state = ADB_STATE_READ_MSG;
@@ -353,19 +365,18 @@ void usbd_adb_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
         } else {
         }
     } else if (adb_client.write_state == ADB_STATE_AWRITE_DATA) {
-        usbd_adb_notify_write_done();
-        if (adb_client.localid == ADB_SHELL_LOALID) {
-            if (RT_EOK != rt_work_submit(&adb_client.debounce, rt_tick_from_millisecond(100))) {
-                rt_kprintf("%s: failed to submit work\n");
-            }
-        }
+        rt_sem_release(adb_client.w_sem);
     }
 }
 
-void debounce_work(struct rt_work* work, void* work_data)
+void snd_okay_work(struct rt_work* work, void* work_data)
 {
-    /* Use saved localid instead of rx_packet which may have changed */
     adb_send_okay(&tx_packet, adb_client.localid);
+}
+
+void snd_clse_work(struct rt_work* work, void* work_data)
+{
+    adb_send_close(&tx_packet, 0, adb_client.shell_remoteid);
 }
 
 void adb_notify_handler(uint8_t busid, uint8_t event, void *arg)
@@ -390,6 +401,7 @@ void adb_notify_handler(uint8_t busid, uint8_t event, void *arg)
             adb_client.shell_remoteid = 0;
             adb_client.file_remoteid = 0;
             adb_client.common_state = ADB_STATE_READ_MSG;
+            rt_sem_control(adb_client.w_sem, RT_IPC_CMD_RESET, (void *)1);
             break;
         case USBD_EVENT_CONFIGURED:
             adb_client.common_state = ADB_STATE_READ_MSG;
@@ -418,7 +430,14 @@ struct usbd_interface *usbd_adb_init_intf(uint8_t busid, struct usbd_interface *
 
     usbd_add_endpoint(busid, &adb_ep_data[ADB_OUT_EP_IDX]);
     usbd_add_endpoint(busid, &adb_ep_data[ADB_IN_EP_IDX]);
-    rt_work_init(&adb_client.debounce, debounce_work, &adb_client);
+    rt_work_init(&adb_client.snd_okay, snd_okay_work, &adb_client);
+    rt_work_init(&adb_client.snd_clse, snd_clse_work, &adb_client);
+
+    adb_client.w_sem = rt_sem_create("w_sem", 1, RT_IPC_FLAG_FIFO);
+    if (adb_client.w_sem == RT_NULL) {
+        rt_kprintf("[ADB] Failed to create WX semaphore\n");
+        return NULL;
+    }
 
     return intf;
 }
@@ -431,6 +450,11 @@ bool usbd_adb_can_write(void)
 int usbd_adb_write(uint32_t localid, const uint8_t *data, uint32_t len)
 {
     struct adb_packet *packet;
+
+    if (RT_EOK != rt_sem_take(adb_client.w_sem, rt_tick_from_millisecond(3000))) {
+        USB_LOG_ERR("%s: failed to take w_sem\n", __func__);
+        return -1;
+    }
 
     packet = &tx_packet;
     packet->msg.command = A_WRTE;

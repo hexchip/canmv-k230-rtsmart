@@ -119,7 +119,6 @@ static struct usbd_interface intf0;
 
 struct usbd_adb_shell {
     struct rt_device parent;
-    usb_osal_sem_t tx_done;
     struct rt_ringbuffer rx_rb;
     struct rt_device_notify rx_notify;
     rt_uint8_t rx_rb_buffer[CONFIG_USBDEV_SHELL_RX_BUFSIZE];
@@ -156,7 +155,6 @@ static volatile uint8_t msg_pool_used[ADB_SYNC_MSG_POOL_SIZE];  /* 0=free, 1=use
 
 static rt_mq_t adb_sync_mq = RT_NULL;
 static rt_thread_t adb_sync_thread = RT_NULL;
-static usb_osal_sem_t adb_sync_tx_done = RT_NULL;
 
 /* Flow control semaphore: limits concurrent messages to prevent overflow */
 static rt_sem_t flow_control_sem = RT_NULL;
@@ -249,7 +247,6 @@ static struct adb_sync_context sync_ctx = {
     .current_data_remaining = 0
 };
 
-void usbd_adb_sync_write_done(void);
 int usbd_adb_sync_init(void);
 
 /*
@@ -285,16 +282,6 @@ void usbd_adb_notify_shell_read(uint8_t *data, uint32_t len)
     }
 }
 
-void usbd_adb_notify_write_done(void)
-{
-    if (g_usbd_adb_shell.tx_done) {
-        usb_osal_sem_give(g_usbd_adb_shell.tx_done);
-    }
-
-    usbd_adb_sync_write_done();
-
-}
-
 static rt_err_t usbd_adb_shell_open(struct rt_device *dev, rt_uint16_t oflag)
 {
     while (!usb_device_is_configured(0)) {
@@ -305,10 +292,6 @@ static rt_err_t usbd_adb_shell_open(struct rt_device *dev, rt_uint16_t oflag)
 
 static rt_err_t usbd_adb_shell_close(struct rt_device *dev)
 {
-    if (g_usbd_adb_shell.tx_done) {
-        usb_osal_sem_give(g_usbd_adb_shell.tx_done);
-    }
-
     return RT_EOK;
 }
 
@@ -357,11 +340,9 @@ static rt_size_t usbd_adb_shell_write(struct rt_device *dev,
                 tx_buffer[tx_len++] = data[i];
             }
 
-            usb_osal_sem_reset(g_usbd_adb_shell.tx_done);
             ret = usbd_adb_write(ADB_SHELL_LOALID, tx_buffer, tx_len);
         } else {
             /* Fast path: no \n found or STREAM disabled, send directly */
-            usb_osal_sem_reset(g_usbd_adb_shell.tx_done);
             ret = usbd_adb_write(ADB_SHELL_LOALID, buffer, size);
         }
 
@@ -370,7 +351,6 @@ static rt_size_t usbd_adb_shell_write(struct rt_device *dev,
             rt_mutex_release(g_usbd_adb_shell.tx_lock);
             return 0;  /* Return 0 to indicate write failure */
         }
-        usb_osal_sem_take(g_usbd_adb_shell.tx_done, 0xffffffff);
     }
 
     /* Release lock after write completes */
@@ -452,13 +432,6 @@ void usbd_adb_shell_init(uint8_t in_ep, uint8_t out_ep)
         goto err_unregister_device;
     }
 
-    /* Initialize semaphore for write completion */
-    g_usbd_adb_shell.tx_done = usb_osal_sem_create(0);
-    if (g_usbd_adb_shell.tx_done == NULL) {
-        rt_kprintf("[ADB] Failed to create TX semaphore\n");
-        goto err_delete_mutex;
-    }
-
     /* Initialize ring buffer */
     rt_ringbuffer_init(&g_usbd_adb_shell.rx_rb, g_usbd_adb_shell.rx_rb_buffer,
                        sizeof(g_usbd_adb_shell.rx_rb_buffer));
@@ -467,7 +440,7 @@ void usbd_adb_shell_init(uint8_t in_ep, uint8_t out_ep)
     g_usbd_adb_shell.adb_rx_sem = rt_sem_create("adb_rx", 0, RT_IPC_FLAG_FIFO);
     if (g_usbd_adb_shell.adb_rx_sem == RT_NULL) {
         rt_kprintf("[ADB] Failed to create RX semaphore\n");
-        goto err_delete_tx_sem;
+        goto err_delete_mutex;
     }
 
     g_usbd_adb_shell.adb_rx_thread = rt_thread_create("adb_rx",
@@ -497,10 +470,6 @@ err_delete_thread:
 err_delete_rx_sem:
     rt_sem_delete(g_usbd_adb_shell.adb_rx_sem);
     g_usbd_adb_shell.adb_rx_sem = RT_NULL;
-
-err_delete_tx_sem:
-    usb_osal_sem_delete(g_usbd_adb_shell.tx_done);
-    g_usbd_adb_shell.tx_done = NULL;
 
 err_delete_mutex:
     rt_mutex_delete(g_usbd_adb_shell.tx_lock);
@@ -683,7 +652,6 @@ static ssize_t write_all(int fd, const void *buf, size_t count)
  * This mimics the shell's write mechanism:
  * 1. Reset semaphore
  * 2. Call usbd_adb_write which triggers AWRITE_MSG -> AWRITE_DATA state machine
- * 3. Wait for usbd_adb_notify_write_done callback to signal completion
  */
 static void adb_sync_write(const uint8_t *data, uint32_t len)
 {
@@ -712,9 +680,7 @@ static void adb_sync_write(const uint8_t *data, uint32_t len)
         return;  /* Abort on timeout instead of sending corrupted data */
     }
 
-    usb_osal_sem_reset(adb_sync_tx_done);
     usbd_adb_write(ADB_FILE_LOALID, data, len);
-    usb_osal_sem_take(adb_sync_tx_done, 0xffffffff);
     SYNC_DBG("  Write completed");
 }
 
@@ -1394,13 +1360,6 @@ int usbd_adb_sync_init(void)
         return -RT_ERROR;
     }
 
-    adb_sync_tx_done = usb_osal_sem_create(0);
-    if (adb_sync_tx_done == NULL) {
-        rt_sem_delete(flow_control_sem);
-        rt_mq_delete(adb_sync_mq);
-        return -RT_ERROR;
-    }
-
     adb_sync_thread = rt_thread_create("adb_sync",
                                        adb_sync_thread_entry,
                                        RT_NULL,
@@ -1410,7 +1369,6 @@ int usbd_adb_sync_init(void)
     if (adb_sync_thread == RT_NULL) {
         rt_sem_delete(flow_control_sem);
         rt_mq_delete(adb_sync_mq);
-        usb_osal_sem_delete(adb_sync_tx_done);
         return -RT_ERROR;
     }
 
@@ -1471,20 +1429,6 @@ void usbd_adb_notify_file_read(uint8_t *data, uint32_t len)
         msg_pool_used[idx] = 0;
         rt_hw_interrupt_enable(level);
         rt_sem_release(flow_control_sem);
-    }
-}
-
-/*
- * Callback: called when device finishes sending A_WRTE to PC
- * This is called from usbd_adb_notify_write_done (line 42 in usbd_adb_shell.c)
- * Wakes up adb_sync_write's semaphore wait
- */
-void usbd_adb_sync_write_done(void)
-{
-    SYNC_DBG("*** Callback: usbd_adb_sync_write_done ***");
-
-    if (adb_sync_tx_done) {
-        usb_osal_sem_give(adb_sync_tx_done);
     }
 }
 

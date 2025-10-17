@@ -26,7 +26,6 @@ struct usbd_interface *usbd_adb_init_intf(uint8_t busid, struct usbd_interface *
 
 void usbd_adb_notify_shell_read(uint8_t *data, uint32_t len);
 void usbd_adb_notify_file_read(uint8_t *data, uint32_t len);
-void usbd_adb_notify_write_done(void);
 bool usbd_adb_can_write(void);
 int usbd_adb_write(uint32_t localid, const uint8_t *data, uint32_t len);
 void usbd_adb_close(uint32_t localid);

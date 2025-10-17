@@ -4,6 +4,7 @@
 #include <rtthread.h>
 
 #include "usbd_desc.h"
+#include "usbd_cdc.h"
 
 #if defined(CHERRY_USB_DEVICE_FUNC_CDC) || defined (CHERRY_USB_DEVICE_FUNC_CDC_MTP) || defined (CHERRY_USB_DEVICE_FUNC_CDC_ADB)
 
