@@ -5,6 +5,6 @@ CPPPATH = [cwd]
 
 src	= Glob('*.c')
 
-group = DefineGroup('rw007', src, depend = [''], CPPPATH = CPPPATH)
+group = DefineGroup('rw007', src, depend = ['RT_USING_RW007'], CPPPATH = CPPPATH)
 
 Return('group')
