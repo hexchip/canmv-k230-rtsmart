@@ -458,6 +458,32 @@ rt_int32_t rt_strcasecmp(const char *a, const char *b)
 RTM_EXPORT(rt_strcasecmp);
 
 /**
+ * @brief  This function will copy string.
+ *
+ * @param  dst points to the address used to store the copied content.
+ *
+ * @param  src is the string to be copied.
+ *
+ * @return The address where the copied content is stored.
+ */
+char *rt_strcpy(char *dst, const char *src)
+{
+    char *dest = dst;
+
+    while (*src != '\0')
+    {
+        *dst = *src;
+        dst++;
+        src++;
+    }
+
+    *dst = '\0';
+    return dest;
+}
+RTM_EXPORT(rt_strcpy);
+
+
+/**
  * This function will copy string no more than n bytes.
  *
  * @param dst the string to copy
@@ -1586,6 +1612,7 @@ int   memcmp(const void *s1, const void *s2, size_t n) __attribute__((weak, alia
 size_t strlen(const char *s) __attribute__((weak, alias("rt_strlen")));
 char *strstr(const char *s1, const char *s2) __attribute__((weak, alias("rt_strstr")));
 int strcasecmp(const char *a, const char *b) __attribute__((weak, alias("rt_strcasecmp")));
+char *strcpy(char *dst, const char *src) __attribute__((weak, alias("rt_strcpy")));
 char *strncpy(char *dest, const char *src, size_t n) __attribute__((weak, alias("rt_strncpy")));
 int strncmp(const char *cs, const char *ct, size_t count) __attribute__((weak, alias("rt_strncmp")));
 #ifdef RT_USING_HEAP
