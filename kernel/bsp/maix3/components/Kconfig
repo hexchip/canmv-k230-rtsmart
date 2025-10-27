@@ -204,4 +204,5 @@ menu "Components Configuration"
 
     source "components/netutils/Kconfig"
 
+    source "components/lvgl/Kconfig"
 endmenu
