@@ -1,0 +1,27 @@
+menuconfig ENABLE_TERMINAL
+    bool "Enable Terminal"
+    default y
+    select RT_USING_HEAP
+    select RT_USING_DEVICE_WRAP
+    select PKG_USING_LVGL
+
+    if ENABLE_TERMINAL
+        config TERMINAL_MQ_MSG_MAX_NUM
+        int "Maximum number of mq's messages"
+        default 64
+
+        config TERMINAL_MQ_MSG_SHORT_STR_LEN
+        int "Maximum length of short_str in mq's messages"
+        default 32
+
+        choice TERMINAL_FONT
+            prompt "Choice Terminal font"
+            default TERMINAL_FONT_UNSCII_16
+
+            config TERMINAL_FONT_UNSCII_8
+                bool "UNSCII_8"
+
+            config TERMINAL_FONT_UNSCII_16
+                bool "UNSCII_16"
+        endchoice
+    endif
