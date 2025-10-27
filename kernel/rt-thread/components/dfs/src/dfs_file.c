@@ -848,14 +848,14 @@ void ls(const char *pathname)
 
                 if (dfs_file_stat(fullpath, &stat) == 0)
                 {
-                    rt_kprintf("%-40s", dirent.d_name);
+                    rt_kprintf("%-30s", dirent.d_name);
                     if (S_ISDIR(stat.st_mode))
                     {
-                        rt_kprintf("%-25s\n", "<DIR>");
+                        rt_kprintf("%s\n", "<DIR>");
                     }
                     else
                     {
-                        rt_kprintf("%-25lu\n", (unsigned long)stat.st_size);
+                        rt_kprintf("%lu\n", (unsigned long)stat.st_size);
                     }
                 }
                 else
