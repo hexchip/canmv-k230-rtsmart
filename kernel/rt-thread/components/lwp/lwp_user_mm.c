@@ -433,8 +433,13 @@ int lwp_munmap(void *addr)
 
 size_t lwp_get_from_user(void *dst, void *src, size_t size)
 {
-    struct rt_lwp *lwp = RT_NULL;
-    rt_mmu_info *m_info = RT_NULL;
+
+    struct rt_lwp *lwp = lwp_self();
+    if (!lwp)
+    {
+        rt_memcpy(dst, src, size);
+        return size;
+    }
 
     /* check src */
 
@@ -451,20 +456,19 @@ size_t lwp_get_from_user(void *dst, void *src, size_t size)
         return 0;
     }
 
-    lwp = lwp_self();
-    if (!lwp)
-    {
-        return 0;
-    }
-    m_info = &lwp->mmu_info;
+    rt_mmu_info *m_info = &lwp->mmu_info;
 
     return lwp_data_get(m_info, dst, src, size);
 }
 
 size_t lwp_put_to_user(void *dst, void *src, size_t size)
 {
-    struct rt_lwp *lwp = RT_NULL;
-    rt_mmu_info *m_info = RT_NULL;
+    struct rt_lwp *lwp = lwp_self();
+    if (!lwp)
+    {
+        rt_memcpy(dst, src, size);
+        return size;
+    }
 
     /* check dst */
     if (dst < (void *)USER_VADDR_START)
@@ -480,12 +484,7 @@ size_t lwp_put_to_user(void *dst, void *src, size_t size)
         return 0;
     }
 
-    lwp = lwp_self();
-    if (!lwp)
-    {
-        return 0;
-    }
-    m_info = &lwp->mmu_info;
+    rt_mmu_info *m_info = &lwp->mmu_info;
     return lwp_data_put(m_info, dst, src, size);
 }
 
