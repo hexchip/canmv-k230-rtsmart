@@ -24,6 +24,7 @@
 #include "stack.h"
 #include "sysctl_boot.h"
 #include "rtconfig.h"
+#include "k230_atag.h"
 
 #define MEMORY_RESERVED     (0x1000)
 
@@ -54,41 +55,19 @@
 #endif
 
 #ifdef CONFIG_AUTO_DETECT_DDR_SIZE
-struct k230_ddr_size_tag_st{
-  uint32_t flage;
-  uint32_t shash;
-  uint32_t resver;
-  uint32_t ddr_size;
-};
-
-static uint32_t shash_len(const char *s,int len) {
-  uint32_t v = 5381;
-  int i = 0;
-
-  for(i= 0; i < len; i++){
-    v = (v << 5) + v + s[i];
-  }
-  return v;
-}
-
 rt_size_t get_ddr_phy_size(void)
 {
-    static unsigned int g_ddr_size = 0;
+    static rt_size_t g_ddr_size = 0;
 
-    struct k230_ddr_size_tag_st ddr_tag;
-    int shash = 0;
+    if (g_ddr_size == 0) {
+        rt_uint64_t atag_ddr_size = k230_atag_get_ddr_size();
 
-    if(g_ddr_size == 0){
-        memcpy(&ddr_tag, RTT_SYS_BASE - sizeof(ddr_tag), sizeof(ddr_tag));
-        shash = ddr_tag.shash;
-        ddr_tag.shash = 0;
-
-        if(ddr_tag.flage == 0x5a5a5a5a && shash == shash_len((unsigned char *)&ddr_tag, sizeof(ddr_tag))){
-            g_ddr_size = ddr_tag.ddr_size;
-            //rt_kprintf("ddr size ok %x\n", g_ddr_size);
-        }else {
-            g_ddr_size = 0x20000000;
-            //rt_kprintf("ddr size errror %x %x %x %x \n", g_ddr_size, ddr_tag.flage, shash,ddr_tag.ddr_size);
+        if (atag_ddr_size != 0) {
+            g_ddr_size = (rt_size_t)atag_ddr_size;
+            //rt_kprintf("DDR size from ATAG: %d MB\n", g_ddr_size / (1024 * 1024));
+        } else {
+            g_ddr_size = 0x20000000; /* Default fallback */
+            //rt_kprintf("DDR size using default: %d MB\n", g_ddr_size / (1024 * 1024));
         }
     }
 

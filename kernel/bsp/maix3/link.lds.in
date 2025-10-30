@@ -79,6 +79,11 @@ SECTIONS
         __usbh_class_info_end__ = .;
 
         . = ALIGN(8);
+        __tagtable_begin = .;
+        KEEP(*(SORT(.taglist.init)))
+        __tagtable_end = .;
+
+        . = ALIGN(8);
         _etext = .;
     } > SRAM
 

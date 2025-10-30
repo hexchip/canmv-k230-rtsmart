@@ -26,7 +26,9 @@
 #include "lwp_arch_comm.h"
 #include "console.h"
 #include "board.h"
+#include "k230_atag.h"
 
+#define CONFIG_RTSMART_PRELOAD_RTAPP_MAXSIZE ((128 * 1024 * 1024) / 3)
 #define DBG_TAG "LWP"
 #define DBG_LVL DBG_WARNING
 #include <rtdbg.h>
@@ -364,6 +366,111 @@ static size_t load_fread(void *ptr, size_t size, size_t nmemb, int fd)
     return read_block;
 }
 
+static inline rt_uint64_t get_preload_size(void)
+{
+    rt_uint64_t size;
+
+    if (k230_atag_get_rtapp_size(&size)) {
+        return size;
+    } else {
+        LOG_E("ATAG: No valid boot flag found, falling back to filename check");
+        return 0;
+    }
+
+}
+
+static inline rt_uint64_t get_preload_addr(void)
+{
+    rt_uint64_t load_addr;
+
+    if (k230_atag_get_rtapp_loadaddr(&load_addr)) {
+        return load_addr;
+    } else {
+        LOG_E("ATAG: No valid boot flag found, falling back to filename check");
+        return 0;
+    }
+}
+/**
+ * Read ELF data from preloaded memory region
+ * @param dst destination buffer
+ * @param item_size size of each item
+ * @param item_number number of items to read
+ * @param offset offset in the preloaded ELF region
+ * @return number of bytes read
+ */
+static size_t preload_fread(void *dst, size_t item_size, size_t item_number, size_t offset)
+{
+    size_t bytes_to_read = item_size * item_number;
+    size_t elf_offset = offset;
+
+    /* Check if the requested offset is within preloaded ELF bounds */
+    if (elf_offset >= CONFIG_RTSMART_PRELOAD_RTAPP_MAXSIZE)
+    {
+        LOG_E("ELF is too large\n");
+        return 0;
+    }
+
+    /* Adjust read size if it would exceed preloaded ELF bounds */
+    if (elf_offset + bytes_to_read > CONFIG_RTSMART_PRELOAD_RTAPP_MAXSIZE)
+    {
+        LOG_E("_ELF is too large\n");
+        bytes_to_read = CONFIG_RTSMART_PRELOAD_RTAPP_MAXSIZE - elf_offset;
+    }
+
+    /* Copy from preloaded memory region */
+    rt_memcpy(dst, (void*)(get_preload_addr() + elf_offset), bytes_to_read);
+
+    return bytes_to_read / item_size;
+}
+
+/**
+ * Check if ELF data is valid at preloaded memory location
+ * @return 1 if valid ELF, 0 otherwise
+ */
+static int is_preloaded_elf_valid(void)
+{
+    uint8_t *elf_addr = (uint8_t*)get_preload_addr();
+
+    /* Check ELF magic number */
+    if (rt_memcmp(elf_addr, elf_magic, 4) != 0)
+    {
+        LOG_E("Preloaded ELF magic number mismatch");
+        return 0;
+    }
+
+    /* Check ELF class - support both 32-bit and 64-bit */
+    uint8_t elf_class = elf_addr[EI_CLASS];
+    if (elf_class != ELFCLASS32 && elf_class != ELFCLASS64)
+    {
+        LOG_E("Preloaded ELF has invalid class: %d", elf_class);
+        return 0;
+    }
+
+    /* Additional validation for both 32-bit and 64-bit ELF */
+    /* Verify this is a valid ELF by checking basic structure */
+    uint8_t elf_data = elf_addr[EI_DATA];
+    uint8_t elf_version = elf_addr[EI_VERSION];
+
+    if (elf_data != ELFDATA2LSB)
+    {
+        LOG_E("Preloaded ELF data encoding mismatch: %d", elf_data);
+        return 0;
+    }
+
+    if (elf_version != EV_CURRENT)
+    {
+        LOG_E("Preloaded ELF version mismatch: %d", elf_version);
+        return 0;
+    }
+
+    return 1;
+}
+
+static inline rt_bool_t should_use_preloaded_elf(const char *filename)
+{
+    return (rt_strcmp(filename, "/bin/preload") == 0) && is_preloaded_elf_valid();
+}
+
 typedef struct
 {
     Elf_Word st_name;
@@ -499,14 +606,28 @@ static int load_elf(int fd, int len, struct rt_lwp *lwp, uint8_t *load_addr, str
     rt_mmu_info *m_info = &lwp->mmu_info;
 #endif
 
+    rt_bool_t is_preload_file = should_use_preloaded_elf(lwp->cmd);
+
     if (len < sizeof eheader)
     {
         LOG_E("len < sizeof eheader!");
         return -RT_ERROR;
     }
 
-    lseek(fd, 0, SEEK_SET);
-    read_len = load_fread(&magic, 1, sizeof magic, fd);
+    if (is_preload_file)
+    {
+        read_len = preload_fread(&magic, 1, sizeof magic, 0);
+        if (read_len != sizeof magic)
+        {
+            LOG_E("Failed to read ELF magic from preloaded memory");
+            return -RT_ERROR;
+        }
+    }
+    else
+    {
+        lseek(fd, 0, SEEK_SET);
+        read_len = load_fread(&magic, 1, sizeof magic, fd);
+    }
     check_read(read_len, sizeof magic);
 
     if (memcmp(elf_magic, &magic, 4) != 0)
@@ -514,9 +635,15 @@ static int load_elf(int fd, int len, struct rt_lwp *lwp, uint8_t *load_addr, str
         LOG_E("elf_magic not same, magic:0x%x!", magic);
         return -RT_ERROR;
     }
-
-    lseek(fd, off, SEEK_SET);
-    read_len = load_fread(&eheader, 1, sizeof eheader, fd);
+    if (is_preload_file)
+    {
+        read_len = preload_fread(&eheader, 1, sizeof eheader, 0);
+    }
+    else
+    {
+        lseek(fd, off, SEEK_SET);
+        read_len = load_fread(&eheader, 1, sizeof eheader, fd);
+    }
     check_read(read_len, sizeof eheader);
 
 #ifndef ARCH_CPU_64BIT
@@ -556,8 +683,15 @@ static int load_elf(int fd, int len, struct rt_lwp *lwp, uint8_t *load_addr, str
         for (i = 0; i < eheader.e_phnum; i++, off += sizeof pheader)
         {
             check_off(off, len);
-            lseek(fd, off, SEEK_SET);
-            read_len = load_fread(&pheader, 1, sizeof pheader, fd);
+            if (is_preload_file)
+            {
+                read_len = preload_fread(&pheader, 1, sizeof pheader, off);
+            }
+            else
+            {
+                lseek(fd, off, SEEK_SET);
+                read_len = load_fread(&pheader, 1, sizeof pheader, fd);
+            }
             check_read(read_len, sizeof pheader);
 
             if (pheader.p_type == PT_DYNAMIC)
@@ -609,8 +743,15 @@ static int load_elf(int fd, int len, struct rt_lwp *lwp, uint8_t *load_addr, str
         }
 #endif
         check_off(off, len);
-        lseek(fd, off, SEEK_SET);
-        read_len = load_fread(process_header, 1, process_header_size, fd);
+        if (is_preload_file)
+        {
+            read_len = preload_fread(process_header, 1, process_header_size, off);
+        }
+        else
+        {
+            lseek(fd, off, SEEK_SET);
+            read_len = load_fread(process_header, 1, process_header_size, fd);
+        }
         check_read(read_len, process_header_size);
 #ifdef RT_USING_USERSPACE
         rt_hw_cpu_dcache_ops(RT_HW_CACHE_FLUSH, process_header, process_header_size);
@@ -667,8 +808,15 @@ static int load_elf(int fd, int len, struct rt_lwp *lwp, uint8_t *load_addr, str
         for (i = 0; i < eheader.e_shnum; i++, off += sizeof sheader)
         {
             check_off(off, len);
-            lseek(fd, off, SEEK_SET);
-            read_len = load_fread(&sheader, 1, sizeof sheader, fd);
+            if (is_preload_file)
+            {
+                read_len = preload_fread(&sheader, 1, sizeof sheader, off);
+            }
+            else
+            {
+                lseek(fd, off, SEEK_SET);
+                read_len = load_fread(&sheader, 1, sizeof sheader, fd);
+            }
             check_read(read_len, sizeof sheader);
 
             if ((sheader.sh_flags & SHF_ALLOC) == 0)
@@ -744,8 +892,15 @@ static int load_elf(int fd, int len, struct rt_lwp *lwp, uint8_t *load_addr, str
         for (i = 0; i < eheader.e_shnum; i++, off += sizeof sheader)
         {
             check_off(off, len);
-            lseek(fd, off, SEEK_SET);
-            read_len = load_fread(&sheader, 1, sizeof sheader, fd);
+            if (is_preload_file)
+            {
+                read_len = preload_fread(&sheader, 1, sizeof sheader, off);
+            }
+            else
+            {
+                lseek(fd, off, SEEK_SET);
+                read_len = load_fread(&sheader, 1, sizeof sheader, fd);
+            }
             check_read(read_len, sizeof sheader);
 
             if ((sheader.sh_flags & SHF_ALLOC) == 0)
@@ -798,8 +953,15 @@ static int load_elf(int fd, int len, struct rt_lwp *lwp, uint8_t *load_addr, str
     for (i = 0; i < eheader.e_phnum; i++, off += sizeof pheader)
     {
         check_off(off, len);
-        lseek(fd, off, SEEK_SET);
-        read_len = load_fread(&pheader, 1, sizeof pheader, fd);
+        if (is_preload_file)
+        {
+            read_len = preload_fread(&pheader, 1, sizeof pheader, off);
+        }
+        else
+        {
+            lseek(fd, off, SEEK_SET);
+            read_len = load_fread(&pheader, 1, sizeof pheader, fd);
+        }
         check_read(read_len, sizeof pheader);
 
         if (pheader.p_type == PT_LOAD)
@@ -816,6 +978,7 @@ static int load_elf(int fd, int len, struct rt_lwp *lwp, uint8_t *load_addr, str
             {
                 uint32_t size = pheader.p_filesz;
                 size_t tmp_len = 0;
+                size_t src_offset = pheader.p_offset;
 
                 va = (void *)(pheader.p_vaddr + load_addr);
                 read_len = 0;
@@ -825,15 +988,31 @@ static int load_elf(int fd, int len, struct rt_lwp *lwp, uint8_t *load_addr, str
                     va_self = (void *)((char *)pa - PV_OFFSET);
                     LOG_D("va_self = %p pa = %p", va_self, pa);
                     tmp_len = (size < ARCH_PAGE_SIZE) ? size : ARCH_PAGE_SIZE;
-                    tmp_len = load_fread(va_self, 1, tmp_len, fd);
+                    if (is_preload_file)
+                    {
+                        tmp_len = preload_fread(va_self, 1, tmp_len, src_offset);
+                    }
+                    else
+                    {
+                        tmp_len = load_fread(va_self, 1, tmp_len, fd);
+                    }
                     rt_hw_cpu_dcache_ops(RT_HW_CACHE_FLUSH, va_self, tmp_len);
                     read_len += tmp_len;
                     size -= tmp_len;
+                    if (is_preload_file)
+                        src_offset += tmp_len;
                     va = (void *)((char *)va + ARCH_PAGE_SIZE);
                 }
             }
 #else
-            read_len = load_fread((void*)(pheader.p_vaddr + load_off), 1, pheader.p_filesz, fd);
+            if (is_preload_file)
+            {
+                read_len = preload_fread((void*)(pheader.p_vaddr + load_off), 1, pheader.p_filesz, pheader.p_offset);
+            }
+            else
+            {
+                read_len = load_fread((void*)(pheader.p_vaddr + load_off), 1, pheader.p_filesz, fd);
+            }
 #endif
             check_read(read_len, pheader.p_filesz);
 
@@ -871,8 +1050,15 @@ static int load_elf(int fd, int len, struct rt_lwp *lwp, uint8_t *load_addr, str
         off = eheader.e_shoff;
         /* find section string table */
         check_off(off, len);
-        lseek(fd, off + (sizeof sheader) * eheader.e_shstrndx, SEEK_SET);
-        read_len = load_fread(&sheader, 1, sizeof sheader, fd);
+        if (is_preload_file)
+        {
+            read_len = preload_fread(&sheader, 1, sizeof sheader, off + (sizeof sheader) * eheader.e_shstrndx);
+        }
+        else
+        {
+            lseek(fd, off + (sizeof sheader) * eheader.e_shstrndx, SEEK_SET);
+            read_len = load_fread(&sheader, 1, sizeof sheader, fd);
+        }
         check_read(read_len, sizeof sheader);
 
         p_section_str = (char *)rt_malloc(sheader.sh_size);
@@ -884,15 +1070,29 @@ static int load_elf(int fd, int len, struct rt_lwp *lwp, uint8_t *load_addr, str
         }
 
         check_off(sheader.sh_offset, len);
-        lseek(fd, sheader.sh_offset, SEEK_SET);
-        read_len = load_fread(p_section_str, 1, sheader.sh_size, fd);
+        if (is_preload_file)
+        {
+            read_len = preload_fread(p_section_str, 1, sheader.sh_size, sheader.sh_offset);
+        }
+        else
+        {
+            lseek(fd, sheader.sh_offset, SEEK_SET);
+            read_len = load_fread(p_section_str, 1, sheader.sh_size, fd);
+        }
         check_read(read_len, sheader.sh_size);
 
         check_off(off, len);
         lseek(fd, off, SEEK_SET);
         for (i = 0; i < eheader.e_shnum; i++, off += sizeof sheader)
         {
-            read_len = load_fread(&sheader, 1, sizeof sheader, fd);
+            if (is_preload_file)
+            {
+                read_len = preload_fread(&sheader, 1, sizeof sheader, off);
+            }
+            else
+            {
+                read_len = load_fread(&sheader, 1, sizeof sheader, fd);
+            }
             check_read(read_len, sizeof sheader);
 
             if (strcmp(p_section_str + sheader.sh_name, ".got") == 0)
@@ -922,8 +1122,15 @@ static int load_elf(int fd, int len, struct rt_lwp *lwp, uint8_t *load_addr, str
                 goto _exit;
             }
             check_off(dynsym_off, len);
-            lseek(fd, dynsym_off, SEEK_SET);
-            read_len = load_fread(dynsym, 1, dynsym_size, fd);
+            if (is_preload_file)
+            {
+                read_len = preload_fread(dynsym, 1, dynsym_size, dynsym_off);
+            }
+            else
+            {
+                lseek(fd, dynsym_off, SEEK_SET);
+                read_len = load_fread(dynsym, 1, dynsym_size, fd);
+            }
             check_read(read_len, dynsym_size);
         }
 #ifdef RT_USING_USERSPACE
@@ -939,6 +1146,10 @@ static int load_elf(int fd, int len, struct rt_lwp *lwp, uint8_t *load_addr, str
     LOG_D("lwp->text_size  = 0x%p", lwp->text_size);
 
 _exit:
+    if (result != RT_EOK)
+    {
+        LOG_E("ERROR: ELF loading failed with result %d", result);
+    }
     if (dynsym)
     {
         rt_free(dynsym);
@@ -993,6 +1204,12 @@ RT_WEAK int lwp_load(const char *filename, struct rt_lwp *lwp, uint8_t *load_add
         LOG_E("ERROR: Can't open elf file %s!", filename);
         goto out;
     }
+
+    if (should_use_preloaded_elf(lwp->cmd)) {
+        len = get_preload_size();
+        goto _load_elf;
+    }
+
     len = lseek(fd, 0, SEEK_END);
     if (len < 0)
     {
@@ -1085,6 +1302,7 @@ _temp_failed:
     }
 #endif
 
+_load_elf:
     ret = load_elf(fd, len, lwp, ptr, aux);
     if ((ret != RT_EOK) && (ret != 1))
     {
