@@ -23,52 +23,123 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __DRV_ADC__
-#define __DRV_ADC__
-#include "board.h"
+#pragma once
 
-#define K230_ADC_NAME       "adc"
-#define CLK_DIV             1
+#include <stdint.h>
 
-#define ADC_MAX_CHANNEL     6
-#define ADC_MAX_DMA_CHN     3
+#define K_ADC_MAX_CHANNEL (6)
 
-#define K_IOC_TYPE_ADC      'A'
+#define K_ADC_INTER_VREF_0P85 (0x00)
+#define K_ADC_INTER_VREF_0P90 (0x01)
+#define K_ADC_INTER_VREF_0P95 (0x02)
+#define K_ADC_INTER_VREF_1P00 (0x03)
 
-typedef enum {
-    K_IOC_NR_ADC_ENABLE,
-    K_IOC_NR_ADC_DISABLE,
-    K_IOC_NR_ADC_READ,
-} k_ioc_nr_adc;
+struct k_adc_trim_reg {
+    union {
+        struct {
+            uint32_t enadc : 1;
+            uint32_t resv_3_1 : 3;
+            uint32_t inter_ref_sel : 1;
+            uint32_t resv_7_5 : 3;
+            uint32_t vref_sel : 2;
+            uint32_t resv_11_10 : 2;
+            uint32_t bgtrim : 4;
+            uint32_t resv_19_16 : 4;
+            uint32_t oscal_en : 1;
+            uint32_t resv_23_21 : 3;
+            uint32_t oscal_done : 1;
+            uint32_t resv_31_25 : 7;
+        } bits;
+        uint32_t data;
+    };
+};
 
-#define K_IOC_ADC_ENABLE        _IOW(K_IOC_TYPE_ADC, K_IOC_NR_ADC_ENABLE, rt_uint32_t);
-#define K_IOC_ADC_DISABLE       _IOW(K_IOC_TYPE_ADC, K_IOC_NR_ADC_DISABLE, rt_uint32_t);
-#define K_IOC_ADC_READ          _IOW(K_IOC_TYPE_ADC, K_IOC_NR_ADC_READ, rt_uint32_t);
+struct k_adc_cfg_reg {
+    union {
+        struct {
+            uint32_t in_sel : 3;
+            uint32_t resv_3 : 1;
+            uint32_t start_of_conv : 1;
+            uint32_t resv_7_5 : 3;
+            uint32_t busy : 1;
+            uint32_t resv_11_9 : 3;
+            uint32_t end_of_conv : 1;
+            uint32_t resv_15_13 : 3;
+            uint32_t outen : 1;
+            uint32_t resv_31_17 : 15;
+        } bits;
+        uint32_t data;
+    };
+};
 
-typedef struct
-{
-    rt_uint32_t trim_reg;                       /**< 0x00 */
-    rt_uint32_t cfg_reg;                        /**< 0x04 */
-    rt_uint32_t mode_reg;                       /**< 0x08 */
-    rt_uint32_t thsd_reg;                       /**< 0x0c */
-    rt_uint32_t dma_intr_reg;                   /**< 0x10 */
-    rt_uint32_t data_reg[ADC_MAX_CHANNEL];      /**< 0x14~0x28 */
-    rt_uint32_t data_dma[ADC_MAX_DMA_CHN];      /**< 0x2c~0x34 */
-} k_adc_regs_t;
+struct k_adc_mode_reg {
+    union {
+        struct {
+            uint32_t mode_sel : 2;
+            uint32_t resv_3_2 : 2;
+            uint32_t dma_pause : 1;
+            uint32_t resv_7_5 : 3;
+            uint32_t dma1_en : 1;
+            uint32_t dma1_in_sel : 3;
+            uint32_t dma1_clr : 1;
+            uint32_t resv_15_13 : 3;
+            uint32_t dma2_in_sel : 3;
+            uint32_t dma2_clr : 1;
+            uint32_t resv_23_20 : 4;
+            uint32_t dma3_in_sel : 3;
+            uint32_t dma3_clr : 1;
+            uint32_t resv_31_28 : 4;
+        } bits;
+        uint32_t data;
+    };
+};
 
-typedef struct 
-{
-    rt_uint32_t dev_num;
-    rt_uint32_t chn_num;
-    rt_int8_t enabled;
-} k_adc_chn_t;
+#define K_ADC_THRESHOLD_SEL_HIGH_PASS (0x00)
+#define K_ADC_THRESHOLD_SEL_BAND_PASS (0x01)
+#define K_ADC_THRESHOLD_SEL_BAND_STOP (0x02)
+#define K_ADC_THRESHOLD_SEL_LOW_PASS  (0x03)
 
-typedef struct
-{
-    rt_uint32_t dev_num;
-    k_adc_regs_t *adc_regs;
-    k_adc_chn_t chn[ADC_MAX_CHANNEL];
-    rt_uint8_t use_num;
-} k_adc_dev_t;
+struct k_adc_thsd_reg {
+    union {
+        struct {
+            uint32_t threshold_sel : 2;
+            uint32_t resv_3_2 : 2;
+            uint32_t threshold_low : 12;
+            uint32_t threshold_high : 12;
+            uint32_t resv_31_28 : 4;
+        } bits;
+        uint32_t data;
+    };
+};
 
-#endif /*__DRV_ADC__*/
+struct k_adc_intr_reg {
+    union {
+        struct {
+            uint32_t dma1_intr : 1;
+            uint32_t dma2_intr : 1;
+            uint32_t dma3_intr : 1;
+            uint32_t resv_31_3 : 29;
+        } bits;
+        uint32_t data;
+    };
+};
+
+struct k_adc_data_reg {
+    union {
+        struct {
+            uint32_t data : 12;
+            uint32_t resv_31_12 : 20;
+        } bits;
+        uint32_t data;
+    };
+};
+
+struct k_adc_reg {
+    volatile struct k_adc_trim_reg trim; // 0x00: LSADC initializes the self-calibrating control register
+    volatile struct k_adc_cfg_reg  cfg; // 0x04: LSADC Data conversion control registe
+    volatile struct k_adc_mode_reg mode; // 0x08: LSADC output mode selection control register
+    volatile struct k_adc_thsd_reg threshold; // 0x0C: LSADC threshold interrupt control register
+    volatile struct k_adc_intr_reg intr; // 0x10: LSADC's DMA error interrupt register
+    volatile struct k_adc_data_reg data[6]; // 0x14 - 0x28: Input channel N Digital signal output
+    volatile struct k_adc_data_reg dma_data[3]; // 0x2C - 0x34: Continuous sampling channel N digital signal output
+};

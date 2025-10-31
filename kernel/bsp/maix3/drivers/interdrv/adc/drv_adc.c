@@ -22,166 +22,242 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#include <rtthread.h>
-#include <rthw.h>
-#include <drivers/mmcsd_core.h>
-#include <rtdevice.h>
-#include "board.h"
 #include "drv_adc.h"
+
+#include "ioremap.h"
+#include "rtdef.h"
+#include "rtdevice.h"
+#include "rtthread.h"
+
+#include "board.h"
+#include "iopoll.h"
 #include "riscv_io.h"
-#include <string.h>
-#include <ioremap.h>
-#include "sysctl_rst.h"
-#include "sysctl_clk.h"
 #include "tick.h"
 
-#ifdef RT_USING_ADC
+#include "sysctl_clk.h"
+#include "sysctl_rst.h"
 
-static struct rt_adc_device k230_adc;
-k_adc_dev_t adc_dev;
+#ifdef RT_DEBUG
+#define DBG_LVL DBG_LOG
+#else
+#define DBG_LVL DBG_WARNING
+#endif
 
-static int k_adc_drv_hw_init(k_adc_regs_t *adc_regs)
-{
-    rt_uint32_t reg;
+#define DBG_COLOR
+#define DBG_TAG "drv_adc"
+#include <rtdbg.h>
 
-    reg = readl(&adc_regs->trim_reg);
-    reg &= (~(0x1));
-    writel(reg, &adc_regs->trim_reg);
+struct adc_inst {
+    struct rt_adc_device device;
+    struct rt_mutex      mutex;
 
-    reg = readl(&adc_regs->trim_reg);
-    reg |= 0x1;
-    writel(reg, &adc_regs->trim_reg);
+    struct k_adc_reg* reg; // ADC_BASE_ADDR
 
-    reg = readl(&adc_regs->trim_reg);
-    reg |= (0x1 << 20);
-    writel(reg, &adc_regs->trim_reg);
-
-    cpu_ticks_delay_us(150);
-
-    reg &= ~(0x1 << 20);
-    writel(reg, &adc_regs->trim_reg);
-
-    writel(0x0, &adc_regs->mode_reg);
-
-    return RT_EOK;
-}
-
-static int k_adc_drv_init()
-{
-    int i;
-
-    adc_dev.dev_num = 0;
-    adc_dev.adc_regs = (k_adc_regs_t*)rt_ioremap((void *)ADC_BASE_ADDR, ADC_IO_SIZE);
-    adc_dev.use_num = 0;
-
-    for (i = 0; i < ADC_MAX_DMA_CHN; i++)
-    {
-        adc_dev.chn[i].dev_num = adc_dev.dev_num;
-        adc_dev.chn[i].chn_num = i;
-        adc_dev.chn[i].enabled = 0;
-    }
-
-    k_adc_drv_hw_init(adc_dev.adc_regs);
-
-    return RT_EOK;
-}
-
-static int k_adc_drv_enabled(k_adc_regs_t *adc_regs)
-{
-    rt_uint32_t reg;
-
-    reg = readl(&adc_regs->trim_reg);
-    reg |= 0x1;
-    writel(reg, &adc_regs->trim_reg);
-
-    return RT_EOK;
-}
-
-static int k_adc_drv_disabled(k_adc_regs_t *adc_regs)
-{
-    rt_uint32_t reg;
-
-    reg = readl(&adc_regs->trim_reg);
-    reg = reg & (~(0x1));
-    writel(reg, &adc_regs->trim_reg);
-
-    return RT_EOK;
-}
-
-rt_err_t k230_adc_enabled(struct rt_adc_device *device, rt_uint32_t channel, rt_bool_t enabled)
-{
-    if (channel >= ADC_MAX_CHANNEL)
-    {
-        return RT_ERROR;
-    }
-
-    if (enabled)
-    {
-        if (adc_dev.chn[channel].enabled)
-        {
-            return RT_EOK;
-        }
-        else
-        {
-            adc_dev.chn[channel].enabled = 1;
-            adc_dev.use_num++;
-        }
-        // if (adc_dev.use_num == 1)
-        // {
-        //     k_adc_drv_enabled(adc_dev.adc_regs);
-        // }
-    }
-    else
-    {
-        if (!adc_dev.chn[channel].enabled)
-        {
-            return RT_EOK;
-        }
-        else
-        {
-            adc_dev.chn[channel].enabled = 0;
-            adc_dev.use_num--;
-        }
-        // if (adc_dev.use_num == 0)
-        // {
-        //     k_adc_drv_disabled(adc_dev.adc_regs);
-        // }
-    }
-
-    return RT_EOK;
-}
-
-rt_err_t k230_get_adc_value(struct rt_adc_device *device, rt_uint32_t channel, rt_uint32_t *value)
-{
-    if (channel >= ADC_MAX_CHANNEL)
-        return RT_ERROR;
-    
-    if (!adc_dev.chn[channel].enabled){
-        return RT_ERROR;
-    }
-
-    writel(channel | 0x10, &adc_dev.adc_regs->cfg_reg);
-    while ((readl(&adc_dev.adc_regs->cfg_reg) & 0x10000) == 0);
-    *value = readl(&adc_dev.adc_regs->data_reg[channel]);
-
-    return RT_EOK;
-}
-
-static const struct rt_adc_ops k230_adc_ops =
-{
-    k230_adc_enabled,
-    k230_get_adc_value,
+    int inited;
 };
 
-int rt_hw_adc_init(void)
-{
-    k_adc_drv_init();
+static struct adc_inst k230_adc_inst;
 
-    rt_hw_adc_register(&k230_adc, K230_ADC_NAME, &k230_adc_ops, NULL);
+static int k230_adc_init(void)
+{
+    int ret;
+
+    struct k_adc_trim_reg trim;
+    struct k_adc_mode_reg mode;
+
+    if (NULL == k230_adc_inst.reg) {
+        LOG_E("invalid inst");
+        return -1;
+    }
+
+    rt_mutex_take(&k230_adc_inst.mutex, RT_WAITING_FOREVER);
+
+#if 0
+    sysctl_clk_set_leaf_en(SYSCTL_CLK_ADC_PCLK_GATE, 0);
+    cpu_ticks_delay_us(1);
+    sysctl_clk_set_leaf_en(SYSCTL_CLK_ADC_PCLK_GATE, 1);
+    cpu_ticks_delay_us(1);
+
+    // enable adc
+    trim.data       = readl(&k230_adc_inst.reg->trim);
+    trim.bits.enadc = 1;
+    writel(trim.data, &k230_adc_inst.reg->trim);
+
+    // reset adc, wait 100us
+    sysctl_reset(SYSCTL_RESET_ADC);
+    sysctl_reset(SYSCTL_RESET_ADC_APB);
+    cpu_ticks_delay_us(100);
+#endif
+
+    // disable adc
+    trim.data       = readl(&k230_adc_inst.reg->trim);
+    trim.bits.enadc = 0;
+    writel(trim.data, &k230_adc_inst.reg->trim);
+
+    // enable adc
+    trim.data       = readl(&k230_adc_inst.reg->trim);
+    trim.bits.enadc = 1;
+    writel(trim.data, &k230_adc_inst.reg->trim);
+
+    // enable calibration
+    trim.data          = readl(&k230_adc_inst.reg->trim);
+    trim.bits.enadc    = 1;
+    trim.bits.oscal_en = 1;
+    writel(trim.data, &k230_adc_inst.reg->trim);
+
+    // wait calibration done
+#if 1
+    cpu_ticks_delay_us(200);
+#else
+    ret = readl_poll_timeout(&k230_adc_inst.reg->trim, trim.data, (trim.bits.oscal_done), 1, 200);
+    if (0x00 != ret) {
+        LOG_E("ADC OS Cal failed: timeout");
+        // rt_mutex_release(&k230_adc_inst.mutex);
+
+        // return ret;
+    }
+#endif
+
+    // disable calibration
+    trim.data          = readl(&k230_adc_inst.reg->trim);
+    trim.bits.oscal_en = 0;
+    writel(trim.data, &k230_adc_inst.reg->trim);
+
+    // set mode, one shot mode.
+    mode.data          = readl(&k230_adc_inst.reg->mode);
+    mode.bits.mode_sel = 0x00;
+    writel(mode.data, &k230_adc_inst.reg->mode);
+
+    rt_mutex_release(&k230_adc_inst.mutex);
+
+    return 0;
+}
+
+static rt_err_t k230_adc_read(rt_uint32_t channel, rt_uint32_t* value)
+{
+    int ret;
+
+    struct k_adc_cfg_reg  cfg;
+    struct k_adc_data_reg data;
+
+    if (value) {
+        *value = 0;
+    }
+
+    if (K_ADC_MAX_CHANNEL <= channel) {
+        return -1;
+    }
+
+    if (0x00 == k230_adc_inst.inited) {
+        return -1;
+    }
+
+    rt_mutex_take(&k230_adc_inst.mutex, RT_WAITING_FOREVER);
+
+    ret = readl_poll_timeout(&k230_adc_inst.reg->cfg, cfg.data, (0x00 == cfg.bits.busy), 1, 200);
+    if (0x00 != ret) {
+        LOG_E("Wait adc done timeout 1, %d", ret);
+        rt_mutex_release(&k230_adc_inst.mutex);
+
+        return ret;
+    }
+
+    cfg.data               = 0;
+    cfg.bits.start_of_conv = 1;
+    cfg.bits.in_sel        = channel;
+    writel(cfg.data, &k230_adc_inst.reg->cfg);
+
+    uint64_t start = cpu_ticks_us();
+
+    ret = readl_poll_timeout(&k230_adc_inst.reg->cfg, cfg.data, cfg.bits.outen && cfg.bits.end_of_conv, 1, 200);
+    if (0x00 != ret) {
+        LOG_E("Wait adc done timeout 2, %d", ret);
+        rt_mutex_release(&k230_adc_inst.mutex);
+
+        return ret;
+    }
+
+    data.data = readl(&k230_adc_inst.reg->data[channel]);
+    if (value) {
+        *value = data.bits.data;
+    }
+
+    rt_mutex_release(&k230_adc_inst.mutex);
 
     return RT_EOK;
 }
-INIT_DEVICE_EXPORT(rt_hw_adc_init);
 
-#endif /* defined(RT_USING_ADC) */
+static rt_err_t k230_adc_enabled(struct rt_adc_device* device, rt_uint32_t channel, rt_bool_t enabled)
+{
+    (void)device;
+    (void)channel;
+    (void)enabled;
+
+    // we use oneshot mode to read adc, so no need to enable or disable.
+
+    return RT_EOK;
+}
+
+static rt_err_t k230_adc_convert(struct rt_adc_device* device, rt_uint32_t channel, rt_uint32_t* value)
+{
+    (void)device;
+
+    return k230_adc_read(channel, value);
+}
+
+static struct rt_adc_ops k230_adc_ops = {
+    .enabled = k230_adc_enabled,
+    .convert = k230_adc_convert,
+};
+
+int k230_adc_dev_init(void)
+{
+    if (0x00 != k230_adc_inst.inited) {
+        return 0;
+    }
+
+    rt_memset(&k230_adc_inst, 0x00, sizeof(k230_adc_inst));
+
+    if (RT_EOK != rt_mutex_init(&k230_adc_inst.mutex, "k230_adc", RT_IPC_FLAG_FIFO)) {
+        LOG_E("register adc device failed");
+
+        goto _failed_init_mutex;
+    }
+
+    k230_adc_inst.reg = rt_ioremap_nocache((void*)ADC_BASE_ADDR, ADC_IO_SIZE);
+    if (!k230_adc_inst.reg) {
+        LOG_E("ioremap failed");
+
+        goto _failed_remap;
+    }
+
+    if (0x00 != k230_adc_init()) {
+        LOG_E("init failed");
+
+        goto _failed_init;
+    }
+
+    if (RT_EOK != rt_hw_adc_register(&k230_adc_inst.device, "adc", &k230_adc_ops, NULL)) {
+        LOG_E("Register adc failed");
+
+        goto _failed_reg_device;
+    }
+
+    k230_adc_inst.inited = 1;
+
+    return 0;
+
+_failed_reg_device:
+    LOG_W("TODO: deinit adc driver");
+_failed_init:
+    if (k230_adc_inst.reg) {
+        rt_iounmap(k230_adc_inst.reg);
+        k230_adc_inst.reg = NULL;
+    }
+_failed_remap:
+    rt_mutex_detach(&k230_adc_inst.mutex);
+_failed_init_mutex:
+
+    return -1;
+}
+INIT_DEVICE_EXPORT(k230_adc_dev_init);
