@@ -221,11 +221,17 @@ struct sync_msg {
  *
  * SYNC_RECEIVING_FILE:
  *   - File is open (after SEND command)
- *   - Processing DATA packets until DONE
+ *   - Processing DATA packets until current_data_remaining == 0
+ *
+ * SYNC_WAIT_HEADER:
+ *   - Current DATA chunk complete, waiting for next header
+ *   - Header could be DATA (more data) or DONE (transfer complete)
+ *   - Handles split headers across packet boundaries
  */
 enum sync_state {
     SYNC_IDLE,
-    SYNC_RECEIVING_FILE
+    SYNC_RECEIVING_FILE,
+    SYNC_WAIT_HEADER
 };
 
 struct adb_sync_context {
@@ -236,6 +242,8 @@ struct adb_sync_context {
     uint32_t expected_file_size;
     uint32_t bytes_received;
     uint32_t current_data_remaining;  /* Bytes remaining in current DATA chunk */
+    uint8_t header_buffer[8];         /* Buffer for DATA(4)+size(4) or DONE(4)+time(4) that might be split */
+    uint8_t header_buffer_len;        /* Number of bytes currently in header buffer */
 };
 
 static struct adb_sync_context sync_ctx = {
@@ -244,10 +252,82 @@ static struct adb_sync_context sync_ctx = {
     .file_mode = 0,
     .expected_file_size = 0,
     .bytes_received = 0,
-    .current_data_remaining = 0
+    .current_data_remaining = 0,
+    .header_buffer_len = 0
 };
 
 int usbd_adb_sync_init(void);
+static void send_sync_response(uint32_t id, const void *data, uint32_t len);
+
+/*
+ * Helper function to check if we have DATA or DONE header in buffer
+ * Returns: ID_DATA if DATA header found, ID_DONE if DONE header found, 0 if need more data
+ */
+static uint32_t check_data_or_done_header(void)
+{
+    if (sync_ctx.header_buffer_len >= 4) {
+        if (memcmp(sync_ctx.header_buffer, "DATA", 4) == 0) {
+            return ID_DATA;
+        } else if (memcmp(sync_ctx.header_buffer, "DONE", 4) == 0) {
+            return ID_DONE;
+        }
+    }
+    return 0;  /* Need more data or unknown header */
+}
+
+/*
+ * Helper function to process remaining data when current_data_remaining == 0
+ * Saves data to buffer and tries to identify next header (DATA or DONE)
+ * Returns true if next action determined, false if need more data
+ */
+static bool process_next_header(const uint8_t *remaining_data, uint32_t remaining_len)
+{
+    if (remaining_len == 0) {
+        return false;
+    }
+
+    /* Prevent buffer overflow */
+    if (sync_ctx.header_buffer_len >= 8) {
+        SYNC_ERR("Header buffer overflow, resetting");
+        sync_ctx.header_buffer_len = 0;
+    }
+
+    /* Add data to buffer */
+    uint32_t to_copy = (remaining_len < (8 - sync_ctx.header_buffer_len)) ? remaining_len : (8 - sync_ctx.header_buffer_len);
+    memcpy(sync_ctx.header_buffer + sync_ctx.header_buffer_len, remaining_data, to_copy);
+    sync_ctx.header_buffer_len += to_copy;
+
+    /* Check if we have a complete header */
+    uint32_t header_id = check_data_or_done_header();
+    if (header_id == ID_DATA) {
+        if (sync_ctx.header_buffer_len >= 8) {
+            /* Complete DATA header found */
+            uint32_t data_size = *(const uint32_t *)(sync_ctx.header_buffer + 4);
+            sync_ctx.current_data_remaining = data_size;
+            sync_ctx.header_buffer_len = 0;  /* Clear buffer */
+            SYNC_DBG("DATA header found, size=%u", data_size);
+            return true;
+        }
+    } else if (header_id == ID_DONE) {
+        if (sync_ctx.header_buffer_len >= 8) {
+            /* DONE found, process it */
+            uint32_t zero = 0;
+            if (sync_ctx.file_fd >= 0) {
+                close(sync_ctx.file_fd);
+                sync_ctx.file_fd = -1;
+            }
+            sync_ctx.state = SYNC_IDLE;
+            sync_ctx.current_data_remaining = 0;
+            sync_ctx.header_buffer_len = 0;
+            send_sync_response(ID_OKAY, &zero, 4);
+            SYNC_DBG("DONE found, transfer complete");
+            return true;
+        }
+    }
+
+    /* Need more data to determine header */
+    return false;
+}
 
 /*
  * Thread entry: process console RX notifications in thread context
@@ -907,12 +987,12 @@ static void handle_sync_send(const uint8_t *data, uint32_t len)
             if (data_size <= remaining_in_packet) {
                 /* Small file: header size is accurate */
                 actual_data_len = data_size;
+                SYNC_DBG("Will write %u bytes, DATA chunk complete", actual_data_len);
             } else {
-                /* Large file: header size is wrong, use packet length */
                 actual_data_len = remaining_in_packet;
+                sync_ctx.current_data_remaining = data_size - actual_data_len;
+                SYNC_DBG("Will write %u bytes, %u remaining in DATA chunk", actual_data_len, sync_ctx.current_data_remaining);
             }
-
-            SYNC_DBG("Writing %u bytes (header_size=%u)", actual_data_len, data_size);
 
             if (actual_data_len > 0) {
                 ssize_t written = write_all(sync_ctx.file_fd, (const void *)file_data, actual_data_len);
@@ -925,39 +1005,38 @@ static void handle_sync_send(const uint8_t *data, uint32_t len)
                     return;
                 }
                 sync_ctx.bytes_received += written;
-                
-                /* Update current_data_remaining if data doesn't fit in one packet */
-                if (data_size > actual_data_len) {
-                    sync_ctx.current_data_remaining = data_size - actual_data_len;
-                    SYNC_DBG("Wrote %d bytes, %u remaining in DATA chunk", (int)written, sync_ctx.current_data_remaining);
-                } else {
-                    sync_ctx.current_data_remaining = 0;
-                    SYNC_DBG("Wrote %d bytes, DATA chunk complete", (int)written);
-                }
-                
-                SYNC_DBG("Total received: %u bytes", sync_ctx.bytes_received);
+                SYNC_DBG("Wrote %d bytes, total=%u", (int)written, sync_ctx.bytes_received);
 
-                /* Check for DONE in same packet (after actual data written) */
-                uint32_t done_offset = file_data_offset + actual_data_len;
-                if (done_offset + 8 <= len) {
-                    const uint8_t *done_pos = data + done_offset;
-                    if (memcmp(done_pos, "DONE", 4) == 0) {
-                        uint32_t zero = 0;
-                        SYNC_DBG("DONE in same packet, closing file");
-                        close(sync_ctx.file_fd);
-                        sync_ctx.file_fd = -1;
-                        sync_ctx.state = SYNC_IDLE;
-                        sync_ctx.current_data_remaining = 0;
-                        /* Send OKAY with 4 bytes of 0, matching QUIT/DONE format */
-                        send_sync_response(ID_OKAY, &zero, 4);
-                        return;
+                /* For small files where data_size <= remaining_in_packet:
+                 * all data fits in current packet, so DONE+time comes next */
+                if (data_size <= remaining_in_packet) {
+                    /* All file data processed (data_size bytes), now process any remaining data for DONE */
+                    uint32_t remaining_offset = file_data_offset + data_size;  /* Use data_size, not actual_data_len */
+                    uint32_t remaining_len = len - remaining_offset;
+
+                    sync_ctx.header_buffer_len = 0;  /* Clear buffer before use */
+
+                    if (remaining_len > 0) {
+                        /* Process remaining data in current packet */
+                        if (process_next_header(data + remaining_offset, remaining_len)) {
+                            /* DONE processed, transfer complete */
+                            return;
+                        } else {
+                            sync_ctx.state = SYNC_WAIT_HEADER;
+                        }
                     }
+
+                    SYNC_DBG("All file data processed, waiting for DONE in next packet");
+                } else {
+                    /* Large file: more data chunks will come in subsequent packets */
+                    sync_ctx.current_data_remaining = data_size - written;
+                    SYNC_DBG("Wrote %d bytes, %u remaining in DATA chunk", (int)written, sync_ctx.current_data_remaining);
                 }
             } else {
                 /* No data in this packet, but DATA header indicates more data coming */
                 if (data_size > 0) {
                     sync_ctx.current_data_remaining = data_size;
-                    SYNC_DBG("DATA header only, %u bytes remaining", data_size);
+                    SYNC_ERR("DATA header only, %u bytes remaining", data_size);
                 }
             }
         }
@@ -1006,13 +1085,13 @@ static void handle_sync_recv(const uint8_t *path, uint32_t len)
 
     SYNC_DBG("[ADB_SYNC] File opened, fd=%d\n", fd);
 
-    static char buffer[4016];  /* 4000 data + 16 for headers */
+    static char buffer[4096];  /* 4080 data + 16 for headers */
     ssize_t bytes_read;
     uint32_t total_sent = 0;
     bool is_last = false;
 
     while (!is_last) {
-        bytes_read = read(fd, buffer + 8, 4000);  /* Reserve 8 bytes for DATA header */
+        bytes_read = read(fd, buffer + 8, 4080);  /* Reserve 8 bytes for DATA header */
         if (bytes_read <= 0) {
             break;  /* End of file or error */
         }
@@ -1158,6 +1237,7 @@ static void handle_sync_quit(void)
     sync_ctx.state = SYNC_IDLE;
     sync_ctx.bytes_received = 0;
     sync_ctx.current_data_remaining = 0;
+    sync_ctx.header_buffer_len = 0;  /* Clear header detection buffer */
     memset(sync_ctx.current_path, 0, sizeof(sync_ctx.current_path));
 
     SYNC_DBG("[ADB_SYNC] State -> SYNC_IDLE\n");
@@ -1168,10 +1248,11 @@ static void handle_sync_quit(void)
     SYNC_DBG("[ADB_SYNC] Sent OKAY response to QUIT\n");
 }
 
+
 /*
  * Handle subsequent DATA/DONE packets after SEND
  * Called when state == SYNC_RECEIVING_FILE
- * Packet format: "DATAnnnnFileData..." or "DONEnnnn"
+ * Simplified logic: write data, when current_data_remaining == 0, check for next header
  */
 static void handle_file_data_packet(const uint8_t *data, uint32_t len)
 {
@@ -1184,85 +1265,70 @@ static void handle_file_data_packet(const uint8_t *data, uint32_t len)
         return;
     }
 
-    /* Process packet in a loop instead of recursion */
+    /* Process all data in this packet */
     while (offset < len) {
         const uint8_t *current_data = data + offset;
         uint32_t remaining = len - offset;
 
-        /* Check if continuation of previous DATA chunk */
+        /* If we have pending data to write, write it first */
         if (sync_ctx.current_data_remaining > 0) {
             uint32_t to_write = (remaining < sync_ctx.current_data_remaining) ? remaining : sync_ctx.current_data_remaining;
-            if (to_write == 0) {
-                SYNC_ERR("to_write is 0! remaining=%u, data_remaining=%u", remaining, sync_ctx.current_data_remaining);
-                return;
-            }
 
-            ssize_t written = write_all(sync_ctx.file_fd, current_data, to_write);
-            if (written < 0) {
-                SYNC_ERR("Write failed: to_write=%u, fd=%d", to_write, sync_ctx.file_fd);
-                send_sync_fail("Write error");
-                goto cleanup;
-            }
-
-            sync_ctx.bytes_received += written;
-            sync_ctx.current_data_remaining -= written;
-            offset += written;
-
-            /* If chunk complete, loop will process next header */
-            continue;
-        }
-
-        /* New packet with header */
-        if (remaining < 8) {
-            SYNC_ERR("Packet too short: %u bytes", remaining);
-            send_sync_fail("Invalid packet");
-            goto cleanup;
-        }
-
-        struct sync_msg *msg = (struct sync_msg *)current_data;
-
-        if (msg->id == ID_DATA) {
-            uint32_t data_size = msg->size;
-            uint32_t actual_len = remaining - 8;
-
-            offset += 8;  /* Skip header */
-
-            if (actual_len > 0) {
-                uint32_t to_write = (actual_len < data_size) ? actual_len : data_size;
-                ssize_t written = write_all(sync_ctx.file_fd, current_data + 8, to_write);
+            if (to_write > 0) {
+                /* Single write_all call */
+                ssize_t written = write_all(sync_ctx.file_fd, current_data, to_write);
                 if (written < 0) {
-                    SYNC_ERR("Write failed");
+                    SYNC_ERR("Write failed: to_write=%u, fd=%d", to_write, sync_ctx.file_fd);
                     send_sync_fail("Write error");
                     goto cleanup;
                 }
+
                 sync_ctx.bytes_received += written;
-                sync_ctx.current_data_remaining = data_size - written;
+                sync_ctx.current_data_remaining -= written;
                 offset += written;
-            } else {
-                /* Header only, all data in next packets */
+            }
+            continue;  /* Continue loop to check if more data to write or check next header */
+        }
+
+        /* current_data_remaining == 0, need to check what's next */
+        if (remaining >= 8) {
+            /* Complete header available */
+            struct sync_msg *msg = (struct sync_msg *)current_data;
+
+            if (msg->id == ID_DATA) {
+                uint32_t data_size = msg->size;
                 sync_ctx.current_data_remaining = data_size;
-            }
-            continue;
-        }
-
-        if (msg->id == ID_DONE) {
-            if (sync_ctx.file_fd >= 0) {
-                close(sync_ctx.file_fd);
-                sync_ctx.file_fd = -1;
-            }
-            sync_ctx.state = SYNC_IDLE;
-            sync_ctx.current_data_remaining = 0;
-            if (sync_ctx.bytes_received > 0) {
-                /* Send OKAY with 4 bytes of 0, matching QUIT/DONE format */
+                offset += 8;  /* Skip header */
+                SYNC_DBG("DATA header found, size=%u", data_size);
+                continue;  /* Go back to write data in next iteration */
+            } else if (msg->id == ID_DONE) {
+                /* DONE found, complete transfer */
                 uint32_t zero = 0;
+                if (sync_ctx.file_fd >= 0) {
+                    close(sync_ctx.file_fd);
+                    sync_ctx.file_fd = -1;
+                }
+                sync_ctx.state = SYNC_IDLE;
+                sync_ctx.current_data_remaining = 0;
                 send_sync_response(ID_OKAY, &zero, 4);
+                SYNC_DBG("DONE found, transfer complete");
+                return;
+            } else {
+                SYNC_ERR("Unknown packet id: 0x%08x", msg->id);
+                send_sync_fail("Invalid data packet");
+                goto cleanup;
             }
-            return;
+        } else {
+            /* Not enough data for complete header, save to buffer and wait for next packet */
+            if (process_next_header(current_data, remaining)) {
+                return;
+            } else {
+                /* Need more data to determine header, set state and wait for next packet */
+                sync_ctx.state = SYNC_WAIT_HEADER;
+                SYNC_DBG("Current chunk complete, waiting for next header in next packet");
+                return;
+            }
         }
-
-        SYNC_ERR("Unknown packet id: 0x%08x", msg->id);
-        send_sync_fail("Invalid data packet");
-        goto cleanup;
     }
 
     return;
@@ -1285,6 +1351,23 @@ static void process_sync_command(struct adb_sync_message *msg)
 
     if (sync_ctx.state == SYNC_RECEIVING_FILE) {
         handle_file_data_packet(msg->data, msg->length);
+        return;
+    }
+
+    if (sync_ctx.state == SYNC_WAIT_HEADER) {
+        /* In SYNC_WAIT_HEADER, use the header detection logic */
+        if (process_next_header(msg->data, msg->length)) {
+            if (sync_ctx.current_data_remaining > 0) {
+                /* DATA header found, switch back to RECEIVING_FILE */
+                sync_ctx.state = SYNC_RECEIVING_FILE;
+                handle_file_data_packet(msg->data, msg->length);
+                return;
+            } else {
+                /* DONE processed */
+                return;
+            }
+        }
+        /* Need more data to determine header, wait for next packet */
         return;
     }
 
