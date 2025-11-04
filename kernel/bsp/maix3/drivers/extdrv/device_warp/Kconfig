@@ -1,0 +1,7 @@
+menuconfig RT_USING_DEVICE_WRAP
+    bool "Enable Driver wrap"
+    default n
+    select RT_USING_HEAP
+
+    help 
+        device_wrap enables you to listen to and intercept the lifecycle of the device.
