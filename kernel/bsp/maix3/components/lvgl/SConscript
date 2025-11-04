@@ -11,26 +11,7 @@ cwd = GetCurrentDir() # get current dir path
 port_src = Glob('*.c')
 port_inc = [cwd]
 
-mpp_src_dir = os.getenv('MPP_SRC_DIR')
-LIBPATH = []
-LINKFLAGS = ''
-if mpp_src_dir is not None:
-    port_inc += [mpp_src_dir + '/include/comm', mpp_src_dir + '/include/ioctl' ,mpp_src_dir + '/userapps/api']
-    port_src += [mpp_src_dir + '/userapps/src/connector/mpi_connector.c']
-    userapps_lib_dir = cwd + '/lib'
-
-    if os.path.exists(userapps_lib_dir):
-        LIBPATH += [userapps_lib_dir]
-
-        libname = ''
-        liblist = os.listdir(userapps_lib_dir)
-        for item in liblist:
-            if item[-2:] == ".a":
-                libname = libname + '-l' + item[3:-2] + ' '
-
-        LINKFLAGS += ' -Wl,--whole-archive ' + libname  + ' -Wl,--no-whole-archive'
-
-group = group + DefineGroup('LVGL-port', port_src, depend = ['PKG_USING_LVGL'], CPPPATH = port_inc, LIBPATH = LIBPATH, LINKFLAGS = LINKFLAGS)
+group = group + DefineGroup('LVGL-port', port_src, depend = ['PKG_USING_LVGL'], CPPPATH = port_inc)
 
 # check if .h or .hpp files exists
 def check_h_hpp_exists(path):
