@@ -1,6 +1,7 @@
 menuconfig PKG_USING_LVGL
     bool "LVGL (official): Light and Versatile Graphics Library"
     default n
+    select USING_DISPLAY_MANAGER
 
     if PKG_USING_LVGL
         config PKG_LVGL_THREAD_STACK_SIZE
