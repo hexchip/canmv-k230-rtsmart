@@ -47,6 +47,10 @@ if RT_USING_LIBC && RT_USING_DFS
         bool "Enable mmap() API"
         default n
 
+    config RT_USING_POSIX_TERMIOS
+        bool "Enable termios feature"
+        default n
+        
     config RT_USING_POSIX_GETLINE
         bool "Enable getline()/getdelim() APIs"
         default n
