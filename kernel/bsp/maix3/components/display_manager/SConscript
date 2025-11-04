@@ -1,0 +1,36 @@
+# RT-Thread building script for component
+
+from building import *
+
+cwd = GetCurrentDir()
+src = Glob('*.c')
+src += Glob('internal/*.c')
+
+CPPPATH = [cwd]
+LOCAL_CPPPATH = [f'{cwd}/internal']
+
+mpp_src_dir = os.getenv('MPP_SRC_DIR')
+LIBPATH = []
+LINKFLAGS = ''
+if mpp_src_dir is not None:
+    CPPPATH += [mpp_src_dir + '/include/comm', mpp_src_dir + '/include/ioctl' ,mpp_src_dir + '/userapps/api']
+    src += [mpp_src_dir + '/userapps/src/connector/mpi_connector.c']
+    userapps_lib_dir = cwd + '/lib'
+
+    if os.path.exists(userapps_lib_dir):
+        LIBPATH += [userapps_lib_dir]
+
+        libname = ''
+        liblist = os.listdir(userapps_lib_dir)
+        for item in liblist:
+            if item[-2:] == ".a":
+                libname = libname + '-l' + item[3:-2] + ' '
+
+        LINKFLAGS += ' -Wl,--whole-archive ' + libname  + ' -Wl,--no-whole-archive'
+
+
+group = DefineGroup('DisplayManager', src, depend = ['USING_DISPLAY_MANAGER'], CPPPATH = CPPPATH, LOCAL_CPPPATH = LOCAL_CPPPATH, LIBPATH = LIBPATH, LINKFLAGS = LINKFLAGS)
+
+objs = [group]
+
+Return('objs')

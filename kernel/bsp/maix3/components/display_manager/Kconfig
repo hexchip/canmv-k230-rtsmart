@@ -1,0 +1,7 @@
+menuconfig USING_DISPLAY_MANAGER
+    bool "DisplayManager"
+    default n
+
+    if USING_DISPLAY_MANAGER
+
+    endif
