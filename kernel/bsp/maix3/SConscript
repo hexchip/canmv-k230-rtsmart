@@ -17,34 +17,11 @@ user_app_dir = user_app_dir.strip('"')
 
 filtered_list.append(user_app_dir)
 
-romfs_obj = None  # Define first
-
-if GetDepend(['CONFIG_RTSMART_ENABLE_ROMFS']):
-    romfs_dir = cwd + '/romfs'  # the folder to package
-    romfs_c = cwd + '/romfs.c'    # output C file
-
-    # Ensure romfs dir exists and has .keep if empty
-    if not os.path.exists(romfs_dir):
-        os.makedirs(romfs_dir)
-    keep_file = os.path.join(romfs_dir, '.keep')
-    if not os.path.exists(keep_file):
-        with open(keep_file, 'w') as f:
-            f.write('')  # create an empty .keep file
-
-    romfs_c_target = Env.Command(
-        target=romfs_c,
-        source=['mkromfs.py'],
-        action=f'python3 $SOURCE {romfs_dir} $TARGET'
-    )
-    AlwaysBuild(romfs_c_target)
-
-    romfs_obj = Env.Value(str(romfs_c))
-
 # Iterate through the filtered list and include SConscript files
 for d in filtered_list:
     path = os.path.join(cwd, d)
     if os.path.isfile(os.path.join(path, 'SConscript')):
-        objs += SConscript(os.path.join(d, 'SConscript'), exports={'romfs_obj': romfs_obj})
+        objs += SConscript(os.path.join(d, 'SConscript'))
 
 # Return the collected objects
 Return('objs')
