@@ -130,6 +130,10 @@ static inline __attribute__((always_inline)) void _usbd_video_release_pool(struc
 
     k_u32 pool_id = inst->buffer_pool_id;
 
+    if (VB_INVALID_POOLID == pool_id) {
+        return;
+    }
+
     // remove all frames, and destroy pool
     for (int i = 0; i < inst->buffer_cnt; i++) {
         frame = &inst->frames[i];
