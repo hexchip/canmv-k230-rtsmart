@@ -141,14 +141,55 @@ void usbd_cdc_acm_bulk_in(uint8_t busid, uint8_t ep, uint32_t nbytes)
     }
 }
 
-void usbd_cdc_acm_set_line_coding(uint8_t busid, uint8_t intf, struct cdc_line_coding* line_coding) { }
+#define CDC_ACM_MAGIC_REBOOT_BAUDRATE (300)
+#define CDC_ACM_MAGIC_REBOOT_STOPBITS (2)
+#define CDC_ACM_MAGIC_REBOOT_PARITY   (3)
+#define CDC_ACM_MAGIC_REBOOT_DATABITS (5)
+
+static volatile bool pending_magic_reset = false;
+static volatile bool last_dtr_state = false;
+static volatile bool last_rts_state = false;
+static volatile bool send_break_flag = false;
+
+static struct cdc_line_coding s_line_coding = {
+    .dwDTERate = 2000000,
+    .bCharFormat = 0,
+    .bParityType = 0,
+    .bDataBits = 8,
+};
+
+void usbd_cdc_acm_set_line_coding(uint8_t busid, uint8_t intf, struct cdc_line_coding* line_coding) {
+    if(!line_coding) {
+        return;
+    }
+
+    last_dtr_state = false;
+    last_rts_state = false;
+    send_break_flag = false;
+    usb_memcpy((void *)&s_line_coding, line_coding, sizeof(s_line_coding));
+
+    if(CDC_ACM_MAGIC_REBOOT_BAUDRATE != line_coding->dwDTERate) {
+        return;
+    }
+
+    if(CDC_ACM_MAGIC_REBOOT_STOPBITS != line_coding->bCharFormat) {
+        return;
+    }
+
+    if(CDC_ACM_MAGIC_REBOOT_PARITY != line_coding->bParityType) {
+        return;
+    }
+
+    if(CDC_ACM_MAGIC_REBOOT_DATABITS != line_coding->bDataBits) {
+        return;
+    }
+
+    pending_magic_reset = true;
+}
 
 void usbd_cdc_acm_get_line_coding(uint8_t busid, uint8_t intf, struct cdc_line_coding* line_coding)
 {
-    line_coding->dwDTERate   = 2000000;
-    line_coding->bDataBits   = 8;
-    line_coding->bParityType = 0;
-    line_coding->bCharFormat = 0;
+    usb_memcpy((void *)line_coding, &s_line_coding, sizeof(s_line_coding));
 }
 
 void usbd_cdc_acm_set_dtr(uint8_t busid, uint8_t intf, bool dtr)
@@ -158,11 +199,32 @@ void usbd_cdc_acm_set_dtr(uint8_t busid, uint8_t intf, bool dtr)
     cdc          = &g_usbd_serial_cdc_acm;
     cdc->cdc_dtr = (int)dtr;
     rt_hw_serial_isr(&cdc->serial, RT_SERIAL_EVENT_HOTPLUG);
+
+    last_dtr_state = dtr;
 }
 
-void usbd_cdc_acm_set_rts(uint8_t busid, uint8_t intf, bool rts) { }
+void usbd_cdc_acm_set_rts(uint8_t busid, uint8_t intf, bool rts) {
+    if(!pending_magic_reset) {
+        return;
+    }
 
-void usbd_cdc_acm_send_break(uint8_t busid, uint8_t intf) { }
+    if(!last_dtr_state) {
+        return;
+    }
+
+    if(!send_break_flag) {
+        return;
+    }
+
+    if(!rts) {
+        return;
+    }
+
+    extern void reboot_to_upgrade(void);
+    reboot_to_upgrade();
+}
+
+void usbd_cdc_acm_send_break(uint8_t busid, uint8_t intf) { send_break_flag = true; }
 
 void canmv_usb_device_cdc_on_connected(void)
 {

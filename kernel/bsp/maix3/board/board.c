@@ -15,6 +15,7 @@
 
 #include "board.h"
 #include "tick.h"
+#include "riscv_io.h"
 
 #include "drv_uart.h"
 #include "encoding.h"
@@ -327,6 +328,7 @@ MSH_CMD_EXPORT_ALIAS(rt_hw_cpu_reset, reboot, reset machine);
 
 void reboot_to_upgrade(void)
 {
+#if 0
     const rt_ubase_t target = 0x80230000;
     void *map_base = rt_ioremap_nocache((void *)(target & ~(PAGE_SIZE - 1)), PAGE_SIZE);
     volatile rt_uint32_t *memory_address = (rt_uint32_t *)(void *)(map_base + (target & (PAGE_SIZE - 1)));
@@ -334,6 +336,10 @@ void reboot_to_upgrade(void)
     *memory_address = 0x5aa5a55a;
 
     rt_iounmap(map_base);
+#else
+    writel(0x5aa5a55a, (volatile void *)(uintptr_t)0x80230000);
+#endif
+
     rt_hw_cpu_reset();
 }
 MSH_CMD_EXPORT_ALIAS(reboot_to_upgrade, reboot_to_upgrade, reboot to upgrade mode);
