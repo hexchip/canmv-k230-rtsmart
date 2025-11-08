@@ -52,6 +52,7 @@
 #endif // ENABLE_CHERRY_USB
 
 bool g_fs_mount_data_succ = false;
+bool g_fs_mount_sdcard_succ = false;
 
 static const struct dfs_mount_tbl* const auto_mount_table[SYSCTL_BOOT_MAX] = {
     (const struct dfs_mount_tbl[]) {
@@ -61,21 +62,33 @@ static const struct dfs_mount_tbl* const auto_mount_table[SYSCTL_BOOT_MAX] = {
     (const struct dfs_mount_tbl[]) {
         /* Nand Flash */
         { "nand0", "/bin", "uffs", 0, 0 },
+#if CONFIG_RT_PARTITION_NUMBER >= 2
         { "nand1", "/sdcard", "uffs", 0, 0 },
+#endif
         { 0 },
     },
     (const struct dfs_mount_tbl[]) {
         /* EMMC */
         { "sd00", "/bin", "elm", 0, 0 },
+#if CONFIG_RT_PARTITION_NUMBER == 2
+        { "sd01", "/data", "elm", 0, 0 },
+#endif
+#if CONFIG_RT_PARTITION_NUMBER == 3
         { "sd01", "/sdcard", "elm", 0, 0 },
         { "sd02", "/data", "elm", 0, 0 },
+#endif
         { 0 },
     },
     (const struct dfs_mount_tbl[]) {
         /* SdCard */
         { "sd10", "/bin", "elm", 0, 0 },
+#if CONFIG_RT_PARTITION_NUMBER == 2
+        { "sd11", "/data", "elm", 0, 0 },
+#endif
+#if CONFIG_RT_PARTITION_NUMBER == 3
         { "sd11", "/sdcard", "elm", 0, 0 },
         { "sd12", "/data", "elm", 0, 0 },
+#endif
         { 0 },
     },
 };
@@ -104,6 +117,8 @@ static void mnt_mount_table(void)
                                 mnt_tbl->data))) {
             if (0x00 == rt_strcmp("/data", mnt_tbl->path)) {
                 g_fs_mount_data_succ = true;
+            } else if (0x00 == rt_strcmp("/sdcard", mnt_tbl->path)) {
+                g_fs_mount_sdcard_succ = true;
             }
         } else {
             err = errno;

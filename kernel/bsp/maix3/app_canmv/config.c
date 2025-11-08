@@ -117,6 +117,8 @@ struct partition_entry {
   u_int32_t lba_len;
 };
 
+#define CONFIG_RT_AUTO_RESIZE_PARTITION_NR (CONFIG_RT_PARTITION_NUMBER - 1)
+
 _Static_assert(sizeof(struct partition_entry) == DPT_ITEM_SIZE,
                "Error partition entry size error");
 
