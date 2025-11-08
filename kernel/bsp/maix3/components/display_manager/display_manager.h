@@ -33,14 +33,6 @@ uint32_t display_manager_get_screen_height();
 
 int display_manager_screen_flush(const display_manager_area_t *area, uint8_t *px_map);
 
-k_vo_osd display_manager_get_osd_layer();
-
-k_u8 display_manager_get_dma_channel();
-
-k_video_frame_info * display_manager_get_disp_frame_info();
-
-k_video_frame_info * display_manager_get_rotation_frame_info();
-
 #ifdef __cplusplus
 } /*extern "C"*/
 #endif
