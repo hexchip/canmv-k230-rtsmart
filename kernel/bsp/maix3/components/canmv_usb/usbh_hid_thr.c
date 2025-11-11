@@ -510,10 +510,24 @@ rt_err_t rt_hw_hid_register(struct rt_hid_device *hid, const char *name, rt_uint
 void usbh_hid_run(struct usbh_hid *hid_class)
 {
     int ret;
+    struct usb_interface_descriptor *intf_desc;
 
-    if (hid_class != (struct usbh_hid *)usbh_find_class_instance("/dev/input0")) {
+    /* Get interface descriptor to check protocol */
+    intf_desc = &hid_class->hport->config.intf[hid_class->intf].altsetting[0].intf_desc;
+
+    /* Only handle keyboard devices (protocol = 0x01)
+     * HID_PROTOCOL_KEYBOARD = 0x01 (from usb_hid.h)
+     * HID_PROTOCOL_MOUSE    = 0x02
+     * HID_PROTOCOL_NONE     = 0x00 (need to parse report descriptor)
+     */
+    if ((HID_PROTOCOL_KEYBOARD != intf_desc->bInterfaceProtocol) ||
+        (0x1 != intf_desc->bNumEndpoints) || (NULL == hid_class->intin)) {
+        USB_LOG_INFO("HID device protocol 0x%02x have %d ep num is not keyboard, skipping\n",
+                   intf_desc->bInterfaceProtocol, intf_desc->bNumEndpoints);
         return;
     }
+
+    rt_kprintf("HID Keyboard detected (protocol=0x%02x)\n", intf_desc->bInterfaceProtocol);
 
     /* Initialize HID device structure */
     rt_memset(&hid_dev, 0, sizeof(hid_dev));
