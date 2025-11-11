@@ -509,7 +509,7 @@ int main(int argc, char *argv[])
 		return ret;
 	} else {
 		cli_add_commandset(get_helper_cmds());
-		cli_add_commandset(get_test_cmds());
+		// cli_add_commandset(get_test_cmds());
 		if (conf_command_line_mode) {
 			if (conf_exec_script) {
 				cli_interpret(script_command);

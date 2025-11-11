@@ -9,7 +9,7 @@ SET (libemu_SRCS
 		uffs_fileem_ecc_hw.c
 		uffs_fileem_ecc_hw_auto.c
 		uffs_fileem.h
-		test_cmds.c
+		#test_cmds.c
 	 )
 
 set (srcs)

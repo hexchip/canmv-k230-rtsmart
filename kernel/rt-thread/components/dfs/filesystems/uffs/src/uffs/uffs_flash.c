@@ -35,7 +35,10 @@
  * \brief UFFS flash interface
  * \author Ricky Zheng, created 17th July, 2009
  */
+#if defined (RT_THREAD)
 #include "rtthread.h"
+#endif
+
 #include "uffs_config.h"
 #include "uffs/uffs_public.h"
 #include "uffs/uffs_ecc.h"
@@ -44,6 +47,7 @@
 #include "uffs/uffs_badblock.h"
 #include "uffs/uffs_crc.h"
 #include <string.h>
+#include <stdint.h>
 
 #define PFX "flsh: "
 
@@ -68,14 +72,14 @@ static const u8 MTD2K_LAYOUT_DATA[] = {2, 38, 0xFF, 0};
 static void inline dump_buffer(const char *tag, const uint8_t *buffer, size_t size)
 {
 #if 1
-rt_kprintf("%s->%d\n", tag, size);
+uffs_Perror(UFFS_MSG_NORMAL, "%s->%d\n", tag, size);
     for(size_t i = 0; i < size; i++) {
-        rt_kprintf("%02X ", buffer[i]);
+        uffs_Perror(UFFS_MSG_NORMAL, "%02X ", buffer[i]);
         if(15 == (i % 16)) {
-            rt_kprintf("\n");
+            uffs_Perror(UFFS_MSG_NORMAL, "\n");
         }
     }
-    rt_kprintf("\n");
+    uffs_Perror(UFFS_MSG_NORMAL, "\n");
 #endif
 }
 
@@ -532,7 +536,7 @@ int uffs_FlashReadPage(uffs_Device *dev, int block, int page, uffs_Buf *buf, UBO
 				// otherwise, we try CRC check again after ecc correction.
 				ret = UFFS_FLASH_CRC_ERR;
 
-				rt_kprintf("%s->%d hdr_crc 0x%x\n", __func__, __LINE__, HEADER(buf)->crc);
+				uffs_Perror(UFFS_MSG_NORMAL, "%s->%d hdr_crc 0x%x\n", __func__, __LINE__, HEADER(buf)->crc);
 
 				dump_buffer("data", buf->data, size - sizeof(struct uffs_MiniHeaderSt));
 
@@ -574,7 +578,7 @@ int uffs_FlashReadPage(uffs_Device *dev, int block, int page, uffs_Buf *buf, UBO
 		if (HEADER(buf)->crc != uffs_crc16sum(buf->data, size - sizeof(struct uffs_MiniHeaderSt))) {
 			ret = UFFS_FLASH_CRC_ERR;
 
-			rt_kprintf("%s->%d hdr_crc 0x%x\n", __func__, __LINE__, HEADER(buf)->crc);
+			uffs_Perror(UFFS_MSG_NORMAL, "%s->%d hdr_crc 0x%x\n", __func__, __LINE__, HEADER(buf)->crc);
 
 			dump_buffer("data", buf->data, size - sizeof(struct uffs_MiniHeaderSt));
 
@@ -691,6 +695,8 @@ int uffs_FlashWritePageCombine(uffs_Device *dev,
 #ifdef CONFIG_PAGE_WRITE_VERIFY
 	uffs_Tags chk_tag;
 #endif
+
+	(void)verify_buf;
 	
 	spare = (u8 *) uffs_PoolGet(SPOOL(dev));
 	if (spare == NULL)

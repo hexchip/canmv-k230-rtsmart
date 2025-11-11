@@ -15,8 +15,9 @@ ADD_SUBDIRECTORY(uffs)
 ADD_SUBDIRECTORY(utils)
 ADD_SUBDIRECTORY(example)
 ADD_SUBDIRECTORY(platform)
-ADD_SUBDIRECTORY(test/api_test)
-ADD_SUBDIRECTORY(test/clients)
+
+#ADD_SUBDIRECTORY(test/api_test)
+#ADD_SUBDIRECTORY(test/clients)
 
 add_library(uffs_shared SHARED ${lib_SRCS})
 

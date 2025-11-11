@@ -33,6 +33,8 @@ src = src + uffs
 
 CPPPATH = [cwd, cwd + '/src/inc']
 
-group = DefineGroup('Filesystem', src , depend = ['RT_USING_DFS', 'RT_USING_DFS_UFFS'], CPPPATH = CPPPATH)
+CPPDEFINES = ['RT_THREAD']
+
+group = DefineGroup('Filesystem', src , depend = ['RT_USING_DFS', 'RT_USING_DFS_UFFS'], CPPPATH = CPPPATH, CPPDEFINES = CPPDEFINES)
 
 Return('group')
