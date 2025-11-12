@@ -521,13 +521,15 @@ void usbh_hid_run(struct usbh_hid *hid_class)
      * HID_PROTOCOL_NONE     = 0x00 (need to parse report descriptor)
      */
     if ((HID_PROTOCOL_KEYBOARD != intf_desc->bInterfaceProtocol) ||
+        (HID_SUBCLASS_BOOTIF != intf_desc->bInterfaceSubClass) ||
         (0x1 != intf_desc->bNumEndpoints) || (NULL == hid_class->intin)) {
-        USB_LOG_INFO("HID device protocol 0x%02x have %d ep num is not keyboard, skipping\n",
-                   intf_desc->bInterfaceProtocol, intf_desc->bNumEndpoints);
+        USB_LOG_INFO("HID device protocol 0x%02x subclass 0x%02x have %d ep num is not keyboard, skipping\n",
+                   intf_desc->bInterfaceProtocol, intf_desc->bInterfaceSubClass, intf_desc->bNumEndpoints);
         return;
     }
 
-    rt_kprintf("HID Keyboard detected (protocol=0x%02x)\n", intf_desc->bInterfaceProtocol);
+    rt_kprintf("HID Keyboard detected (protocol=0x%02x, subclass=0x%02x)\n",
+               intf_desc->bInterfaceProtocol, intf_desc->bInterfaceSubClass);
 
     /* Initialize HID device structure */
     rt_memset(&hid_dev, 0, sizeof(hid_dev));
