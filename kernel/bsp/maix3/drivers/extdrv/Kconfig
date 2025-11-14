@@ -8,4 +8,5 @@ menu "Ext Driver"
     source "drivers/extdrv/ws2812/Kconfig"
     source "drivers/extdrv/onewire/Kconfig"
     source "drivers/extdrv/device_warp/Kconfig"
+    source "drivers/extdrv/usb_serial/Kconfig"
 endmenu
