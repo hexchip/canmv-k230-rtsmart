@@ -8,7 +8,7 @@
 
 #define DEV_FORMAT "/dev/ttyUSB%d"
 
-USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_ch34x_buf[64];
+USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_ch34x_buf[USB_ALIGN_UP(64, CONFIG_USB_ALIGN_SIZE)];
 
 #define CONFIG_USBHOST_MAX_CP210X_CLASS 1
 
@@ -17,12 +17,12 @@ static uint32_t g_devinuse = 0;
 
 static struct usbh_ch34x *usbh_ch34x_class_alloc(void)
 {
-    int devno;
+    uint8_t devno;
 
     for (devno = 0; devno < CONFIG_USBHOST_MAX_CP210X_CLASS; devno++) {
-        if ((g_devinuse & (1 << devno)) == 0) {
-            g_devinuse |= (1 << devno);
-            usb_memset(&g_ch34x_class[devno], 0, sizeof(struct usbh_ch34x));
+        if ((g_devinuse & (1U << devno)) == 0) {
+            g_devinuse |= (1U << devno);
+            memset(&g_ch34x_class[devno], 0, sizeof(struct usbh_ch34x));
             g_ch34x_class[devno].minor = devno;
             return &g_ch34x_class[devno];
         }
@@ -32,12 +32,12 @@ static struct usbh_ch34x *usbh_ch34x_class_alloc(void)
 
 static void usbh_ch34x_class_free(struct usbh_ch34x *ch34x_class)
 {
-    int devno = ch34x_class->minor;
+    uint8_t devno = ch34x_class->minor;
 
-    if (devno >= 0 && devno < 32) {
-        g_devinuse &= ~(1 << devno);
+    if (devno < 32) {
+        g_devinuse &= ~(1U << devno);
     }
-    usb_memset(ch34x_class, 0, sizeof(struct usbh_ch34x));
+    memset(ch34x_class, 0, sizeof(struct usbh_ch34x));
 }
 
 static int usbh_ch34x_get_baudrate_div(uint32_t baudrate, uint8_t *factor, uint8_t *divisor)
@@ -90,8 +90,13 @@ static int usbh_ch34x_get_baudrate_div(uint32_t baudrate, uint8_t *factor, uint8
 
 static int usbh_ch34x_get_version(struct usbh_ch34x *ch34x_class)
 {
-    struct usb_setup_packet *setup = ch34x_class->hport->setup;
+    struct usb_setup_packet *setup;
     int ret;
+
+    if (!ch34x_class || !ch34x_class->hport) {
+        return -USB_ERR_INVAL;
+    }
+    setup = ch34x_class->hport->setup;
 
     setup->bmRequestType = USB_REQUEST_DIR_IN | USB_REQUEST_VENDOR | USB_REQUEST_RECIPIENT_DEVICE;
     setup->bRequest = CH34X_READ_VERSION;
@@ -110,7 +115,12 @@ static int usbh_ch34x_get_version(struct usbh_ch34x *ch34x_class)
 
 static int usbh_ch34x_flow_ctrl(struct usbh_ch34x *ch34x_class)
 {
-    struct usb_setup_packet *setup = ch34x_class->hport->setup;
+    struct usb_setup_packet *setup;
+
+    if (!ch34x_class || !ch34x_class->hport) {
+        return -USB_ERR_INVAL;
+    }
+    setup = ch34x_class->hport->setup;
 
     setup->bmRequestType = USB_REQUEST_DIR_OUT | USB_REQUEST_VENDOR | USB_REQUEST_RECIPIENT_DEVICE;
     setup->bRequest = CH34X_WRITE_REG;
@@ -123,13 +133,18 @@ static int usbh_ch34x_flow_ctrl(struct usbh_ch34x *ch34x_class)
 
 int usbh_ch34x_set_line_coding(struct usbh_ch34x *ch34x_class, struct cdc_line_coding *line_coding)
 {
-    struct usb_setup_packet *setup = ch34x_class->hport->setup;
+    struct usb_setup_packet *setup;
     uint16_t reg_value = 0;
     uint16_t value = 0;
     uint8_t factor = 0;
     uint8_t divisor = 0;
 
-    usb_memcpy((uint8_t *)&ch34x_class->line_coding, line_coding, sizeof(struct cdc_line_coding));
+    if (!ch34x_class || !ch34x_class->hport) {
+        return -USB_ERR_INVAL;
+    }
+    setup = ch34x_class->hport->setup;
+
+    memcpy((uint8_t *)&ch34x_class->line_coding, line_coding, sizeof(struct cdc_line_coding));
 
     /* refer to https://github.com/WCHSoftGroup/ch341ser_linux/blob/main/driver/ch341.c */
 
@@ -191,13 +206,18 @@ int usbh_ch34x_set_line_coding(struct usbh_ch34x *ch34x_class, struct cdc_line_c
 
 int usbh_ch34x_get_line_coding(struct usbh_ch34x *ch34x_class, struct cdc_line_coding *line_coding)
 {
-    usb_memcpy(line_coding, (uint8_t *)&ch34x_class->line_coding, sizeof(struct cdc_line_coding));
+    memcpy(line_coding, (uint8_t *)&ch34x_class->line_coding, sizeof(struct cdc_line_coding));
     return 0;
 }
 
 int usbh_ch34x_set_line_state(struct usbh_ch34x *ch34x_class, bool dtr, bool rts)
 {
-    struct usb_setup_packet *setup = ch34x_class->hport->setup;
+    struct usb_setup_packet *setup;
+
+    if (!ch34x_class || !ch34x_class->hport) {
+        return -USB_ERR_INVAL;
+    }
+    setup = ch34x_class->hport->setup;
 
     setup->bmRequestType = USB_REQUEST_DIR_OUT | USB_REQUEST_VENDOR | USB_REQUEST_RECIPIENT_DEVICE;
     setup->bRequest = CH34X_MODEM_CTRL;
@@ -257,7 +277,7 @@ static int usbh_ch34x_connect(struct usbh_hubport *hport, uint8_t intf)
     usbh_ch34x_set_line_coding(ch34x_class, &linecoding);
     usbh_ch34x_set_line_state(ch34x_class, true, false);
 
-    usb_memset(g_ch34x_buf, 'a', sizeof(g_ch34x_buf));
+    memset(g_ch34x_buf, 'a', sizeof(g_ch34x_buf));
     ret = usbh_ch34x_bulk_out_transfer(ch34x_class, g_ch34x_buf, sizeof(g_ch34x_buf), 0xfffffff);
     USB_LOG_RAW("out ret:%d\r\n", ret);
     while (count--) {
@@ -329,10 +349,12 @@ int usbh_ch34x_bulk_out_transfer(struct usbh_ch34x *ch34x_class, uint8_t *buffer
 
 __WEAK void usbh_ch34x_run(struct usbh_ch34x *ch34x_class)
 {
+    (void)ch34x_class;
 }
 
 __WEAK void usbh_ch34x_stop(struct usbh_ch34x *ch34x_class)
 {
+    (void)ch34x_class;
 }
 
 const struct usbh_class_driver ch34x_class_driver = {
@@ -342,11 +364,11 @@ const struct usbh_class_driver ch34x_class_driver = {
 };
 
 CLASS_INFO_DEFINE const struct usbh_class_info ch34x_class_info = {
-    .match_flags = USB_CLASS_MATCH_VENDOR | USB_CLASS_MATCH_PRODUCT | USB_CLASS_MATCH_INTF_CLASS,
+    .match_flags = USB_CLASS_MATCH_VENDOR | USB_CLASS_MATCH_PRODUCT,
     .class = 0xff,
     .subclass = 0xff,
     .protocol = 0xff,
     .vid = 0x1A86,
-    .pid = 0x7523,
+    .pid = 0x55d3,
     .class_driver = &ch34x_class_driver
 };
