@@ -1,0 +1,17 @@
+menuconfig RT_USING_USB_SERIAL_DEVICE
+    bool "Enable USB serial device"
+    default n
+    select RT_USING_HEAP
+    select ENABLE_CHERRY_USB
+    help
+        the device abstraction framework for USB to serial port conversion
+
+    if RT_USING_USB_SERIAL_DEVICE
+        config USB_SERIAL_DEVICE_ENABLE_HOST
+        bool "Enable USB host device"
+        default y
+        select ENABLE_CHERRY_USB_HOST_CLASS_DRV
+        select CHERRY_USB_HOST_ENABLE_CLASS_CDC_ACM
+
+    endif
+    

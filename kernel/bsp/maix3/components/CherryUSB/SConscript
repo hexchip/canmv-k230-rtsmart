@@ -92,6 +92,12 @@ if GetDepend(['ENABLE_CHERRY_USB_HOST']):
     if GetDepend(['CHERRY_USB_HOST_ENABLE_CLASS_SERIAL']):
         if GetDepend(['CHERRY_USB_HOST_ENABLE_CLASS_SERIAL_EC200M']):
             src += Glob('class/vendor/serial/usbh_ec200m.c')
+        if GetDepend(['CHERRY_USB_HOST_ENABLE_CLASS_SERIAL_CH34x']):
+            src += Glob('class/vendor/serial/usbh_ch34x.c')
+        if GetDepend(['CHERRY_USB_HOST_ENABLE_CLASS_SERIAL_CP210x']):
+            src += Glob('class/vendor/serial/usbh_cp210x.c')
+        if GetDepend(['CHERRY_USB_HOST_ENABLE_CLASS_SERIAL_FTDI']):
+            src += Glob('class/vendor/serial/usbh_ftdi.c')
 
     if GetDepend(['CHERRY_USB_HOST_ENABLE_CLASS_CDC_ACM']):
         src += Glob('class/cdc/usbh_cdc_acm.c')

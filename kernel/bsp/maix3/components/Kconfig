@@ -185,6 +185,8 @@ menu "Components Configuration"
                             menuconfig CHERRY_USB_HOST_ENABLE_CLASS_SERIAL
                                 bool "Enable SERIAL"
                                 default n
+                                select RT_USING_USB_SERIAL_DEVICE
+                                select USB_SERIAL_DEVICE_ENABLE_HOST
 
                                 if CHERRY_USB_HOST_ENABLE_CLASS_SERIAL
 
@@ -192,6 +194,17 @@ menu "Components Configuration"
                                     bool "Enable serial EC200M"
                                     default y
 
+                                    config CHERRY_USB_HOST_ENABLE_CLASS_SERIAL_CH34x
+                                    bool "Enable serial CH34x"
+                                    default y
+
+                                    config CHERRY_USB_HOST_ENABLE_CLASS_SERIAL_CP210x
+                                    bool "Enable serial CP210x"
+                                    default y
+
+                                    config CHERRY_USB_HOST_ENABLE_CLASS_SERIAL_FTDI
+                                    bool "Enable serial FTDI"
+                                    default y
                                 endif
 
                             config CHERRY_USB_HOST_ENABLE_CLASS_CDC_ACM
