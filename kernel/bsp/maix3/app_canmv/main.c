@@ -34,10 +34,8 @@
 
 #ifdef ENABLE_CHERRY_USB
 
-#include "canmv_usb.h"
-
 #ifdef ENABLE_CHERRY_USB_DEVICE
-#include "usbd_core.h"
+#include "usbd_desc.h"
 #endif // ENABLE_CHERRY_USB_DEVICE
 
 #ifdef ENABLE_CHERRY_USB_HOST
@@ -53,9 +51,8 @@
 
 #endif // ENABLE_CHERRY_USB
 
-#ifndef CHERRY_USB_DEVICE_ENABLE_CLASS_MTP
 bool g_fs_mount_data_succ = false;
-#endif
+bool g_fs_mount_sdcard_succ = false;
 
 static const struct dfs_mount_tbl* const auto_mount_table[SYSCTL_BOOT_MAX] = {
     (const struct dfs_mount_tbl[]) {
@@ -65,21 +62,33 @@ static const struct dfs_mount_tbl* const auto_mount_table[SYSCTL_BOOT_MAX] = {
     (const struct dfs_mount_tbl[]) {
         /* Nand Flash */
         { "nand0", "/bin", "uffs", 0, 0 },
+#if CONFIG_RT_PARTITION_NUMBER >= 2
         { "nand1", "/sdcard", "uffs", 0, 0 },
+#endif
         { 0 },
     },
     (const struct dfs_mount_tbl[]) {
         /* EMMC */
         { "sd00", "/bin", "elm", 0, 0 },
+#if CONFIG_RT_PARTITION_NUMBER == 2
+        { "sd01", "/data", "elm", 0, 0 },
+#endif
+#if CONFIG_RT_PARTITION_NUMBER == 3
         { "sd01", "/sdcard", "elm", 0, 0 },
         { "sd02", "/data", "elm", 0, 0 },
+#endif
         { 0 },
     },
     (const struct dfs_mount_tbl[]) {
         /* SdCard */
         { "sd10", "/bin", "elm", 0, 0 },
+#if CONFIG_RT_PARTITION_NUMBER == 2
+        { "sd11", "/data", "elm", 0, 0 },
+#endif
+#if CONFIG_RT_PARTITION_NUMBER == 3
         { "sd11", "/sdcard", "elm", 0, 0 },
         { "sd12", "/data", "elm", 0, 0 },
+#endif
         { 0 },
     },
 };
@@ -108,6 +117,8 @@ static void mnt_mount_table(void)
                                 mnt_tbl->data))) {
             if (0x00 == rt_strcmp("/data", mnt_tbl->path)) {
                 g_fs_mount_data_succ = true;
+            } else if (0x00 == rt_strcmp("/sdcard", mnt_tbl->path)) {
+                g_fs_mount_sdcard_succ = true;
             }
         } else {
             err = errno;
@@ -211,14 +222,7 @@ int main(void) {
   /* Strange BUG, ​​USB Host must be initialized first */
 #if defined (ENABLE_CHERRY_USB_HOST) && defined (ENABLE_CANMV_USB_HOST)
   usb_base = (void *)rt_ioremap((void *)usb_dev_addr[CHERRY_USB_HOST_USING_DEV], 0x10000);
-
   usbh_initialize(0, (uint32_t)(long)usb_base);
-#endif // ENABLE_CHERRY_USB_HOST
-
-#if defined (ENABLE_CHERRY_USB_DEVICE) && defined (ENABLE_CANMV_USB_DEV)
-  usb_base = (void *)rt_ioremap((void *)usb_dev_addr[CHERRY_USB_DEVICE_USING_DEV], 0x10000);
-
-  board_usb_device_init(usb_base);
 
 #ifdef CANMV_USB_PWR_PIN
   int usb_host_pin = CANMV_USB_PWR_PIN;
@@ -228,6 +232,11 @@ int main(void) {
   }
 #endif
 
+#endif // ENABLE_CHERRY_USB_HOST
+
+#if defined (ENABLE_CHERRY_USB_DEVICE)
+  usb_base = (void *)rt_ioremap((void *)usb_dev_addr[CHERRY_USB_DEVICE_USING_DEV], 0x10000);
+  board_usb_device_init(usb_base);
 #endif // ENABLE_CHERRY_USB_DEVICE
 
 #endif //ENABLE_CHERRY_USB

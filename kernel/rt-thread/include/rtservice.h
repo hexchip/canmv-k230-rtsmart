@@ -179,6 +179,17 @@ rt_inline unsigned int rt_list_len(const rt_list_t *l)
 #define rt_list_first_entry(ptr, type, member) \
     rt_list_entry((ptr)->next, type, member)
 
+/**
+ * rt_list_first_entry_or_null - get the first element from a list or NULL
+ * @ptr:    the list head to take the element from.
+ * @type:   the type of the struct this is embedded in.
+ * @member: the name of the list_struct within the struct.
+ *
+ * Returns NULL if the list is empty.
+ */
+#define rt_list_first_entry_or_null(ptr, type, member) \
+    (rt_list_isempty(ptr) ? (type *)RT_NULL : rt_list_first_entry(ptr, type, member))
+
 #define RT_SLIST_OBJECT_INIT(object) { RT_NULL }
 
 /**

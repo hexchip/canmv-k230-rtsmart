@@ -33,14 +33,14 @@
 #ifndef _UFFS_OS_H_
 #define _UFFS_OS_H_
 
-#include <rtthread.h>
-#define RT_THREAD
-#if !defined(RT_THREAD)
-#include <stdarg.h>
-#endif
-
 #ifdef __cplusplus
 extern "C"{
+#endif
+
+#if defined (RT_THREAD)
+#include <rtthread.h>
+#else
+#include <stdarg.h>
 #endif
 
 #define UFFS_TASK_ID_NOT_EXIST	-1

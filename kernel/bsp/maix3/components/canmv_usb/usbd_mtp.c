@@ -3,13 +3,14 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#include "canmv_usb.h"
+#include "usbd_desc.h"
 
 #include "mtp.h"
 #include "mtp_helpers.h"
 
 #include "usb_osal.h"
 
+#if defined (CHERRY_USB_DEVICE_FUNC_CDC_MTP)
 /* Max USB packet size */
 #define MTP_BULK_EP_MPS USB_DEVICE_MAX_MPS
 
@@ -206,10 +207,22 @@ static void mtp_device_init(void)
     mtp_load_config_file(mtp_context, "/bin/mtp.conf");
     init_usb_mtp_buffer(mtp_context);
     mtp_set_usb_handle(mtp_context, NULL, MTP_BULK_EP_MPS);
-    mtp_add_storage(mtp_context, "/sdcard", "sdcard", 0, 0, UMTP_STORAGE_READWRITE);
+
+    extern bool g_fs_mount_data_succ;
+    extern bool g_fs_mount_sdcard_succ;
+
+    if(g_fs_mount_sdcard_succ) {
+        mtp_add_storage(mtp_context, "/sdcard", "sdcard", 0, 0, UMTP_STORAGE_READWRITE);
+    }
+
     if(g_fs_mount_data_succ) {
         mtp_add_storage(mtp_context, "/data", "data", 0, 0, UMTP_STORAGE_READWRITE);
     }
+
+    if(!g_fs_mount_sdcard_succ && !g_fs_mount_data_succ) {
+        mtp_add_storage(mtp_context, "/tmp", "ERROR", 0, 0, UMTP_STORAGE_READWRITE);
+    }
+
     mtp_event = rt_event_create("mtp", RT_IPC_FLAG_FIFO);
     mtp_tid = rt_thread_create("mtp", mtp_thread, mtp_context, CONFIG_USBDEV_MTP_STACKSIZE, CONFIG_USBDEV_MTP_PRIO, 10);
 	rt_thread_startup(mtp_tid);
@@ -239,3 +252,4 @@ void canmv_usb_device_mtp_init(void)
 
     mtp_device_init();
 }
+#endif

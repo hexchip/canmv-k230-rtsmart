@@ -12,7 +12,7 @@ LINK_DIRECTORIES(${uffs_BINARY_DIR}/src/uffs)
 
 SET(mkuffs_SRCS mkuffs.c clone.c)
 ADD_EXECUTABLE(mkuffs ${mkuffs_SRCS})
-TARGET_LINK_LIBRARIES(mkuffs emu uffs emu platform apitest_server)
+TARGET_LINK_LIBRARIES(mkuffs emu uffs emu platform) # apitest_server)
 IF (UNIX)
 	TARGET_LINK_LIBRARIES(mkuffs pthread)
 ENDIF ()

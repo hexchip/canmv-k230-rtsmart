@@ -45,6 +45,10 @@ extern "C"{
 
 #include "uffs/uffs.h"
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <time.h>
+
 /**
  * \brief definitions for uffs_stat::st_mode
  */

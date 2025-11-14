@@ -1,0 +1,13 @@
+# RT-Thread building script for component
+
+from building import *
+
+cwd     = GetCurrentDir()
+src     = Glob('*.c')
+CPPPATH = [cwd]
+
+group = DefineGroup('rotary_encoder', src, depend = ['CONFIG_ENABLE_ROTARY_ENCODER'], CPPPATH = CPPPATH)
+
+objs = [group]
+
+Return('objs')

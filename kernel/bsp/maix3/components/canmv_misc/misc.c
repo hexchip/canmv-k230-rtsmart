@@ -31,6 +31,10 @@
   #include "ntp.h"
 #endif
 
+#if defined (CONFIG_ENABLE_ROTARY_ENCODER)
+  #include "rotary_encoder.h"
+#endif
+
 #include "dfs_posix.h"
 
 struct misc_dev_handle {
@@ -141,6 +145,8 @@ static int misc_close(struct dfs_fd *file) { return 0; }
 #define MISC_DEV_CMD_SET_TIMEZONE             _IOWR('M', 0x0b, void *)
 #define MISC_DEV_CMD_GET_TIMEZONE             _IOWR('M', 0x0c, void *)
 #define MISC_DEV_CMD_SET_AUTO_EXEC_PY_STAGE   _IOWR('M', 0x0d, void *)
+#define MISC_DEV_CMD_CREATE_ROTARY_ENC_DEV    _IOWR('M', 0x0e, void *)
+#define MISC_DEV_CMD_DELETE_ROTARY_ENC_DEV    _IOWR('M', 0x0f, void *)
 
 struct meminfo_t {
   size_t total_size;
@@ -529,6 +535,30 @@ static int misc_set_auto_exec_stage(void* args)
     return 0;
 }
 
+#if defined(CONFIG_ENABLE_ROTARY_ENCODER)
+static int misc_create_rotary_encoder_dev(void* args)
+{
+    struct encoder_dev_cfg_t cfg;
+
+    if (0x00 != LWP_GET_FROM_USER(&cfg, args, struct encoder_dev_cfg_t)) {
+        return -1;
+    }
+
+    return encoder_dev_create(&cfg);
+}
+
+static int misc_delete_rotary_encoder_dev(void* args)
+{
+    int index;
+
+    if (0x00 != LWP_GET_FROM_USER(&index, args, int)) {
+        return -1;
+    }
+
+    return encoder_dev_delete(index);
+}
+#endif
+
 static const struct misc_dev_handle misc_handles[] = {
   {
     .cmd = MISC_DEV_CMD_READ_HEAP,
@@ -582,6 +612,17 @@ static const struct misc_dev_handle misc_handles[] = {
     .cmd = MISC_DEV_CMD_SET_AUTO_EXEC_PY_STAGE,
     .func = misc_set_auto_exec_stage,
   },
+
+#if defined (CONFIG_ENABLE_ROTARY_ENCODER)
+  {
+    .cmd = MISC_DEV_CMD_CREATE_ROTARY_ENC_DEV,
+    .func = misc_create_rotary_encoder_dev,
+  },
+  {
+    .cmd = MISC_DEV_CMD_DELETE_ROTARY_ENC_DEV,
+    .func = misc_delete_rotary_encoder_dev,
+  },
+#endif
 };
 
 static int misc_ioctl(struct dfs_fd *file, int cmd, void *args) {

@@ -1409,6 +1409,20 @@ void rt_kprintf(const char *fmt, ...)
         length = RT_CONSOLEBUF_SIZE - 1;
     }
 
+#if defined(CHERRY_USB_DEVICE_ENABLE_CLASS_ADB)
+    extern rt_bool_t is_use_adb_console();
+    if (is_use_adb_console()) {
+        rt_device_t dev;
+        dev = rt_device_find(RT_CONSOLE_DEVICE_NAME);
+        rt_device_write(dev, 0, rt_log_buf, length);
+
+        if (rt_interrupt_get_nest() != 0) {
+            return;
+        }
+    }
+
+#endif
+
 #ifdef RT_USING_DEVICE
     if (_console_device == RT_NULL)
     {

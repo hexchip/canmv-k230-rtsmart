@@ -106,4 +106,27 @@
     #define writeq(v,c) ({ __io_bw(); __raw_writeq((v),(c)); __io_aw(); })
     #endif
 
+    
+typedef volatile int atomic_lock_t;
+
+static inline void atoic_lock_init(atomic_lock_t *lock)
+{
+    __sync_lock_release(lock);
+}
+
+static inline void atomic_lock_take(atomic_lock_t *lock)
+{
+    while (__sync_lock_test_and_set(lock, 1));
+}
+
+static inline int atomic_lock_try_take(atomic_lock_t *lock)
+{
+    return __sync_lock_test_and_set(lock, 1);
+}
+
+static inline void atomic_lock_release(atomic_lock_t *lock)
+{
+    __sync_lock_release(lock);
+}
+
 #endif
