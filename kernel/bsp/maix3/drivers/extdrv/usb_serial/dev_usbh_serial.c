@@ -31,7 +31,7 @@ struct usbh_serial_dev {
     bool is_open;
     volatile bool is_thread_running;
     rt_mutex_t thread_mutex;
-    rt_device_warp_t *serial_device_warp;
+    rt_device_wrap_t *serial_device_wrap;
     volatile bool is_async_rx_failed;
     volatile bool is_async_tx_failed;
 };
@@ -503,11 +503,11 @@ static rt_size_t _serial_fifo_calc_recved_len(struct rt_serial_device *serial)
     }
 }
 
-static rt_bool_t on_fops_poll(struct dfs_fd *warp_fd, struct rt_pollreq **req_ptr, int *ret_ptr, void *user_data) {
+static rt_bool_t on_fops_poll(struct dfs_fd *wrap_fd, struct rt_pollreq **req_ptr, int *ret_ptr, void *user_data) {
     struct rt_pollreq *req = *req_ptr;
     usbh_serial_dev_t *dev = user_data;
-    rt_device_warp_t *device_warp = warp_fd->fnode->data;
-    rt_device_t device = rt_device_warp_get_origin_device(device_warp);
+    rt_device_wrap_t *device_wrap = wrap_fd->fnode->data;
+    rt_device_t device = rt_device_wrap_get_origin_device(device_wrap);
 
     rt_poll_add(&(device->wait_queue), req);
 
@@ -528,7 +528,7 @@ static rt_bool_t on_fops_poll(struct dfs_fd *warp_fd, struct rt_pollreq **req_pt
             mask |= POLLERR;
         }
 
-        uint32_t flags = warp_fd->flags & O_ACCMODE;
+        uint32_t flags = wrap_fd->flags & O_ACCMODE;
         if (flags == O_RDONLY || flags == O_RDWR) {
             rt_serial_t *serial = (rt_serial_t *)device;
             struct rt_serial_rx_fifo *rx_fifo = serial->serial_rx;
@@ -545,11 +545,14 @@ static rt_bool_t on_fops_poll(struct dfs_fd *warp_fd, struct rt_pollreq **req_pt
     return true;
 }
 
-static rt_device_warp_interceptor_t serial_dev_interceptor = {
+static rt_device_wrap_fops_interceptor_t serial_dev_fops_interceptor = {
     .on_fops_open = on_fops_open,
+    .on_fops_close = NULL,
     .on_fops_ioctl = on_fops_ioctl,
     .on_fops_read = on_fops_read,
     .on_fops_write = on_fops_write,
+    .on_fops_flush = NULL,
+    .on_fops_lseek = NULL,
     .on_fops_poll = on_fops_poll,
 };
 
@@ -646,8 +649,8 @@ static rt_err_t uart_control(struct rt_serial_device *serial, int cmd, void *arg
             }
             else {
                 LOG_I("destroy");
-                rt_device_warp_unregister_interceptor(dev->serial_device_warp, &serial_dev_interceptor);
-                rt_device_warp_destroy(dev->serial_device_warp);
+                rt_device_wrap_unregister_fops_interceptor(dev->serial_device_wrap, &serial_dev_fops_interceptor);
+                rt_device_wrap_destroy(dev->serial_device_wrap);
                 rt_free(dev);
             }
         } break;
@@ -854,18 +857,18 @@ usbh_serial_dev_t* dev_usbh_serial_create(void *usbh_serial, dev_usbh_serial_ops
         return RT_NULL;
     }
 
-    dev->serial_device_warp = rt_device_warp_create(&serial_device->parent);
+    dev->serial_device_wrap = rt_device_wrap_create(&serial_device->parent);
 
-    if (dev->serial_device_warp == RT_NULL) {
-        LOG_E("usbh_serial_create: create serial device warp failed! err = %d", errno);
+    if (dev->serial_device_wrap == RT_NULL) {
+        LOG_E("usbh_serial_create: create serial device wrap failed! err = %d", errno);
         dev_usbh_serial_destroy(dev);
         rt_set_errno(ENOMEM);
         return RT_NULL;
     }
 
-    rt_device_warp_set_user_data(dev->serial_device_warp, dev);
+    rt_device_wrap_set_user_data(dev->serial_device_wrap, dev);
 
-    err = rt_device_warp_register_interceptor(dev->serial_device_warp, &serial_dev_interceptor);
+    err = rt_device_wrap_register_fops_interceptor(dev->serial_device_wrap, &serial_dev_fops_interceptor);
     if (err != RT_EOK) {
         LOG_E("usbh_serial_create: register interceptor for serial device failed! err = %d", err);
         dev_usbh_serial_destroy(dev);
@@ -874,7 +877,7 @@ usbh_serial_dev_t* dev_usbh_serial_create(void *usbh_serial, dev_usbh_serial_ops
         return RT_NULL;
     }
 
-    err = rt_device_warp_register(dev->serial_device_warp, dev_name);
+    err = rt_device_wrap_register(dev->serial_device_wrap, dev_name);
     if (err != RT_EOK) {
         LOG_E("usbh_serial_create: register %s failed! err = %d", dev_name, err);
         rt_set_errno(EPERM);
@@ -956,14 +959,14 @@ void dev_usbh_serial_destroy(usbh_serial_dev_t* dev) {
         }
     }
 
-    if (dev->serial_device_warp) {
-        rt_err_t err = rt_device_warp_unregister(dev->serial_device_warp);
+    if (dev->serial_device_wrap) {
+        rt_err_t err = rt_device_wrap_unregister(dev->serial_device_wrap);
         if (err == RT_EOK) {
-            LOG_I("unregister %s\n", rt_device_warp_get_name(dev->serial_device_warp));
+            LOG_I("unregister %s\n", rt_device_wrap_get_name(dev->serial_device_wrap));
             // patch: When unregistering a device, maybe we shouldn't block it from being used.
-            rt_device_warp_get_parent(dev->serial_device_warp)->parent.type = RT_Object_Class_Device | RT_Object_Class_Static;
+            rt_device_wrap_get_parent(dev->serial_device_wrap)->parent.type = RT_Object_Class_Device | RT_Object_Class_Static;
         }
-        // rt_device_warp_destroy(dev->serial_device_warp);
+        // rt_device_wrap_destroy(dev->serial_device_wrap);
     }
 
     // rt_free(dev);

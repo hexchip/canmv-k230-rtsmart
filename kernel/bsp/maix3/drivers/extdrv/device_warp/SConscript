@@ -4,9 +4,10 @@ from building import *
 
 cwd     = GetCurrentDir()
 src     = Glob('*.c')
-CPPPATH = [cwd]
+CPPPATH = [cwd + '/include']
+LOCAL_CPPPATH = [cwd]
 
-group = DefineGroup('DeviceWarp', src, depend = ['RT_USING_DEVICE_WRAP'], CPPPATH = CPPPATH)
+group = DefineGroup('DeviceWarp', src, depend = ['RT_USING_DEVICE_WRAP'], CPPPATH = CPPPATH, LOCAL_CPPPATH = LOCAL_CPPPATH)
 
 objs = [group]
 

@@ -12,8 +12,8 @@ typedef struct terminal_context {
     size_t line_buffer_size;
     rt_device_t iodev;
     rt_tick_t last_output_time_ms;
-    rt_device_warp_t *iodev_warp;
-    rt_device_warp_listener_t iodev_listener;
+    rt_device_wrap_t *iodev_wrap;
+    rt_device_wrap_listener_t iodev_listener;
     rt_mq_t mq;
     rt_thread_t thread;
 } terminal_context_t;
@@ -221,14 +221,14 @@ int terminal_init(terminal_t *terminal) {
     rt_device_t iodev = console_get_iodev();
     terminal->context->iodev = iodev;
 
-    rt_device_warp_t *iodev_warp = rt_device_warp_create(iodev);
-    if (iodev_warp == NULL) {
-        printf("Failed to create iodev warp.\n");
+    rt_device_wrap_t *iodev_wrap = rt_device_wrap_create(iodev);
+    if (iodev_wrap == NULL) {
+        printf("Failed to create iodev wrap.\n");
         terminal_deinit(terminal);
         return -ENOMEM;
     }
 
-    terminal->context->iodev_warp = iodev_warp;
+    terminal->context->iodev_wrap = iodev_wrap;
     terminal->context->mq = rt_mq_create("iodev-out", sizeof(struct mq_msg), TERMINAL_MQ_MSG_MAX_NUM, RT_IPC_FLAG_PRIO);
 
     if (terminal->context->mq == NULL) {
@@ -237,19 +237,19 @@ int terminal_init(terminal_t *terminal) {
         return -ENOMEM;
     }
 
-    rt_device_warp_set_user_data(iodev_warp, terminal);
+    rt_device_wrap_set_user_data(iodev_wrap, terminal);
 
-    rt_err_t ret = rt_device_warp_register(iodev_warp, "iodev_warp");
+    rt_err_t ret = rt_device_wrap_register(iodev_wrap, "iodev_wrap");
     if (ret != RT_EOK) {
-        printf("device_warp_register(%s) failed: %d\n", "iodev_warp", ret);
+        printf("device_wrap_register(%s) failed: %d\n", "iodev_wrap", ret);
         terminal_deinit(terminal);
     }
-    console_set_iodev(rt_device_warp_get_parent(iodev_warp));
+    console_set_iodev(rt_device_wrap_get_parent(iodev_wrap));
 
     terminal->context->iodev_listener.on_open = on_iodev_open;
     terminal->context->iodev_listener.on_write = on_iodev_write;
     terminal->context->iodev_listener.on_close = on_iodev_close;
-    rt_device_warp_register_listener(iodev_warp, &terminal->context->iodev_listener);
+    rt_device_wrap_register_listener(iodev_wrap, &terminal->context->iodev_listener);
 
     rt_thread_t terminal_thread = rt_thread_create(
         terminal->name, 
@@ -280,8 +280,8 @@ void terminal_deinit(terminal_t *terminal) {
         rt_thread_delete(terminal->context->thread);
     }
 
-    if (terminal->context->iodev_warp) {
-        rt_device_warp_unregister_listener(terminal->context->iodev_warp, &terminal->context->iodev_listener);
+    if (terminal->context->iodev_wrap) {
+        rt_device_wrap_unregister_listener(terminal->context->iodev_wrap, &terminal->context->iodev_listener);
 
         if (terminal->context->iodev) {
             console_set_iodev(terminal->context->iodev);
@@ -290,7 +290,7 @@ void terminal_deinit(terminal_t *terminal) {
             rt_mq_delete(terminal->context->mq);
         }
         
-        rt_device_warp_destroy(terminal->context->iodev_warp);
+        rt_device_wrap_destroy(terminal->context->iodev_wrap);
     }
 
     if (terminal->context->vt) {
