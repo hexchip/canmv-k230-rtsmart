@@ -7,7 +7,7 @@
 #endif // RT_USING_POSIX
 
 #define DBG_SECTION_NAME    "DEV_WRAP"
-#define DBG_LEVEL           DBG_ERROR
+#define DBG_LEVEL           DBG_INFO
 #include <rtdbg.h>
 
 #ifdef RT_USING_DEVICE_OPS
@@ -39,6 +39,7 @@
 #define device_write    (dev->write)
 #define device_control  (dev->control)
 #endif
+
 
 typedef struct rt_device_warp_listener_entry {
     rt_list_t list;
@@ -80,6 +81,108 @@ typedef struct rt_device_warp_list_node {
 
 static rt_list_t s_device_warp_list = RT_LIST_OBJECT_INIT(s_device_warp_list);
 
+#include "console.h"
+
+typedef struct safe_log_msg {
+    char log_buf[RT_CONSOLEBUF_SIZE];
+    rt_size_t log_size;
+} safe_log_msg_t;
+
+static void safe_log_thread(void *context) {
+    rt_mq_t mq = context;
+
+    safe_log_msg_t msg;
+    while(1) {
+        rt_err_t err = rt_mq_recv(mq, &msg, sizeof(safe_log_msg_t), RT_WAITING_FOREVER);
+
+        rt_device_t io_device = console_get_iodev();
+
+        rt_device_warp_t *io_device_warp = RT_NULL;
+        rt_device_warp_list_node_t *node = RT_NULL;
+        rt_list_for_each_entry(node, &s_device_warp_list, list) {
+            if (&node->device_warp->parent == io_device) {
+                io_device_warp = node->device_warp;
+                break;
+            }
+        }
+
+        if (err) {
+            char err_log[64] = {0};
+            int err_len = snprintf(err_log, sizeof(err_log), "rt_device_warp: safe_log_thread rt_mq_recv err = %d", err);
+
+            if (io_device_warp != RT_NULL) {
+                if (io_device_warp->device_ops != RT_NULL) {
+                    io_device_warp->device_ops->write(io_device_warp->device, 0, err_log, err_len);
+                }
+                else {
+                    rt_device_write(io_device_warp->device, 0, err_log, err_len);
+                }
+            }
+            else {
+                rt_device_write(io_device, 0, err_log, err_len);
+            }
+
+            break;
+        }
+
+        if (io_device_warp != RT_NULL) {
+            if (io_device_warp->device_ops != RT_NULL) {
+                io_device_warp->device_ops->write(io_device_warp->device, 0, msg.log_buf, msg.log_size);
+            }
+            else {
+                rt_device_write(io_device_warp->device, 0, msg.log_buf, msg.log_size);
+            }
+        }
+        else {
+            rt_device_write(io_device, 0, msg.log_buf, msg.log_size);
+        }
+    }
+}
+
+static void safe_log(const char* format, ...);
+
+#define S_DBG_LOG_HDR(lvl_name, color_n)                    \
+    safe_log("[" lvl_name "/" DBG_SECTION_NAME "] ")
+#define S_DBG_LOG_X_END                                     \
+    safe_log("\n")
+
+#define safe_dbg_log_line(lvl, color_n, fmt, ...)                \
+    do                                                      \
+    {                                                       \
+        S_DBG_LOG_HDR(lvl, color_n);                         \
+        safe_log(fmt, ##__VA_ARGS__);                     \
+        S_DBG_LOG_X_END;                                     \
+    }                                                       \
+    while (0)
+
+#undef LOG_D
+#if (DBG_LEVEL >= DBG_LOG)
+#define LOG_D(fmt, ...)      safe_dbg_log_line("D", 0, fmt, ##__VA_ARGS__)
+#else
+#define LOG_D(...)
+#endif
+
+#undef LOG_I
+#if (DBG_LEVEL >= DBG_INFO)
+#define LOG_I(fmt, ...)      safe_dbg_log_line("D", 32, fmt, ##__VA_ARGS__)
+#else
+#define LOG_I(...)
+#endif
+
+#undef LOG_W
+#if (DBG_LEVEL >= DBG_WARNING)
+#define LOG_W(fmt, ...)      safe_dbg_log_line("W", 33, fmt, ##__VA_ARGS__)
+#else
+#define LOG_W(...)
+#endif
+
+#undef LOG_E
+#if (DBG_LEVEL >= DBG_ERROR)
+#define LOG_E(fmt, ...)      safe_dbg_log_line("E", 31, fmt, ##__VA_ARGS__)
+#else
+#define LOG_E(...)
+#endif
+
 static inline rt_device_warp_t * get_device_warp(rt_device_t dev) {
     rt_device_warp_t *device_warp = RT_NULL;
     rt_device_warp_list_node_t *node = RT_NULL;
@@ -93,7 +196,7 @@ static inline rt_device_warp_t * get_device_warp(rt_device_t dev) {
 }
 
 static rt_err_t rt_device_hack_init(rt_device_t dev) {
-    LOG_D("hack_init: enter");
+    LOG_I("%s hack_init: enter", dev->parent.name);
     rt_device_warp_t *device_warp = get_device_warp(dev);
 
     rt_device_warp_listener_entry_t *listener_entry;
@@ -117,7 +220,7 @@ static rt_err_t rt_device_hack_init(rt_device_t dev) {
     }
 
     if (is_intercepted) {
-        LOG_D("hack_init: intercepted!");
+        LOG_I("%s hack_init: intercepted!", dev->parent.name);
         return ret;
     }
 
@@ -130,7 +233,7 @@ static rt_err_t rt_device_hack_init(rt_device_t dev) {
 }
 
 static rt_err_t rt_device_hack_open(rt_device_t dev, rt_uint16_t oflag) {
-    LOG_D("hack_open: enter");
+    LOG_I("%s hack_open: enter", dev->parent.name);
     rt_device_warp_t *device_warp = get_device_warp(dev);
 
     rt_device_warp_listener_entry_t *listener_entry;
@@ -154,7 +257,7 @@ static rt_err_t rt_device_hack_open(rt_device_t dev, rt_uint16_t oflag) {
     }
 
     if (is_intercepted) {
-        LOG_D("hack_open: intercepted!");
+        LOG_I("%s hack_open: intercepted!", dev->parent.name);
         return ret;
     }
 
@@ -167,7 +270,7 @@ static rt_err_t rt_device_hack_open(rt_device_t dev, rt_uint16_t oflag) {
 }
 
 static rt_err_t rt_device_hack_close(rt_device_t dev) {
-    LOG_D("hack_close: enter");
+    LOG_I("%s hack_close: enter", dev->parent.name);
     rt_device_warp_t *device_warp = get_device_warp(dev);
 
     rt_device_warp_listener_entry_t *listener_entry;
@@ -191,7 +294,7 @@ static rt_err_t rt_device_hack_close(rt_device_t dev) {
     }
 
     if (is_intercepted) {
-        LOG_D("hack_close: intercepted!");
+        LOG_I("%s hack_close: intercepted!", dev->parent.name);
         return ret;
     }
 
@@ -204,7 +307,7 @@ static rt_err_t rt_device_hack_close(rt_device_t dev) {
 }
 
 static rt_size_t rt_device_hack_read(rt_device_t dev, rt_off_t pos, void *buffer, rt_size_t size) {
-    LOG_D("hack_read: enter");
+    LOG_D("%s hack_read: enter", dev->parent.name);
     rt_device_warp_t *device_warp = get_device_warp(dev);
 
     rt_device_warp_listener_entry_t *listener_entry;
@@ -230,7 +333,7 @@ static rt_size_t rt_device_hack_read(rt_device_t dev, rt_off_t pos, void *buffer
     }
 
     if (is_intercepted) {
-        LOG_D("hack_read: intercepted!");
+        LOG_D("%s hack_read: intercepted!", dev->parent.name);
         return read_size;
     }
 
@@ -243,7 +346,7 @@ static rt_size_t rt_device_hack_read(rt_device_t dev, rt_off_t pos, void *buffer
 }
 
 static rt_size_t rt_device_hack_write(rt_device_t dev, rt_off_t pos, const void *buffer, rt_size_t size) {
-    LOG_D("hack_write: enter");
+    LOG_D("%s hack_write: enter", dev->parent.name);
     rt_device_warp_t *device_warp = get_device_warp(dev);
 
     rt_device_warp_listener_entry_t *listener_entry;
@@ -269,7 +372,7 @@ static rt_size_t rt_device_hack_write(rt_device_t dev, rt_off_t pos, const void 
     }
 
     if (is_intercepted) {
-        LOG_D("hack_write: intercepted!");
+        LOG_D("%s hack_write: intercepted!", dev->parent.name);
         return write_size;
     }
 
@@ -282,7 +385,7 @@ static rt_size_t rt_device_hack_write(rt_device_t dev, rt_off_t pos, const void 
 }
 
 static rt_err_t rt_device_hack_control(rt_device_t dev, int cmd, void *args) {
-    LOG_D("hack_control: enter");
+    LOG_I("%s hack_control: enter", dev->parent.name);
     rt_device_warp_t *device_warp = get_device_warp(dev);
 
     rt_device_warp_listener_entry_t *listener_entry;
@@ -306,7 +409,7 @@ static rt_err_t rt_device_hack_control(rt_device_t dev, int cmd, void *args) {
     }
 
     if (is_intercepted) {
-        LOG_D("hack_control: intercepted!");
+        LOG_I("%s hack_control: intercepted!", dev->parent.name);
         return ret;
     }
 
@@ -320,12 +423,12 @@ static rt_err_t rt_device_hack_control(rt_device_t dev, int cmd, void *args) {
 
 #ifdef RT_USING_DEVICE_OPS
 static const struct rt_device_ops device_hack_ops = {
-    rt_device_hack_init,
-    rt_device_hack_open,
-    rt_device_hack_close,
-    rt_device_hack_read,
-    rt_device_hack_write,
-    rt_device_hack_control
+    .init = rt_device_hack_init,
+    .open = rt_device_hack_open,
+    .close = rt_device_hack_close,
+    .read = rt_device_hack_read,
+    .write = rt_device_hack_write,
+    .control = rt_device_hack_control
 };
 #endif // RT_USING_DEVICE_OPS
 
@@ -336,21 +439,7 @@ static rt_err_t device_warp_init(rt_device_t dev) {
     rt_err_t ret = RT_EOK;
 
     if (device_warp->is_registered_device) {
-        #ifdef RT_USING_DEVICE_OPS
-        device_warp->device_ops = device_warp->device->ops;
-        device_warp->device->ops = &device_hack_ops;
         ret = rt_device_init(device_warp->device);
-        if(device_warp->device->ops == &device_hack_ops) {
-            device_warp->device->ops = device_warp->device_ops;
-        }
-        #else
-        device_warp->device_init = device_warp->device->init;
-        device_warp->device->init = device_hack_init;
-        ret = rt_device_init(device_warp->device);
-        if (device_warp->device->init == device_hack_init) {
-            device_warp->device->init = device_warp->device_init;
-        }
-        #endif // RT_USING_DEVICE_OPS
     }
     else {
         ret = rt_device_hack_init(device_warp->device);
@@ -366,21 +455,7 @@ static rt_err_t device_warp_open(rt_device_t dev, rt_uint16_t oflag) {
     rt_err_t ret = RT_EOK;
 
     if (device_warp->is_registered_device) {
-        #ifdef RT_USING_DEVICE_OPS
-        device_warp->device_ops = device_warp->device->ops;
-        device_warp->device->ops = &device_hack_ops;
         ret = rt_device_open(device_warp->device, oflag);
-        if(device_warp->device->ops == &device_hack_ops) {
-            device_warp->device->ops = device_warp->device_ops;
-        }
-        #else
-        device_warp->device_open = device_warp->device->open;
-        device_warp->device->open = device_hack_open;
-        ret = rt_device_open(device_warp->device, oflag);
-        if (device_warp->device->open == device_hack_open) {
-            device_warp->device->open = device_warp->device_open;
-        }
-        #endif // RT_USING_DEVICE_OPS
     }
     else {
         ret = rt_device_hack_open(device_warp->device, oflag);
@@ -396,21 +471,7 @@ static rt_err_t device_warp_close(rt_device_t dev) {
     rt_err_t ret = RT_EOK;
 
     if (device_warp->is_registered_device) {
-        #ifdef RT_USING_DEVICE_OPS
-        device_warp->device_ops = device_warp->device->ops;
-        device_warp->device->ops = &device_hack_ops;
         ret = rt_device_close(device_warp->device);
-        if(device_warp->device->ops == &device_hack_ops) {
-            device_warp->device->ops = device_warp->device_ops;
-        }
-        #else
-        device_warp->device_close = device_warp->device->close;
-        device_warp->device->close = device_hack_close;
-        ret = rt_device_close(device_warp->device);
-        if (device_warp->device->close == device_hack_close) {
-            device_warp->device->close = device_warp->device_close;
-        }
-        #endif // RT_USING_DEVICE_OPS
     }
     else {
         ret = rt_device_hack_close(device_warp->device);
@@ -426,25 +487,13 @@ static rt_size_t device_warp_read(rt_device_t dev, rt_off_t pos, void *buffer, r
     rt_size_t read_size = RT_EOK;
 
     if (device_warp->is_registered_device) {
-        #ifdef RT_USING_DEVICE_OPS
-        device_warp->device_ops = device_warp->device->ops;
-        device_warp->device->ops = &device_hack_ops;
         read_size = rt_device_read(device_warp->device, pos, buffer, size);
-        if(device_warp->device->ops == &device_hack_ops) {
-            device_warp->device->ops = device_warp->device_ops;
-        }
-        #else
-        device_warp->device_read = device_warp->device->read;
-        device_warp->device->read = device_hack_read;
-        read_size = rt_device_read(device_warp->device, pos, buffer, size);
-        if (device_warp->device->read == device_hack_read) {
-            device_warp->device->read = device_warp->device_read;
-        }
-        #endif // RT_USING_DEVICE_OPS
     }
     else {
         read_size = rt_device_hack_read(device_warp->device, pos, buffer, size);
     }
+
+    LOG_D("%s device_warp_read: exit", device_warp->parent.parent.name);
 
     return read_size;
 }
@@ -456,21 +505,7 @@ static rt_size_t device_warp_write(rt_device_t dev, rt_off_t pos, const void *bu
     rt_size_t write_size = RT_EOK;
 
     if (device_warp->is_registered_device) {
-        #ifdef RT_USING_DEVICE_OPS
-        const struct rt_device_ops *origin_device_ops = device_warp->device->ops;
-        device_warp->device->ops = &device_hack_ops;
         write_size = rt_device_write(device_warp->device, pos, buffer, size);
-        if(device_warp->device->ops == &device_hack_ops) {
-            device_warp->device->ops = origin_device_ops;
-        }
-        #else
-        rt_err_t (*origin_write_func)(rt_device_t dev) = device_warp->device->write;
-        device_warp->device->write = device_hack_write;
-        write_size = rt_device_write(device_warp->device, pos, buffer, size);
-        if (device_warp->device->write == device_hack_write) {
-            device_warp->device->write = origin_write_func;
-        }
-        #endif // RT_USING_DEVICE_OPS
     }
     else {
         write_size = rt_device_hack_write(device_warp->device, pos, buffer, size);
@@ -486,21 +521,7 @@ static rt_err_t device_warp_control(rt_device_t dev, int cmd, void *args) {
     rt_err_t ret = RT_EOK;
 
     if (device_warp->is_registered_device) {
-        #ifdef RT_USING_DEVICE_OPS
-        const struct rt_device_ops *origin_device_ops = device_warp->device->ops;
-        device_warp->device->ops = &device_hack_ops;
         ret = rt_device_control(device_warp->device, cmd, args);
-        if(device_warp->device->ops == &device_hack_ops) {
-            device_warp->device->ops = origin_device_ops;
-        }
-        #else
-        rt_err_t (*origin_control_func)(rt_device_t dev) = device_warp->device->control;
-        device_warp->device->control = device_hack_control;
-        ret = rt_device_control(device_warp->device, cmd, args);
-        if (device_warp->device->control == device_hack_control) {
-            device_warp->device->control = origin_control_func;
-        }
-        #endif // RT_USING_DEVICE_OPS
     }
     else {
         ret = rt_device_hack_control(device_warp->device, cmd, args);
@@ -543,7 +564,7 @@ static int fops_hack_open(struct dfs_fd *fd) {
     }
 
     if (is_intercepted) {
-        LOG_D("%s fops_hack_open: intercepted", dev->parent.name);
+        LOG_I("%s fops_hack_open: intercepted", dev->parent.name);
         return ret;
     }
 
@@ -767,7 +788,7 @@ static int fops_hack_poll(struct dfs_fd *fd, struct rt_pollreq *req) {
     }
 
     if (is_intercepted) {
-        LOG_D("%s fops_hack_poll: intercepted ret = %d", dev->parent.name, ret);
+        LOG_I("%s fops_hack_poll: intercepted ret = %d", dev->parent.name, ret);
         return ret;
     }
     
@@ -786,6 +807,24 @@ static const struct dfs_file_ops hack_fops = {
     .poll = fops_hack_poll
 };
 
+
+static int get_dfs_fd(struct dfs_fd *dfs_fd) {
+    struct dfs_fdtable *fdt = dfs_fdtable_get();
+    int fd = -1;
+
+    dfs_fd_lock();
+
+    for(int i = 0; i < fdt->maxfd; i++) {
+        if(fdt->fds[i] == dfs_fd) {
+            fd = i;
+        }
+    }
+
+    dfs_fd_unlock();
+
+    return fd;
+}
+
 static int fops_open(struct dfs_fd *fd) {
     rt_device_warp_t *device_warp = (rt_device_warp_t *)fd->fnode->data;
     rt_device_t dev = device_warp->device;
@@ -794,27 +833,27 @@ static int fops_open(struct dfs_fd *fd) {
 
     int ret = 0;
 
+    rt_base_t level = rt_hw_interrupt_disable();
+
     if (device_warp->is_registered_device) {
-        device_warp->device_fops = dev->fops;
-        dev->fops = &hack_fops;
         char device_fullpath[RT_NAME_MAX + 6];
         rt_snprintf(device_fullpath, sizeof(device_fullpath), "/dev/%s", dev->parent.name);
-        device_warp->device_fd = open(device_fullpath, fd->flags);
-        if (device_warp->device_fd == -1) {
-            ret = errno;
+
+        if (device_warp->device_fd < 0) {
+            device_warp->device_fd = open(device_fullpath, fd->flags);
+            if (device_warp->device_fd == -1) {
+                ret = errno;
+            }
         }
-        if (dev->fops == &hack_fops) {
-            dev->fops = device_warp->device_fops;
-        }
-        else {
-            LOG_E("%s dev->fops != &hack_fops", device_warp->parent.parent.name);
-        }
+
     }
     else {
         fd->data = dev;
         ret = fops_hack_open(fd);
         fd->data = device_warp;
     }
+
+    rt_hw_interrupt_enable(level);
 
     return ret;
 }
@@ -827,18 +866,15 @@ static int fops_close(struct dfs_fd *fd) {
 
     int ret = 0;
 
+    rt_base_t level = rt_hw_interrupt_disable();
+
     if (device_warp->is_registered_device) {
-        device_warp->device_fops = dev->fops;
-        dev->fops = &hack_fops;
         int err = close(device_warp->device_fd);
         if (err) {
             ret = errno;
         }
-        if (dev->fops == &hack_fops) {
-            dev->fops = device_warp->device_fops;
-        }
         else {
-            LOG_E("%s dev->fops != &hack_fops", device_warp->parent.parent.name);
+            device_warp->device_fd = -1;
         }
     }
     else {
@@ -846,6 +882,8 @@ static int fops_close(struct dfs_fd *fd) {
         ret = fops_hack_close(fd);
         fd->data = device_warp;
     }
+
+    rt_hw_interrupt_enable(level);
 
     return ret;
 }
@@ -859,23 +897,17 @@ static int fops_ioctl(struct dfs_fd *fd, int cmd, void *args) {
     int ret = 0;
 
     if (device_warp->is_registered_device) {
-        device_warp->device_fops = dev->fops;
-        dev->fops = &hack_fops;
         int err = ioctl(device_warp->device_fd, cmd, args);
         if (err) {
             ret = errno;
         }
-        if (dev->fops == &hack_fops) {
-            dev->fops = device_warp->device_fops;
-        }
-        else {
-            LOG_E("%s dev->fops != &hack_fops", device_warp->parent.parent.name);
-        }
     }
     else {
+        rt_base_t level = rt_hw_interrupt_disable();
         fd->data = dev;
         ret = fops_hack_ioctl(fd, cmd, args);
         fd->data = device_warp;
+        rt_hw_interrupt_enable(level);
     }
 
     return ret;
@@ -890,8 +922,6 @@ static int fops_read(struct dfs_fd *fd, void *buf, size_t count) {
     int ret = 0;
 
     if (device_warp->is_registered_device) {
-        device_warp->device_fops = dev->fops;
-        dev->fops = &hack_fops;
         int read_size = read(device_warp->device_fd, buf, count);
         if (read_size < 0) {
             ret = errno;
@@ -899,17 +929,13 @@ static int fops_read(struct dfs_fd *fd, void *buf, size_t count) {
         else {
             ret = read_size;
         }
-        if (dev->fops == &hack_fops) {
-            dev->fops = device_warp->device_fops;
-        }
-        else {
-            LOG_E("%s dev->fops != &hack_fops", device_warp->parent.parent.name);
-        }
     }
     else {
+        rt_base_t level = rt_hw_interrupt_disable();
         fd->data = dev;
         ret = fops_hack_read(fd, buf, count);
         fd->data = device_warp;
+        rt_hw_interrupt_enable(level);
     }
 
     return ret;
@@ -924,8 +950,6 @@ static int fops_write(struct dfs_fd *fd, const void *buf, size_t count) {
     int ret = 0;
 
     if (device_warp->is_registered_device) {
-        device_warp->device_fops = dev->fops;
-        dev->fops = &hack_fops;
         int write_size = write(device_warp->device_fd, buf, count);
         if (write_size < 0) {
             ret = errno;
@@ -933,17 +957,13 @@ static int fops_write(struct dfs_fd *fd, const void *buf, size_t count) {
         else {
             ret = write_size;
         }
-        if (dev->fops == &hack_fops) {
-            dev->fops = device_warp->device_fops;
-        }
-        else {
-            LOG_E("%s dev->fops != &hack_fops", device_warp->parent.parent.name);
-        }
     }
     else {
+        rt_base_t level = rt_hw_interrupt_disable();
         fd->data = dev;
         ret = fops_hack_write(fd, buf, count);
         fd->data = device_warp;
+        rt_hw_interrupt_enable(level);
     }
 
     return ret;
@@ -958,20 +978,14 @@ static int fops_flush(struct dfs_fd *fd) {
     int ret = 0;
 
     if (device_warp->is_registered_device) {
-        device_warp->device_fops = dev->fops;
-        dev->fops = &hack_fops;
         ret = fsync(device_warp->device_fd);
-        if (dev->fops == &hack_fops) {
-            dev->fops = device_warp->device_fops;
-        }
-        else {
-            LOG_E("%s dev->fops != &hack_fops", device_warp->parent.parent.name);
-        }
     }
     else {
+        rt_base_t level = rt_hw_interrupt_disable();
         fd->data = dev;
         ret = fops_hack_flush(fd);
         fd->data = device_warp;
+        rt_hw_interrupt_enable(level);
     }
 
     return ret;
@@ -986,8 +1000,6 @@ static int fops_lseek(struct dfs_fd *fd, off_t offset) {
     int ret = offset;
 
     if (device_warp->is_registered_device) {
-        device_warp->device_fops = dev->fops;
-        dev->fops = &hack_fops;
         int lseek_ret = lseek(device_warp->device_fd, offset, SEEK_SET);
         if (lseek_ret == -1) {
             ret = errno;
@@ -995,17 +1007,13 @@ static int fops_lseek(struct dfs_fd *fd, off_t offset) {
         else {
             ret = lseek_ret;
         }
-        if (dev->fops == &hack_fops) {
-            dev->fops = device_warp->device_fops;
-        }
-        else {
-            LOG_E("%s dev->fops != &hack_fops", device_warp->parent.parent.name);
-        }
     }
     else {
+        rt_base_t level = rt_hw_interrupt_disable();
         fd->data = dev;
         ret = fops_hack_lseek(fd, offset);
         fd->data = device_warp;
+        rt_hw_interrupt_enable(level);
     }
 
     return ret;
@@ -1033,10 +1041,12 @@ const static struct dfs_file_ops fops = {
 #endif // RT_USING_POSIX
 
 rt_device_warp_t * rt_device_warp_create(rt_device_t dev) {
-    return rt_device_warp_create_with_data(dev, 0);
-}
+    rt_device_warp_t *device_warp = get_device_warp(dev);
 
-rt_device_warp_t * rt_device_warp_create_with_data(rt_device_t dev, rt_size_t attach_size) {
+    if (device_warp != RT_NULL) {
+        return device_warp;
+    }
+
     rt_device_warp_list_node_t *warp_list_node = rt_malloc(sizeof(rt_device_warp_list_node_t));
     if (warp_list_node == RT_NULL) {
         rt_set_errno(RT_ENOMEM);
@@ -1044,12 +1054,7 @@ rt_device_warp_t * rt_device_warp_create_with_data(rt_device_t dev, rt_size_t at
     }
     rt_list_init(&warp_list_node->list);
 
-    rt_size_t aligned_attach_size = 0;
-    if (attach_size > 0) {
-        aligned_attach_size = RT_ALIGN(attach_size, RT_ALIGN_SIZE);
-    }
-    rt_size_t size = RT_ALIGN(sizeof(rt_device_warp_t), RT_ALIGN_SIZE) + aligned_attach_size;
-    rt_device_warp_t *device_warp = (rt_device_warp_t *)rt_malloc(size);
+    device_warp = (rt_device_warp_t *)rt_malloc(sizeof(rt_device_warp_t));
     if (device_warp == RT_NULL) {
         rt_set_errno(RT_ENOMEM);
         rt_free(warp_list_node);
@@ -1062,13 +1067,10 @@ rt_device_warp_t * rt_device_warp_create_with_data(rt_device_t dev, rt_size_t at
     if (rt_device_find(dev->parent.name) != RT_NULL) {
         device_warp->is_registered_device = RT_TRUE;
     }
+    device_warp->device_fd = -1;
 
     rt_list_init(&device_warp->listeners);
     rt_list_init(&device_warp->interceptors);
-
-    if (attach_size > 0) {
-        rt_device_warp_set_user_data(device_warp, device_warp + 1);
-    }
 
     warp_list_node->device_warp = device_warp;
     rt_list_insert_after(&s_device_warp_list, &warp_list_node->list);
@@ -1136,6 +1138,16 @@ rt_err_t rt_device_warp_register(rt_device_warp_t *device_warp, const char *name
         rt_strncpy(device_warp->device->parent.name, name_buffer, RT_NAME_MAX);
     }
 
+    if (device_warp->device->ops != &device_hack_ops) {
+        device_warp->device_ops = device_warp->device->ops;
+        device_warp->device->ops = &device_hack_ops;
+    }
+
+    if (device_warp->device->fops != &hack_fops) {
+        device_warp->device_fops = device_warp->device->fops;
+        device_warp->device->fops = &hack_fops;
+    }
+
     return ret;
 }
 
@@ -1146,6 +1158,22 @@ rt_err_t rt_device_warp_unregister(rt_device_warp_t *device_warp) {
 
     if (!rt_object_is_systemobject(&device_warp->parent.parent)) {
         return -RT_EINVAL;
+    }
+
+    if(device_warp->device->ops == &device_hack_ops) {
+        device_warp->device->ops = device_warp->device_ops;
+        device_warp->device_ops = RT_NULL;
+    }
+    else {
+        LOG_W("ops of the origin device was changed!");
+    }
+
+    if (device_warp->device->fops == &hack_fops) {
+        device_warp->device->fops = device_warp->device_fops;
+        device_warp->device_fops = RT_NULL;
+    }
+    else {
+        LOG_W("fops of the origin device was changed!");
     }
 
     return rt_device_unregister(&device_warp->parent);
@@ -1247,4 +1275,61 @@ rt_device_t rt_device_warp_get_origin_device(rt_device_warp_t *device_warp) {
 
 rt_device_t rt_device_warp_get_parent(rt_device_warp_t *warp) {
     return &warp->parent;
+}
+
+
+ static void safe_log(const char* format, ...){
+    // static rt_mq_t mq = RT_NULL;
+    // static rt_thread_t thread = RT_NULL;
+
+    // if (mq == RT_NULL) {
+    //     mq = rt_mq_create("dev_warp_log", sizeof(safe_log_msg_t), 128, RT_IPC_FLAG_PRIO);
+    // }
+
+    // if (thread == RT_NULL) {
+    //     thread = rt_thread_create("dev_warp_log", safe_log_thread, mq, 1024 * 5, 26, 10);
+    //     rt_thread_startup(thread);
+    // }
+
+    va_list args;
+    rt_size_t length = 0;
+    static char log_buf[RT_CONSOLEBUF_SIZE];
+
+    va_start(args, format);
+    length = rt_vsnprintf(log_buf, sizeof(log_buf) - 1, format, args);
+    if (length > RT_CONSOLEBUF_SIZE - 1)
+    {
+        length = RT_CONSOLEBUF_SIZE - 1;
+    }
+    va_end(args);
+
+    
+    rt_device_warp_t *io_device_warp = RT_NULL;
+    rt_device_warp_list_node_t *node = RT_NULL;
+    rt_device_t io_device = console_get_iodev();
+    rt_list_for_each_entry(node, &s_device_warp_list, list) {
+        if (&node->device_warp->parent == io_device) {
+            io_device_warp = node->device_warp;
+            break;
+        }
+    }
+    rt_bool_t is_hacked = io_device->ops == &device_hack_ops;
+
+    if (is_hacked) {
+        if (io_device_warp == RT_NULL || io_device_warp->device_ops == RT_NULL) {
+            // impossible! otherwise, it would be a fatal error.
+            return;
+        }
+        io_device_warp->device_ops->write(io_device_warp->device, 0, log_buf, length);
+    }
+    else {
+        rt_device_write(io_device, 0, log_buf, length);
+    }
+
+    // safe_log_msg_t msg;
+    // rt_memset(&msg, 0, sizeof(safe_log_msg_t));
+    // msg.log_size = sizeof(char) * length;
+    // rt_memcpy(msg.log_buf, log_buf, msg.log_size);
+
+    // rt_mq_send(mq, &msg, sizeof(safe_log_msg_t));
 }

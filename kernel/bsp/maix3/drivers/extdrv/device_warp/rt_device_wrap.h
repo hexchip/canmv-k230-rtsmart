@@ -39,8 +39,6 @@ typedef struct rt_device_warp rt_device_warp_t;
 
 rt_device_warp_t * rt_device_warp_create(rt_device_t dev);
 
-rt_device_warp_t * rt_device_warp_create_with_data(rt_device_t dev, rt_size_t attach_size);
-
 void rt_device_warp_destroy(rt_device_warp_t *warp);
 
 rt_err_t rt_device_warp_register(rt_device_warp_t *warp, const char *name);

@@ -27,6 +27,7 @@ static terminal_vb_blk_info_t s_vb_blk_info_disp;
 static k_video_frame_info s_vf_info_disp;
 static terminal_vb_blk_info_t s_vb_blk_info_rotation;
 static k_video_frame_info s_vf_info_rotation;
+static terminal_vb_blk_info_t s_vb_blk_info_dma;
 static k_vo_osd s_vo_osd_layer = K_VO_OSD0;
 
 static k_u32 width_to_stride(k_u32 width) {
@@ -38,7 +39,8 @@ static k_u32 width_to_stride(k_u32 width) {
 static k_s32 display_connector_init() {
     k_s32 ret = 0;
 
-    k_connector_type connector_type = ST7701_V1_MIPI_2LAN_480X640_30FPS;
+    k_connector_type connector_type = ST7701_V1_MIPI_2LAN_480X800_30FPS;
+    // k_connector_type connector_type = ST7701_V1_MIPI_2LAN_480X640_30FPS;
     ret = kd_mpi_get_connector_info(connector_type, &s_connector_info);
     if (ret) {
         LOG_E("connector type %d not found\n", connector_type);
@@ -82,18 +84,18 @@ static k_s32 display_connector_deinit() {
 
 static rt_err_t get_vb_blk_info(struct terminal_vb_blk_info *info, k_u64 blk_size) {
 
-    k_vb_blk_handle handle = kd_mpi_vb_get_block(VB_INVALID_POOLID, blk_size, RT_NULL);
+    k_vb_blk_handle handle = kd_mpi_vb_get_block(s_vb_pool_id, blk_size, RT_NULL);
     if (handle == VB_INVALID_HANDLE) {
         LOG_E("kd_mpi_vb_get_block failed\n");
         return RT_ERROR;
     }
 
-    k_s32 pool_id = kd_mpi_vb_handle_to_pool_id(handle);
-    if (pool_id == VB_INVALID_POOLID) {
-        LOG_E("kd_mpi_vb_handle_to_pool_id failed\n");
-        kd_mpi_vb_release_block(handle);
-        return RT_ERROR;
-    }
+    // k_s32 pool_id = kd_mpi_vb_handle_to_pool_id(handle);
+    // if (pool_id == VB_INVALID_POOLID) {
+    //     LOG_E("kd_mpi_vb_handle_to_pool_id failed\n");
+    //     kd_mpi_vb_release_block(handle);
+    //     return RT_ERROR;
+    // }
 
     k_u64 phys_addr = kd_mpi_vb_handle_to_phyaddr(handle);
     if ((void *)phys_addr == RT_NULL) {
@@ -109,7 +111,8 @@ static rt_err_t get_vb_blk_info(struct terminal_vb_blk_info *info, k_u64 blk_siz
         return RT_ERROR;
     }
 
-    info->pool_id = pool_id;
+    // info->pool_id = pool_id;
+    info->pool_id = s_vb_pool_id;
     info->blk_size = blk_size;
     info->phys_addr = phys_addr;
     info->virt_addr = (k_u64)virt_addr;
@@ -122,10 +125,10 @@ static k_s32 vb_init(k_u64 buffer_size) {
 
     k_vb_config config;
     rt_memset(&config, 0, sizeof(config));
-    config.max_pool_cnt = 1;
-    config.comm_pool[0].blk_cnt = 3;
-    config.comm_pool[0].blk_size = buffer_size;
-    config.comm_pool[0].mode = VB_REMAP_MODE_NOCACHE;
+    config.max_pool_cnt = VB_MAX_COMM_POOLS;
+    // config.comm_pool[0].blk_cnt = 4;
+    // config.comm_pool[0].blk_size = buffer_size;
+    // config.comm_pool[0].mode = VB_REMAP_MODE_NOCACHE;
 
     // for (size_t i = 1; i < 9; i++) {
     //     config.comm_pool[i] = config.comm_pool[0];
@@ -143,20 +146,22 @@ static k_s32 vb_init(k_u64 buffer_size) {
         return ret;
     }
 
-    // k_vb_pool_config pool_config;
-    // rt_memset(&pool_config, 0, sizeof(pool_config));
-    // pool_config.blk_cnt = 2;
-    // pool_config.blk_size = buffer_size;
-    // pool_config.mode = VB_REMAP_MODE_NOCACHE;
+    k_vb_pool_config pool_config;
+    rt_memset(&pool_config, 0, sizeof(pool_config));
+    pool_config.blk_cnt = 5;
+    pool_config.blk_size = buffer_size;
+    pool_config.mode = VB_REMAP_MODE_NOCACHE;
 
-    // s_vb_pool_id = kd_mpi_vb_create_pool(&pool_config);
+    s_vb_pool_id = kd_mpi_vb_create_pool(&pool_config);
 
-    // if (s_vb_pool_id == VB_INVALID_POOLID) {
-    //     return K_FAILED;
-    // }
+    if (s_vb_pool_id == VB_INVALID_POOLID) {
+        LOG_E("kd_mpi_vb_init create pool failed\n");
+        return K_FAILED;
+    }
 
     get_vb_blk_info(&s_vb_blk_info_rotation, buffer_size);
     get_vb_blk_info(&s_vb_blk_info_disp, buffer_size);
+    get_vb_blk_info(&s_vb_blk_info_dma, buffer_size);
 
     return ret;
 }
@@ -289,6 +294,7 @@ static k_s32 dma_dev_init(void) {
             (s_vf_info_rotation.v_frame.pixel_format == PIXEL_FORMAT_RGB_MONOCHROME_8BPP) ? DMA_PIXEL_FORMAT_YUV_400_8BIT : 0,
     };
 
+    kd_mpi_dma_attach_vb_pool(s_dma_dev_chn, s_vb_blk_info_dma.pool_id);
 
     ret = kd_mpi_dma_set_chn_attr(s_dma_dev_chn, &chn_attr);
     if (ret != K_SUCCESS) {

@@ -11,7 +11,7 @@
 #include "rt_device_wrap.h"
 
 #define DBG_SECTION_NAME    "DEV_USBH_SERIAL"
-#define DBG_LEVEL           DBG_WARNING
+#define DBG_LEVEL           DBG_INFO
 #include <rtdbg.h>
 
 #define USBH_SERIAL_ASYNC_TRANSMIT_MAX_RETRY 5

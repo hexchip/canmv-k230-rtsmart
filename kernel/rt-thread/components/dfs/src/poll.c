@@ -17,9 +17,11 @@
 #include <dfs.h>
 #include <dfs_file.h>
 #include <dfs_posix.h>
-#include <dfs_poll.h>
+#include <poll.h>
 
 #ifdef RT_USING_POSIX
+
+#define POLLMASK_DEFAULT (POLLIN | POLLOUT | POLLRDNORM | POLLWRNORM)
 
 struct rt_poll_node;
 

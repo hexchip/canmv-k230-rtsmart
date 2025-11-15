@@ -68,11 +68,10 @@ static void lvgl_thread_entry(void *parameter)
     #endif
 #endif /* LV_USE_LOG */
     lv_init();
-    lv_tick_set_cb(&rt_tick_get_millisecond);
+    lv_tick_set_cb(rt_tick_get_millisecond);
     lv_port_disp_init();
     lv_port_indev_init();
     lv_user_gui_init();
-
 
 #ifdef PKG_USING_CPU_USAGE
     cpu_usage_init();
@@ -84,7 +83,12 @@ static void lvgl_thread_entry(void *parameter)
         rt_mutex_take(s_display_mutex, RT_WAITING_FOREVER);
         uint32_t time_until_next = lv_timer_handler();
         rt_mutex_release(s_display_mutex);
-        rt_thread_mdelay(time_until_next);
+        if (time_until_next == LV_NO_TIMER_READY) {
+            rt_thread_mdelay(33);
+        }
+        else {
+            rt_thread_mdelay(time_until_next);
+        }
     }
 }
 

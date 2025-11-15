@@ -244,7 +244,7 @@ int terminal_init(terminal_t *terminal) {
         printf("device_warp_register(%s) failed: %d\n", "iodev_warp", ret);
         terminal_deinit(terminal);
     }
-    console_set_iodev((rt_device_t)(iodev_warp));
+    console_set_iodev(rt_device_warp_get_parent(iodev_warp));
 
     terminal->context->iodev_listener.on_open = on_iodev_open;
     terminal->context->iodev_listener.on_write = on_iodev_write;

@@ -34,7 +34,8 @@ RT_WEAK void lv_port_disp_init() {
     lv_disp_t *disp = lv_display_create(display_width, display_height);
     lv_display_set_flush_cb(disp, flush);
     lv_display_set_flush_wait_cb(disp, flush_wait_cb);
-    lv_display_set_dpi(disp, 400);
+    // lv_display_set_dpi(disp, 400);
+    lv_display_set_dpi(disp, 300);
     lv_color_format_t color_format = lv_display_get_color_format(disp);
     uint32_t stride = lv_draw_buf_width_to_stride(display_width, color_format);
     size_t buffer_size = stride * display_height;
