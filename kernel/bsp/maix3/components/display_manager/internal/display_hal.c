@@ -126,17 +126,17 @@ static k_s32 vb_init(k_u64 buffer_size) {
     k_vb_config config;
     rt_memset(&config, 0, sizeof(config));
     config.max_pool_cnt = VB_MAX_COMM_POOLS;
-    // config.comm_pool[0].blk_cnt = 4;
-    // config.comm_pool[0].blk_size = buffer_size;
-    // config.comm_pool[0].mode = VB_REMAP_MODE_NOCACHE;
-
-    // for (size_t i = 1; i < 9; i++) {
-    //     config.comm_pool[i] = config.comm_pool[0];
-    // }
 
     ret = kd_mpi_vb_set_config(&config);
     if (ret) {
         LOG_E("kd_mpi_vb_set_config failed: %d\n", ret);
+        return ret;
+    }
+
+    k_vb_supplement_config supplement_config = { VB_SUPPLEMENT_JPEG_MASK };
+    ret = kd_mpi_vb_set_supplement_config(&supplement_config);
+    if (ret) {
+        LOG_E("kd_mpi_vb_set_supplement_config failed: %d\n", ret);
         return ret;
     }
 
@@ -158,6 +158,8 @@ static k_s32 vb_init(k_u64 buffer_size) {
         LOG_E("kd_mpi_vb_init create pool failed\n");
         return K_FAILED;
     }
+
+    LOG_I("kd_mpi_vb_init s_vb_pool_id = %d\n", s_vb_pool_id);
 
     get_vb_blk_info(&s_vb_blk_info_rotation, buffer_size);
     get_vb_blk_info(&s_vb_blk_info_disp, buffer_size);
@@ -268,6 +270,8 @@ static k_s32 dma_dev_init(void) {
         LOG_E("request gdma chn failed.\n");
         return K_FAILED;
     }
+
+    LOG_I("dma_dev_init s_dma_dev_chn = %d\n", s_dma_dev_chn);
 
     k_u32 flag = s_rotation_flag | s_mirror_mode_flag;
 

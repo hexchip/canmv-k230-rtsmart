@@ -134,7 +134,6 @@ rt_err_t rt_device_wrap_unregister(rt_device_wrap_t *device_wrap) {
     const struct rt_device_ops *hack_ops = get_device_hack_ops();
     if(device_wrap->device->ops == hack_ops) {
         device_wrap->device->ops = device_wrap->device_ops;
-        device_wrap->device_ops = RT_NULL;
     }
     else {
         LOG_W("ops of the origin device was changed!");
@@ -144,7 +143,6 @@ rt_err_t rt_device_wrap_unregister(rt_device_wrap_t *device_wrap) {
     const struct dfs_file_ops *device_hack_fops = get_device_hack_fops();
     if (device_wrap->device->fops == device_hack_fops) {
         device_wrap->device->fops = device_wrap->device_fops;
-        device_wrap->device_fops = RT_NULL;
     }
     else {
         LOG_W("fops of the origin device was changed!");

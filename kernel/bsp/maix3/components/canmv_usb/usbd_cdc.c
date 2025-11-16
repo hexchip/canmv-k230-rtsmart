@@ -45,7 +45,6 @@ static rt_err_t cdc_control(struct rt_serial_device* serial, int cmd, void* arg)
     case RT_DEVICE_CTRL_CONFIG: {
         if (arg == (void*)RT_DEVICE_FLAG_DMA_RX) {
             cdc->is_open = RT_TRUE;
-            cdc->cdc_dtr = 0;
         }
         break;
     }
