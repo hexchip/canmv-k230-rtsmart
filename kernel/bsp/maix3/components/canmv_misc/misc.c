@@ -35,6 +35,10 @@
   #include "rotary_encoder.h"
 #endif
 
+#if defined (RT_USING_TOUCH)
+#include "drv_touch.h"
+#endif
+
 #include "dfs_posix.h"
 
 struct misc_dev_handle {
@@ -147,6 +151,8 @@ static int misc_close(struct dfs_fd *file) { return 0; }
 #define MISC_DEV_CMD_SET_AUTO_EXEC_PY_STAGE   _IOWR('M', 0x0d, void *)
 #define MISC_DEV_CMD_CREATE_ROTARY_ENC_DEV    _IOWR('M', 0x0e, void *)
 #define MISC_DEV_CMD_DELETE_ROTARY_ENC_DEV    _IOWR('M', 0x0f, void *)
+#define MISC_DEV_CMD_REGISTER_TOUCH_DEVICE    _IOWR('M', 0x10, void *)
+#define MISC_DEV_CMD_UNREGISTER_TOUCH_DEVICE  _IOWR('M', 0x11, void *)
 
 struct meminfo_t {
   size_t total_size;
@@ -559,6 +565,32 @@ static int misc_delete_rotary_encoder_dev(void* args)
 }
 #endif
 
+#if defined(RT_USING_TOUCH)
+static int misc_register_touch_device(void* args)
+{
+    struct drv_touch_config cfg;
+
+    if (sizeof(cfg) != lwp_get_from_user(&cfg, args, sizeof(cfg))) {
+        rt_kprintf("%s get_from_user failed\n", __func__);
+        return -1;
+    }
+
+    return drv_touch_mgmt_create_device(&cfg);
+}
+
+static int misc_unregister_touch_device(void* args)
+{
+    int index = -1;
+
+    if (sizeof(index) != lwp_get_from_user(&index, args, sizeof(index))) {
+        rt_kprintf("%s get_from_user failed\n", __func__);
+        return -1;
+    }
+
+    return drv_touch_mgmt_delete_device(index);
+}
+#endif
+
 static const struct misc_dev_handle misc_handles[] = {
   {
     .cmd = MISC_DEV_CMD_READ_HEAP,
@@ -623,6 +655,17 @@ static const struct misc_dev_handle misc_handles[] = {
     .func = misc_delete_rotary_encoder_dev,
   },
 #endif
+#if defined (RT_USING_TOUCH)
+  {
+    .cmd = MISC_DEV_CMD_REGISTER_TOUCH_DEVICE,
+    .func = misc_register_touch_device,
+  },
+  {
+    .cmd = MISC_DEV_CMD_UNREGISTER_TOUCH_DEVICE,
+    .func = misc_unregister_touch_device,
+  },
+#endif
+
 };
 
 static int misc_ioctl(struct dfs_fd *file, int cmd, void *args) {

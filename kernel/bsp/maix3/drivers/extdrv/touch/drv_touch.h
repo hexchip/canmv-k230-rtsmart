@@ -25,34 +25,51 @@
 
 #pragma once
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
+#include "rtconfig.h"
 #include "rtdef.h"
 #include <rtthread.h>
 #include <touch.h>
 
 #include "drv_gpio.h"
 
-#define TOUCH_MAX_POINT_NUMBER      10
-#define TOUCH_READ_REG_MAX_SIZE     128
-#define TOUCH_READ_MQ_MSG_COUNT     3
-#define TOUCH_TIMEOUT_MS            1000
+#define TOUCH_MAX_POINT_NUMBER  10
+#define TOUCH_READ_REG_MAX_SIZE 128
+#define TOUCH_READ_MQ_MSG_COUNT 3
 
 struct touch_register {
     rt_tick_t time;
-    uint32_t reg[TOUCH_READ_REG_MAX_SIZE / sizeof(uint32_t)];
+    uint32_t  reg[TOUCH_READ_REG_MAX_SIZE / sizeof(uint32_t)];
 };
 typedef struct touch_register touch_read_mq_msg_type;
 
 struct touch_point {
-    int point_num;
+    int                  point_num;
     struct rt_touch_data point[TOUCH_MAX_POINT_NUMBER];
 };
 
+struct drv_touch_config {
+    int touch_dev_index;
+
+    int range_x;
+    int range_y;
+
+    int pin_intr;
+    int intr_value;
+    int pin_reset;
+    int reset_value;
+
+    int i2c_bus_index;
+    int i2c_bus_speed;
+};
+
 struct drv_touch_dev {
-    const struct {
-        int intr;
+    struct {
+        int fake_intr;
+
+        int             intr;
         gpio_pin_edge_t intr_edge;
 
         int rst;
@@ -60,66 +77,78 @@ struct drv_touch_dev {
     } pin;
 
     struct {
-        struct rt_i2c_bus_device *bus;
-        const char *name;
-        const uint32_t speed;
+        uint32_t index;
+        uint32_t speed;
+        char     name[RT_NAME_MAX];
+
+        struct rt_i2c_bus_device* bus;
+
         uint16_t addr;
         uint16_t reg_width; // 1 or 2
     } i2c;
 
     struct {
-        struct rt_touch_device touch;
-
-        void *priv;
-
-        char drv_name[16];
-
-        int (*read_register)(struct drv_touch_dev *dev, struct touch_register *reg);
-        int (*parse_register)(struct drv_touch_dev *dev, struct touch_register *reg, struct touch_point *result);
-
-        int (*reset)(struct drv_touch_dev *dev);
-        int (*get_default_rotate)(struct drv_touch_dev *dev);
-    } dev;
-
-    struct {
         int range_x;
         int range_y;
+
         int point_num;
     } touch;
+
+    struct {
+        struct rt_touch_device touch;
+
+        int  dev_index;
+        char drv_name[16];
+
+        int (*read_register)(struct drv_touch_dev* dev, struct touch_register* reg);
+        int (*parse_register)(struct drv_touch_dev* dev, struct touch_register* reg, struct touch_point* result);
+
+        int (*reset)(struct drv_touch_dev* dev);
+        int (*get_default_rotate)(struct drv_touch_dev* dev);
+    } dev;
 
 #ifdef TOUCH_DRV_MODEL_INT_WITH_THREAD
     struct {
         struct rt_thread thr;
-        uint32_t thread_stack[RT_ALIGN(TOUCH_DRV_THREAD_STACK_SIZE, RT_ALIGN_SIZE) / sizeof(uint32_t)];
+        uint32_t         thread_stack[RT_ALIGN(TOUCH_DRV_THREAD_STACK_SIZE, RT_ALIGN_SIZE) / sizeof(uint32_t)];
 
         struct rt_semaphore ctrl_sem;
 
         struct rt_messagequeue ctrl_mq;
-        char ctrl_mq_pool[(sizeof(void *) + RT_ALIGN(sizeof(uint32_t), RT_ALIGN_SIZE)) * 1];
+        char                   ctrl_mq_pool[(sizeof(void*) + RT_ALIGN(sizeof(uint32_t), RT_ALIGN_SIZE)) * 1];
 
         struct rt_messagequeue read_mq;
-        char read_mq_pool[(sizeof(void *) + RT_ALIGN(sizeof(touch_read_mq_msg_type), RT_ALIGN_SIZE)) * TOUCH_READ_MQ_MSG_COUNT];
+        char read_mq_pool[(sizeof(void*) + RT_ALIGN(sizeof(touch_read_mq_msg_type), RT_ALIGN_SIZE)) * TOUCH_READ_MQ_MSG_COUNT];
     } thr;
 #endif
+
+    struct drv_touch_config config;
+    rt_list_t               list;
 };
 
 /**
  * write slave, first byte should be register address.
  */
-int touch_dev_write_reg(struct drv_touch_dev *dev, rt_uint8_t *buffer, rt_size_t length);
+int touch_dev_write_reg(struct drv_touch_dev* dev, rt_uint8_t* buffer, rt_size_t length);
 
-int touch_dev_read_reg(struct drv_touch_dev *dev, rt_uint16_t addr,
-    rt_uint8_t *buffer, rt_size_t length);
+int touch_dev_read_reg(struct drv_touch_dev* dev, rt_uint16_t addr, rt_uint8_t* buffer, rt_size_t length);
+
+int touch_dev_write_read_reg(struct drv_touch_dev* dev, uint8_t* send_buffer, uint32_t send_len, uint8_t* read_buffer,
+                             uint32_t read_len);
 
 /**
  * For some touch device, which have no hardware event generate, such as CST128-A.
  */
-void touch_dev_update_event(int finger_num, struct rt_touch_data *point);
+void touch_dev_update_event(int finger_num, struct rt_touch_data* point);
 
-typedef int (*drv_touch_probe)(struct drv_touch_dev *);
+typedef int (*drv_touch_probe)(struct drv_touch_dev*);
 
-int drv_touch_probe_ft5x16(struct drv_touch_dev *dev);
-int drv_touch_probe_cst128(struct drv_touch_dev *dev);
-int drv_touch_probe_chsc5xxx(struct drv_touch_dev *dev);
-int drv_touch_probe_gt911(struct drv_touch_dev *dev);
-int drv_touch_probe_ft5x06(struct drv_touch_dev *dev);
+int drv_touch_probe_ft5x16(struct drv_touch_dev* dev);
+int drv_touch_probe_cst128(struct drv_touch_dev* dev);
+int drv_touch_probe_cst328(struct drv_touch_dev* dev);
+int drv_touch_probe_chsc5xxx(struct drv_touch_dev* dev);
+int drv_touch_probe_gt911(struct drv_touch_dev* dev);
+int drv_touch_probe_ft5x06(struct drv_touch_dev* dev);
+
+int drv_touch_mgmt_create_device(struct drv_touch_config* cfg);
+int drv_touch_mgmt_delete_device(int index);
