@@ -28,7 +28,6 @@
 #include "board.h"
 #include "k230_atag.h"
 
-#define CONFIG_RTSMART_PRELOAD_RTAPP_MAXSIZE ((128 * 1024 * 1024) / 3)
 #define DBG_TAG "LWP"
 #define DBG_LVL DBG_WARNING
 #include <rtdbg.h>
@@ -390,6 +389,7 @@ static inline rt_uint64_t get_preload_addr(void)
         return 0;
     }
 }
+
 /**
  * Read ELF data from preloaded memory region
  * @param dst destination buffer
@@ -400,22 +400,8 @@ static inline rt_uint64_t get_preload_addr(void)
  */
 static size_t preload_fread(void *dst, size_t item_size, size_t item_number, size_t offset)
 {
-    size_t bytes_to_read = item_size * item_number;
     size_t elf_offset = offset;
-
-    /* Check if the requested offset is within preloaded ELF bounds */
-    if (elf_offset >= CONFIG_RTSMART_PRELOAD_RTAPP_MAXSIZE)
-    {
-        LOG_E("ELF is too large\n");
-        return 0;
-    }
-
-    /* Adjust read size if it would exceed preloaded ELF bounds */
-    if (elf_offset + bytes_to_read > CONFIG_RTSMART_PRELOAD_RTAPP_MAXSIZE)
-    {
-        LOG_E("_ELF is too large\n");
-        bytes_to_read = CONFIG_RTSMART_PRELOAD_RTAPP_MAXSIZE - elf_offset;
-    }
+    size_t bytes_to_read = item_size * item_number;
 
     /* Copy from preloaded memory region */
     rt_memcpy(dst, (void*)(get_preload_addr() + elf_offset), bytes_to_read);
@@ -432,7 +418,7 @@ static int is_preloaded_elf_valid(void)
     uint8_t *elf_addr = (uint8_t*)get_preload_addr();
 
     /* Check ELF magic number */
-    if (rt_memcmp(elf_addr, elf_magic, 4) != 0)
+    if ((NULL == elf_addr) || (rt_memcmp(elf_addr, elf_magic, 4) != 0))
     {
         LOG_E("Preloaded ELF magic number mismatch");
         return 0;
