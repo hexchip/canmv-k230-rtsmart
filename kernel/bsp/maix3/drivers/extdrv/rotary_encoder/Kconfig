@@ -1,0 +1,4 @@
+menuconfig ENABLE_ROTARY_ENCODER
+    bool "Enable rotary encoder"
+    default y
+    select RT_USING_HEAP

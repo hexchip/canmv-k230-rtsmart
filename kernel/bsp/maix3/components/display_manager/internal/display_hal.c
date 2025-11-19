@@ -39,8 +39,8 @@ static k_u32 width_to_stride(k_u32 width) {
 static k_s32 display_connector_init() {
     k_s32 ret = 0;
 
-    k_connector_type connector_type = ST7701_V1_MIPI_2LAN_480X800_30FPS;
-    // k_connector_type connector_type = ST7701_V1_MIPI_2LAN_480X640_30FPS;
+    // k_connector_type connector_type = ST7701_V1_MIPI_2LAN_480X800_30FPS;
+    k_connector_type connector_type = ST7701_V1_MIPI_2LAN_480X640_30FPS;
     ret = kd_mpi_get_connector_info(connector_type, &s_connector_info);
     if (ret) {
         LOG_E("connector type %d not found\n", connector_type);
@@ -409,6 +409,11 @@ k_s32 display_hal_flush_frame(k_u8 *px_map) {
         LOG_E("roate frame failed: %d", ret);
     }
 
+    kd_mpi_vo_chn_insert_frame(s_vo_osd_layer + K_MAX_VO_LAYER_NUM, &s_vf_info_disp);
+}
+
+k_s32 display_hal_flush_empty_frame() {
+    rt_memset((void *)s_vf_info_disp.v_frame.virt_addr[0], 0, s_buffer_size);
     kd_mpi_vo_chn_insert_frame(s_vo_osd_layer + K_MAX_VO_LAYER_NUM, &s_vf_info_disp);
 }
 

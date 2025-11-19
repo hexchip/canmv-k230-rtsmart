@@ -54,7 +54,7 @@ struct encoder_device {
 
     // Management
     int                      index;
-    struct encoder_pin_cfg_t cfg;
+    encoder_pin_cfg_t cfg;
 
     rt_list_t list;
     struct rt_work debounce;
@@ -216,9 +216,9 @@ static rt_err_t _encoder_dev_control(rt_device_t dev, int cmd, void* args)
     }
 
     case ENCODER_CMD_CONFIG: {
-        struct encoder_dev_cfg_t cfg;
+        encoder_dev_cfg_t cfg;
 
-        if (0x00 != LWP_GET_FROM_USER(&cfg, args, struct encoder_dev_cfg_t)) {
+        if (0x00 != LWP_GET_FROM_USER(&cfg, args, encoder_dev_cfg_t)) {
             ret = -RT_ERROR;
             break;
         }
@@ -338,7 +338,7 @@ const static struct rt_device_ops encoder_dev_ops = {
 };
 #endif
 
-static struct encoder_device* rotary_encoder_device_register(struct encoder_dev_cfg_t* cfg)
+static struct encoder_device* rotary_encoder_device_register(encoder_dev_cfg_t* cfg)
 {
     rt_err_t ret = RT_EOK;
     char     name[RT_NAME_MAX];
@@ -360,7 +360,7 @@ static struct encoder_device* rotary_encoder_device_register(struct encoder_dev_
     dev->sw_pin     = cfg->cfg.sw_pin;
     dev->configured = 0;
     dev->index = cfg->index;
-    rt_memcpy(&dev->cfg, cfg, sizeof(struct encoder_dev_cfg_t));
+    rt_memcpy(&dev->cfg, cfg, sizeof(encoder_dev_cfg_t));
 
     /* Initialize synchronization objects */
     rt_event_init(&dev->data_evt, "enc_sem", RT_IPC_FLAG_PRIO);
@@ -395,7 +395,7 @@ static struct encoder_device* rotary_encoder_device_register(struct encoder_dev_
 static volatile int encoder_list_flag = 0;
 static rt_list_t    encoder_dev_list  = RT_LIST_OBJECT_INIT(encoder_dev_list);
 
-int encoder_dev_create(struct encoder_dev_cfg_t* cfg)
+int encoder_dev_create(encoder_dev_cfg_t* cfg)
 {
     struct encoder_device *dev = NULL, *temp_dev = NULL;
 

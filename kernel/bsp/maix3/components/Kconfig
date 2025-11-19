@@ -267,4 +267,6 @@ menu "Components Configuration"
     source "components/lvgl/Kconfig"
     
     source "components/terminal/Kconfig"
+
+    source "components/rotary_knob/Kconfig"
 endmenu

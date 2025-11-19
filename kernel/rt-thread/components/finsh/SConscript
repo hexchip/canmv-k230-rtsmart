@@ -3,6 +3,7 @@ from building import *
 cwd     = GetCurrentDir()
 src     = Split('''
 shell.c
+shell_core.c
 cmd.c
 msh.c
 ''')

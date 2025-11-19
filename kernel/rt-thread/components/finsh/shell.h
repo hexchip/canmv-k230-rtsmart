@@ -57,6 +57,7 @@ enum input_stat
     WAIT_NORMAL,
     WAIT_SPEC_KEY,
     WAIT_FUNC_KEY,
+    WAIT_CUSTOM_FUNC_KEY,
 };
 struct finsh_shell
 {

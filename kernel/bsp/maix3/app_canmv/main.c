@@ -51,6 +51,10 @@
 
 #endif // ENABLE_CHERRY_USB
 
+#ifdef ENABLE_ROTARY_ENCODER 
+#include "rotary_encoder.h"
+#endif // ENABLE_ROTARY_ENCODER
+
 bool g_fs_mount_data_succ = false;
 bool g_fs_mount_sdcard_succ = false;
 

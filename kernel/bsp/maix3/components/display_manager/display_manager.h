@@ -33,6 +33,8 @@ uint32_t display_manager_get_screen_height();
 
 int display_manager_screen_flush(const display_manager_area_t *area, uint8_t *px_map);
 
+int display_manager_screen_clean();
+
 #ifdef __cplusplus
 } /*extern "C"*/
 #endif

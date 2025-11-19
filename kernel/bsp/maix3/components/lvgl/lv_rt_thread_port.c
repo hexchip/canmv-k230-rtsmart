@@ -94,6 +94,7 @@ static void lvgl_thread_entry(void *parameter)
 
 static void on_user_access_display() {
     rt_mutex_take(s_display_mutex, RT_WAITING_FOREVER);
+    display_manager_screen_clean();
 }
 
 static void on_user_leave_display() {

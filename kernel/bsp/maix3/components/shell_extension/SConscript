@@ -4,9 +4,10 @@ from building import *
 
 cwd     = GetCurrentDir()
 src     = Glob('*.c')
+
 CPPPATH = [cwd]
 
-group = DefineGroup('rotary_encoder', src, depend = ['ENABLE_ROTARY_ENCODER'], CPPPATH = CPPPATH)
+group = DefineGroup('RotaryKnob', src, depend = ['ENABLE_ROTARY_KNOB'], CPPPATH = CPPPATH)
 
 objs = [group]
 

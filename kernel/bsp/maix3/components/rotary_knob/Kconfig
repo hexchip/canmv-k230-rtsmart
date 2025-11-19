@@ -1,0 +1,9 @@
+menuconfig ENABLE_ROTARY_KNOB
+    bool "Enable Rotary Knob"
+    default y
+    select ENABLE_ROTARY_ENCODER
+
+    if ENABLE_ROTARY_KNOB
+
+    endif
+    

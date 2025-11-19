@@ -25,6 +25,7 @@
 #if defined(RT_USING_MSH) || defined(FINSH_USING_MSH)
 
 #include "shell.h"
+#include "shell_core.h"
 #include "msh.h"
 
 #if defined(RT_USING_DFS)
@@ -370,47 +371,6 @@ static rt_bool_t shell_handle_history(struct finsh_shell *shell)
     rt_kprintf("%s%s", FINSH_PROMPT, shell->line);
     return RT_FALSE;
 }
-
-static void shell_push_history(struct finsh_shell *shell)
-{
-    if (shell->line_position != 0)
-    {
-        /* push history */
-        if (shell->history_count >= FINSH_HISTORY_LINES)
-        {
-            /* if current cmd is same as last cmd, don't push */
-            if (memcmp(&shell->cmd_history[FINSH_HISTORY_LINES - 1], shell->line, FINSH_CMD_SIZE))
-            {
-                /* move history */
-                int index;
-                for (index = 0; index < FINSH_HISTORY_LINES - 1; index ++)
-                {
-                    memcpy(&shell->cmd_history[index][0],
-                           &shell->cmd_history[index + 1][0], FINSH_CMD_SIZE);
-                }
-                memset(&shell->cmd_history[index][0], 0, FINSH_CMD_SIZE);
-                memcpy(&shell->cmd_history[index][0], shell->line, shell->line_position);
-
-                /* it's the maximum history */
-                shell->history_count = FINSH_HISTORY_LINES;
-            }
-        }
-        else
-        {
-            /* if current cmd is same as last cmd, don't push */
-            if (shell->history_count == 0 || memcmp(&shell->cmd_history[shell->history_count - 1], shell->line, FINSH_CMD_SIZE))
-            {
-                shell->current_history = shell->history_count;
-                memset(&shell->cmd_history[shell->history_count][0], 0, FINSH_CMD_SIZE);
-                memcpy(&shell->cmd_history[shell->history_count][0], shell->line, shell->line_position);
-
-                /* increase count and set current history position */
-                shell->history_count ++;
-            }
-        }
-    }
-    shell->current_history = shell->history_count;
-}
 #endif
 
 void finsh_thread_entry(void *parameter)
@@ -464,6 +424,9 @@ void finsh_thread_entry(void *parameter)
          * down key: 0x1b 0x5b 0x42
          * right key:0x1b 0x5b 0x43
          * left key: 0x1b 0x5b 0x44
+         * rotary_knob clockwise: 0x1b 0x5b 0x3f 0x31 (ESC [ ? 1)
+         * rotary_knob anticlockwise: 0x1b 0x5b 0x3f 0x32 (ESC [ ? 2) 
+         * rotary_knob press: 0x1b 0x5b 0x3f 0x33 (ESC [ ? 3)
          */
         if (ch == 0x1b)
         {
@@ -482,6 +445,13 @@ void finsh_thread_entry(void *parameter)
         }
         else if (shell->stat == WAIT_FUNC_KEY)
         {
+            if (ch == 0x3f) {
+                shell->stat = WAIT_CUSTOM_FUNC_KEY;
+                continue;
+            }
+
+            shell_exit_extension_mode(shell);
+
             shell->stat = WAIT_NORMAL;
 
             if (ch == 0x41) /* up key */
@@ -547,12 +517,26 @@ void finsh_thread_entry(void *parameter)
                 continue;
             }
         }
+        else if (shell->stat == WAIT_CUSTOM_FUNC_KEY)
+        {
+            shell_enter_extension_mode(shell);
+            
+            int err = shell_handle_custom_func_key(shell, ch);
+            if (err) {
+                // TODO
+            }
+
+            shell->stat = WAIT_NORMAL;
+            continue;
+        }
 
         /* received null or error */
         if (ch == '\0' || ch == 0xFF) continue;
         /* handle tab key */
         else if (ch == '\t')
         {
+            shell_exit_extension_mode(shell);
+
             int i;
             /* move the cursor to the beginning of line */
             for (i = 0; i < shell->line_curpos; i++)
@@ -568,6 +552,8 @@ void finsh_thread_entry(void *parameter)
         /* handle backspace key */
         else if (ch == 0x7f || ch == 0x08)
         {
+            shell_exit_extension_mode(shell);
+            
             /* note that shell->line_curpos >= 0 */
             if (shell->line_curpos == 0)
                 continue;
@@ -603,28 +589,12 @@ void finsh_thread_entry(void *parameter)
         /* handle end of line, break */
         if (ch == '\r' || ch == '\n')
         {
-#ifdef FINSH_USING_HISTORY
-            shell_push_history(shell);
-#endif
-
-            if (shell->echo_mode)
-                rt_kprintf("\n");
-            msh_exec(shell->line, shell->line_position);
-
-            rt_kprintf(FINSH_PROMPT);
-#if defined(CHERRY_USB_DEVICE_ENABLE_CLASS_ADB)
-            extern int adb_exit(void);
-            extern rt_bool_t use_adb_command;
-
-            if (use_adb_command && (shell->line[0] != 0x0)) {
-                adb_exit();
-                use_adb_command = RT_FALSE;
-            }
-#endif
-            memset(shell->line, 0, sizeof(shell->line));
-            shell->line_curpos = shell->line_position = 0;
+            shell_exit_extension_mode(shell);
+            shell_exec(shell);
             continue;
         }
+
+        shell_exit_extension_mode(shell);
 
         /* it's a large line, discard it */
         if (shell->line_position >= FINSH_CMD_SIZE)

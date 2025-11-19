@@ -19,6 +19,8 @@ int display_hal_init();
 
 k_s32 display_hal_flush_frame(k_u8 *px_map);
 
+k_s32 display_hal_flush_empty_frame();
+
 k_u32 display_hal_get_width();
 
 k_u32 display_hal_get_height();

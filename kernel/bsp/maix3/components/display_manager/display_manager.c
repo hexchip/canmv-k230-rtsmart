@@ -297,3 +297,7 @@ int display_manager_screen_flush(const display_manager_area_t *area, uint8_t *px
     
     return display_hal_flush_frame(px_map);
 }
+
+int display_manager_screen_clean() {
+    return display_hal_flush_empty_frame();
+}

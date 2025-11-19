@@ -37,7 +37,7 @@
 #define ENCODER_CMD_GET_DATA  _IOR('E', 1, struct encoder_data*)
 #define ENCODER_CMD_RESET     _IO('E', 2)
 #define ENCODER_CMD_SET_COUNT _IOW('E', 3, int64_t*)
-#define ENCODER_CMD_CONFIG    _IOW('E', 4, struct encoder_dev_cfg_t*)
+#define ENCODER_CMD_CONFIG    _IOW('E', 4, encoder_dev_cfg_t*)
 #define ENCODER_CMD_WAIT_DATA _IOW('E', 5, int32_t*)
 
 /* Data structures */
@@ -49,19 +49,19 @@ struct encoder_data {
     uint32_t timestamp; /* Tick timestamp */
 };
 
-struct encoder_pin_cfg_t {
+typedef struct encoder_pin_cfg {
     int clk_pin; /* Clock/A phase pin */
     int dt_pin; /* Data/B phase pin */
     int sw_pin; /* Switch/button pin (use -1 if not connected) */
-};
+} encoder_pin_cfg_t;
 
-struct encoder_dev_cfg_t {
+typedef struct encoder_dev_cfg {
     int index;
 
-    struct encoder_pin_cfg_t cfg;
-};
+    encoder_pin_cfg_t cfg;
+} encoder_dev_cfg_t;
 
-int encoder_dev_create(struct encoder_dev_cfg_t* cfg);
+int encoder_dev_create(encoder_dev_cfg_t* cfg);
 int encoder_dev_delete(int index);
 
 #endif /* __DRV_ROTARY_ENCODER_H__ */

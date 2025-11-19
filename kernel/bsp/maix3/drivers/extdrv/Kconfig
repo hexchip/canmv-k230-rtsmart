@@ -10,4 +10,5 @@ menu "Ext Driver"
     source "drivers/extdrv/rw007/Kconfig"
     source "drivers/extdrv/device_warp/Kconfig"
     source "drivers/extdrv/usb_serial/Kconfig"
+    source "drivers/extdrv/rotary_encoder/Kconfig"
 endmenu
