@@ -3753,13 +3753,28 @@ __exit:
 
 char *sys_getcwd(char *buf, size_t size)
 {
+    size_t result_size;
+
     if (!lwp_user_accessable((void *)buf, size))
     {
         return RT_NULL;
     }
-    getcwd(buf, size);
 
-    return (char *)strlen(buf);
+    char *tbuf = rt_malloc(size);
+    if(!tbuf) {
+        return RT_NULL;
+    }
+
+    getcwd(tbuf, size);
+    result_size = strlen(tbuf);
+
+    if(size != lwp_put_to_user(buf, tbuf, size)) {
+        result_size = 0;
+    }
+
+    rt_free(tbuf);
+
+    return (char *)result_size;
 }
 
 int sys_chdir(const char *path)
