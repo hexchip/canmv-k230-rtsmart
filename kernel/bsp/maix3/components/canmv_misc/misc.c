@@ -546,7 +546,7 @@ static int misc_create_rotary_encoder_dev(void* args)
 {
     struct encoder_dev_cfg_t cfg;
 
-    if (0x00 != LWP_GET_FROM_USER(&cfg, args, struct encoder_dev_cfg_t)) {
+    if (0x00 != lwp_get_from_user_ex(&cfg, args, sizeof(struct encoder_dev_cfg_t))) {
         return -1;
     }
 
@@ -557,7 +557,7 @@ static int misc_delete_rotary_encoder_dev(void* args)
 {
     int index;
 
-    if (0x00 != LWP_GET_FROM_USER(&index, args, int)) {
+    if (0x00 != lwp_get_from_user_ex(&index, args, sizeof(int))) {
         return -1;
     }
 

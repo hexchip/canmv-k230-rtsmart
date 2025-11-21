@@ -461,6 +461,19 @@ size_t lwp_get_from_user(void *dst, void *src, size_t size)
     return lwp_data_get(m_info, dst, src, size);
 }
 
+int lwp_get_from_user_ex(void *dst, void *src, size_t size)
+{
+    if ((lwp_self() != NULL) && lwp_user_accessable(dst, size)) {
+        if(size != lwp_get_from_user(dst, src, size)) {
+            return -1;
+        }
+    }
+
+    rt_memcpy(dst, src, size);
+
+    return 0;
+}
+
 size_t lwp_put_to_user(void *dst, void *src, size_t size)
 {
     struct rt_lwp *lwp = RT_NULL;
@@ -487,6 +500,19 @@ size_t lwp_put_to_user(void *dst, void *src, size_t size)
     }
     m_info = &lwp->mmu_info;
     return lwp_data_put(m_info, dst, src, size);
+}
+ 
+int lwp_put_to_user_ex(void *dst, void *src, size_t size)
+{
+    if ((lwp_self() != NULL) && lwp_user_accessable(dst, size)) {
+        if(size != lwp_put_to_user(dst, src, size)) {
+            return -1;
+        }
+    }
+
+    rt_memcpy(dst, src, size);
+
+    return 0;
 }
 
 int lwp_user_accessable(void *addr, size_t size)

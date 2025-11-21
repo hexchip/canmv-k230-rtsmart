@@ -185,7 +185,7 @@ static rt_err_t _encoder_dev_control(rt_device_t dev, int cmd, void* args)
 
         rt_hw_interrupt_enable(level);
 
-        if (0x00 != LWP_PUT_TO_USER(args, &data, struct encoder_data)) {
+        if (0x00 != lwp_put_to_user_ex(args, &data, sizeof(struct encoder_data))) {
             ret = -RT_ERROR;
         }
         break;
@@ -203,7 +203,7 @@ static rt_err_t _encoder_dev_control(rt_device_t dev, int cmd, void* args)
     case ENCODER_CMD_SET_COUNT: {
         rt_int64_t new_count;
 
-        if (0x00 != LWP_GET_FROM_USER(&new_count, args, rt_int64_t)) {
+        if (0x00 != lwp_get_from_user_ex(&new_count, args, sizeof(rt_int64_t))) {
             ret = -RT_ERROR;
             break;
         }
@@ -218,7 +218,7 @@ static rt_err_t _encoder_dev_control(rt_device_t dev, int cmd, void* args)
     case ENCODER_CMD_CONFIG: {
         struct encoder_dev_cfg_t cfg;
 
-        if (0x00 != LWP_GET_FROM_USER(&cfg, args, struct encoder_dev_cfg_t)) {
+        if (0x00 != lwp_get_from_user_ex(&cfg, args, sizeof(struct encoder_dev_cfg_t))) {
             ret = -RT_ERROR;
             break;
         }
@@ -282,7 +282,7 @@ static rt_err_t _encoder_dev_control(rt_device_t dev, int cmd, void* args)
         rt_int32_t  timeout_ms = 0;
         rt_uint32_t event;
 
-        if (0x00 != LWP_GET_FROM_USER(&timeout_ms, args, rt_int32_t)) {
+        if (0x00 != lwp_get_from_user_ex(&timeout_ms, args, sizeof(rt_int32_t))) {
             ret = -RT_ERROR;
             break;
         }

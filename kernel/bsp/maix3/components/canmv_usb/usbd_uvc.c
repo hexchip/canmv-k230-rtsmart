@@ -175,7 +175,7 @@ static inline __attribute__((always_inline)) rt_err_t _usbd_video_ioctl_create_p
         goto _exit;
     }
 
-    if (0x00 != LWP_GET_FROM_USER(&cfg, args, struct usbd_video_create_pool_cfg_t)) {
+    if (0x00 != lwp_get_from_user_ex(&cfg, args, sizeof(struct usbd_video_create_pool_cfg_t))) {
         ret = RT_ERROR;
         goto _exit;
     }
@@ -321,7 +321,7 @@ static inline __attribute__((always_inline)) rt_err_t _usbd_video_ioctl_get_buff
         buffer.user_buffer = 0;
     }
 
-    if (LWP_PUT_TO_USER(args, &buffer, struct usbd_video_buffer_wrap_t)) {
+    if (lwp_put_to_user_ex(args, &buffer, sizeof(struct usbd_video_buffer_wrap_t))) {
         ret = RT_ERROR;
     }
 
@@ -339,7 +339,7 @@ static inline __attribute__((always_inline)) rt_err_t _usbd_video_ioctl_put_buff
 
     rt_mutex_take(&inst->mutex, RT_WAITING_FOREVER);
 
-    if (0x00 == LWP_GET_FROM_USER(&buffer, args, struct usbd_video_buffer_wrap_t)) {
+    if (0x00 == lwp_get_from_user_ex(&buffer, args, sizeof(struct usbd_video_buffer_wrap_t))) {
         LOG_D("Received buffer with size: %d bytes\n", buffer.buffer_size);
 
         if (buffer.buffer_size > inst->buffer_size) {
@@ -384,7 +384,7 @@ static inline __attribute__((always_inline)) rt_err_t _usbd_video_ioctl_configur
 {
     struct uvc_device_conf_t cfg;
 
-    if (0x00 != LWP_GET_FROM_USER(&cfg, args, struct uvc_device_conf_t)) {
+    if (0x00 != lwp_get_from_user_ex(&cfg, args, sizeof(struct uvc_device_conf_t))) {
         return RT_ERROR;
     }
 
@@ -415,7 +415,7 @@ static inline __attribute__((always_inline)) rt_err_t _usbd_video_ioctl_dev_stat
 {
     int _state = tx_flag;
 
-    if (0x00 == LWP_PUT_TO_USER(args, &_state, int)) {
+    if (0x00 == lwp_put_to_user_ex(args, &_state, sizeof(int))) {
         return RT_EOK;
     }
 

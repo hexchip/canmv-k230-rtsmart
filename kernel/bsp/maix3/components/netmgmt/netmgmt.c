@@ -368,7 +368,7 @@ static rt_err_t _lan_mgmt_cmd_get_isconnected(void* mgmt_dev, void* args)
     const char*    dev_name = NULL;
 
     // Get the interface type from the user
-    if (0x00 != LWP_GET_FROM_USER(&cfg, args, struct lan_status_cmd_wrap_t)) {
+    if (0x00 != lwp_get_from_user_ex(&cfg, args, sizeof(struct lan_status_cmd_wrap_t))) {
         return RT_ERROR;
     }
 
@@ -405,7 +405,7 @@ static rt_err_t _lan_mgmt_cmd_get_isconnected(void* mgmt_dev, void* args)
 
 _exit:
     // Return the result (0 or 1) to the user
-    return LWP_PUT_TO_USER(args, &cfg, struct lan_status_cmd_wrap_t);
+    return lwp_put_to_user_ex(args, &cfg, sizeof(struct lan_status_cmd_wrap_t));
 }
 
 static rt_err_t _lan_mgmt_cmd_get_link_status(void* mgmt_dev, void* args)
@@ -417,7 +417,7 @@ static rt_err_t _lan_mgmt_cmd_get_link_status(void* mgmt_dev, void* args)
     const char* dev_name = NULL;
 
     // Get the interface type from the user
-    if (0x00 != LWP_GET_FROM_USER(&cfg, args, struct lan_status_cmd_wrap_t)) {
+    if (0x00 != lwp_get_from_user_ex(&cfg, args, sizeof(struct lan_status_cmd_wrap_t))) {
         return RT_ERROR;
     }
 
@@ -443,7 +443,7 @@ static rt_err_t _lan_mgmt_cmd_get_link_status(void* mgmt_dev, void* args)
 
 _exit:
     // Return the status (0, 1, or 2) to the user
-    return LWP_PUT_TO_USER(args, &cfg, struct lan_status_cmd_wrap_t);
+    return lwp_put_to_user_ex(args, &cfg, sizeof(struct lan_status_cmd_wrap_t));
 }
 
 static rt_err_t _lan_mgmt_cmd_get_mac(void* mgmt_dev, void* args)
@@ -454,7 +454,7 @@ static rt_err_t _lan_mgmt_cmd_get_mac(void* mgmt_dev, void* args)
     const char* dev_name = NULL;
 
     // Get the interface type from user space
-    if (0x00 != LWP_GET_FROM_USER(&cfg, args, struct lan_mac_cmd_wrap_t)) {
+    if (0x00 != lwp_get_from_user_ex(&cfg, args, sizeof(struct lan_mac_cmd_wrap_t))) {
         return RT_ERROR;
     }
 
@@ -473,7 +473,7 @@ static rt_err_t _lan_mgmt_cmd_get_mac(void* mgmt_dev, void* args)
     }
 
     // Send the struct containing the MAC back to the user
-    return LWP_PUT_TO_USER(args, &cfg, struct lan_mac_cmd_wrap_t);
+    return lwp_put_to_user_ex(args, &cfg, sizeof(struct lan_mac_cmd_wrap_t));
 }
 
 static rt_err_t _lan_mgmt_cmd_set_mac(void* mgmt_dev, void* args)
@@ -484,7 +484,7 @@ static rt_err_t _lan_mgmt_cmd_set_mac(void* mgmt_dev, void* args)
     const char* dev_name = NULL;
 
     // Get the struct containing interface type and new MAC from the user
-    if (0x00 != LWP_GET_FROM_USER(&cfg, args, struct lan_mac_cmd_wrap_t)) {
+    if (0x00 != lwp_get_from_user_ex(&cfg, args, sizeof(struct lan_mac_cmd_wrap_t))) {
         rt_kprintf("get mac struct failed\n");
         return RT_ERROR;
     }
