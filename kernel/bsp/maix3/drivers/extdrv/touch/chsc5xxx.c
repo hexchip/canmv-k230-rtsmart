@@ -32,18 +32,20 @@
 #define DBG_COLOR
 #include <rtdbg.h>
 
+struct chsc5xxx_point {
+    rt_uint8_t xl;
+    rt_uint8_t yl;
+    rt_uint8_t resv;
+    rt_uint8_t xh : 4;
+    rt_uint8_t yh : 4;
+    rt_uint8_t id : 4;
+    rt_uint8_t event : 4;
+};
+
 struct chsc5xxx_reg {
     rt_uint8_t act;
     rt_uint8_t finger_num;
-    struct {
-        rt_uint8_t xl;
-        rt_uint8_t yl;
-        rt_uint8_t resv;
-        rt_uint8_t xh : 4;
-        rt_uint8_t yh : 4;
-        rt_uint8_t id : 4;
-        rt_uint8_t event : 4;
-    } pos[TOUCH_CHSC5XXX_MAX_POINTS];
+    struct chsc5xxx_point pos[10];
 };
 
 #define CHSC5XXX_READ_REG_SIZE ((sizeof(struct chsc5xxx_reg) + 3) & ~3)
@@ -90,9 +92,11 @@ static int chsc5xxx_read_reg(struct drv_touch_dev* dev, rt_uint32_t addr, rt_uin
 
 static int read_register(struct drv_touch_dev* dev, struct touch_register* reg)
 {
+    size_t length = sizeof(struct chsc5xxx_reg ) + sizeof(struct chsc5xxx_point) * dev->touch.point_num;
+
     reg->time = rt_tick_get();
 
-    return chsc5xxx_read_reg(dev, 0x2000002C, (uint8_t*)&reg->reg[0], CHSC5XXX_READ_REG_SIZE);
+    return chsc5xxx_read_reg(dev, 0x2000002C, (uint8_t*)&reg->reg[0], length);
 }
 
 static int parse_register(struct drv_touch_dev* dev, struct touch_register* reg, struct touch_point* result)
