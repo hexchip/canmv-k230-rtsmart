@@ -187,6 +187,8 @@ static int reset(struct drv_touch_dev* dev)
         rt_thread_mdelay(50);
     }
 
+    rt_thread_mdelay(50); // wait reset done.
+
     return 0;
 }
 
