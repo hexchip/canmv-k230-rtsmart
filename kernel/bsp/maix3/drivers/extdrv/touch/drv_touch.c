@@ -128,14 +128,26 @@ void touch_dev_update_event(int finger_num, struct rt_touch_data* point)
 {
     static int                  last_finger_num = 0;
     static struct rt_touch_data last_point[TOUCH_MAX_POINT_NUMBER];
-    static rt_tick_t            last_timestamp = 0; //, tmp_timestamp;      // Track the timestamp of the last touch event
-    // static rt_tick_t last_click_timestamp[TOUCH_MAX_POINT_NUMBER] = {0}; // Track double-click timing
+    static rt_tick_t            last_timestamp = 0;
+    rt_bool_t                   new_session    = RT_FALSE;
 
-    // rt_uint16_t tmpx, tmpy;
-    rt_bool_t new_session = RT_FALSE;
+    if (finger_num == 0) {
+        if (last_finger_num > 0) {
+            for (int i = 0; i < last_finger_num; i++) {
+                last_point[i].event = RT_TOUCH_EVENT_UP;
+                LOG_D("Finger %d: Lifted - No current touches\n", last_point[i].track_id);
+            }
+            last_finger_num = 0;
+        }
+        return;
+    }
 
-    // Check if too much time has passed since the last touch event
-    if (finger_num > 0 && (point[0].timestamp - last_timestamp > TOUCH_TIMEOUT_MS)) {
+    if (point == NULL) {
+        LOG_E("touch_dev_update_event: point is NULL but finger_num = %d", finger_num);
+        return;
+    }
+
+    if (point[0].timestamp - last_timestamp > TOUCH_TIMEOUT_MS) {
         // A new touch event is considered after a timeout
         new_session = RT_TRUE;
         LOG_D("New touch session detected due to timeout.\n");
@@ -157,22 +169,6 @@ void touch_dev_update_event(int finger_num, struct rt_touch_data* point)
     for (int i = 0; i < finger_num; i++) {
         struct rt_touch_data* current_point = &point[i];
         struct rt_touch_data* last_touch    = &last_point[i];
-
-        // tmp_timestamp = last_click_timestamp[i];
-        // // Update last click timestamp if it's a valid touch
-        // last_click_timestamp[i] = current_point->timestamp;
-
-        // tmpx = abs(current_point->x_coordinate - last_touch->x_coordinate);
-        // tmpy = abs(current_point->y_coordinate - last_touch->y_coordinate);
-        // // Double-click detection: Check if this touch is at the same position as the last one within the threshold
-        // if (i < last_finger_num &&
-        //     !new_session && (tmpx < 5) && (tmpy < 5) &&
-        //     (current_point->timestamp - tmp_timestamp) < 100) {
-
-        //     // Double-click detected, ignore this event
-        //     LOG_D("Double-click detected for finger %d, filtering out.\n", current_point->track_id);
-        //     continue;
-        // }
 
         if (i < last_finger_num && !new_session) {
             // Check if the touch point has moved
@@ -525,6 +521,11 @@ static const drv_touch_probe touch_probes[] = {
 #if defined TOUCH_TYPE_GT911
     drv_touch_probe_gt911,
 #endif // TOUCH_TYPE_GT911
+
+#if defined TOUCH_TYPE_ST7102
+    drv_touch_probe_st7102,
+#endif // TOUCH_TYPE_ST7102
+
     NULL
 };
 

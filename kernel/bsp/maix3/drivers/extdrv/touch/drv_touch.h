@@ -149,6 +149,7 @@ int drv_touch_probe_cst328(struct drv_touch_dev* dev);
 int drv_touch_probe_chsc5xxx(struct drv_touch_dev* dev);
 int drv_touch_probe_gt911(struct drv_touch_dev* dev);
 int drv_touch_probe_ft5x06(struct drv_touch_dev* dev);
+int drv_touch_probe_st7102(struct drv_touch_dev* dev);
 
 int drv_touch_mgmt_create_device(struct drv_touch_config* cfg);
 int drv_touch_mgmt_delete_device(int index);

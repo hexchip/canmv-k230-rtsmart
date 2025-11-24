@@ -94,13 +94,14 @@ static int parse_register(struct drv_touch_dev* dev, struct touch_register* reg,
     struct rt_touch_data* point     = NULL;
     struct gt911_reg*     gt911_reg = (struct gt911_reg*)reg->reg;
 
+    result->point_num = 0;
+
     finger_num = gt911_reg->status & 0x0F;
     if (finger_num > TOUCH_MAX_POINT_NUMBER) {
         LOG_W("gt911 touch point %d > max %d", finger_num, TOUCH_MAX_POINT_NUMBER);
 
         finger_num = TOUCH_MAX_POINT_NUMBER;
     }
-    result->point_num = finger_num;
 
     if (finger_num) {
         for (result_index = 0, point_index = 0; result_index < finger_num; result_index++, point_index++) {
@@ -135,7 +136,8 @@ static int parse_register(struct drv_touch_dev* dev, struct touch_register* reg,
         }
     }
 
-    touch_dev_update_event(finger_num, point);
+    result->point_num = result_index;
+    touch_dev_update_event(result_index, result->point);
 
     return 0;
 }
@@ -215,11 +217,11 @@ int drv_touch_probe_gt911(struct drv_touch_dev* dev)
     dev->dev.get_default_rotate = get_default_rotate;
 
     dev->touch.point_num = 10;
-    dev->touch.range_x = info.xResolution;
-    dev->touch.range_y = info.yResolution;
+    dev->touch.range_x   = info.xResolution;
+    dev->touch.range_y   = info.yResolution;
 
-    LOG_I("gt9xx-> product id: %s, firmware version: 0x%x, resolution %dx%d\n", info.productId, info.fwId,
-               dev->touch.range_x, dev->touch.range_y);
+    LOG_I("gt9xx-> product id: %s, firmware version: 0x%x, resolution %dx%d\n", info.productId, info.fwId, dev->touch.range_x,
+          dev->touch.range_y);
 
     return 0;
 }

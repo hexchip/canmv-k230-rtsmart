@@ -72,17 +72,13 @@ static int parse_register(struct drv_touch_dev* dev, struct touch_register* reg,
 
     finger_num = ft5x06_reg->finger_num & 0x0F;
 
-    if (finger_num > 10) {
-        result->point_num = 0;
-        return 0;
-    }
+    result->point_num = 0;
 
     if (finger_num > TOUCH_MAX_POINT_NUMBER) {
         LOG_W("FT5x06 touch point %d > max %d", finger_num, TOUCH_MAX_POINT_NUMBER);
 
         finger_num = TOUCH_MAX_POINT_NUMBER;
     }
-    result->point_num = finger_num;
 
     if (finger_num) {
         for (result_index = 0, point_index = 0; result_index < finger_num; result_index++, point_index++) {
@@ -119,6 +115,8 @@ static int parse_register(struct drv_touch_dev* dev, struct touch_register* reg,
             point->timestamp    = time;
         }
     }
+
+    result->point_num = result_index;
 
     return 0;
 }
