@@ -67,6 +67,12 @@ static int parse_register(struct drv_touch_dev* dev, struct touch_register* reg,
     result->point_num = 0;
 
     finger_num = cst128_reg->finger_num & 0x0F;
+    if (finger_num > 5) {
+        touch_dev_update_event(0, NULL);
+
+        return 0;
+    }
+
     if (finger_num > TOUCH_MAX_POINT_NUMBER) {
         LOG_W("CST128 touch point %d > max %d", finger_num, TOUCH_MAX_POINT_NUMBER);
 

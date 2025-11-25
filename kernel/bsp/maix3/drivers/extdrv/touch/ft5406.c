@@ -70,9 +70,15 @@ static int parse_register(struct drv_touch_dev* dev, struct touch_register* reg,
     struct rt_touch_data* point      = NULL;
     struct ft5x06_reg*    ft5x06_reg = (struct ft5x06_reg*)reg->reg;
 
+    result->point_num = 0;
+
     finger_num = ft5x06_reg->finger_num & 0x0F;
 
-    result->point_num = 0;
+    if (finger_num > 10) {
+        touch_dev_update_event(0, NULL);
+
+        return 0;
+    }
 
     if (finger_num > TOUCH_MAX_POINT_NUMBER) {
         LOG_W("FT5x06 touch point %d > max %d", finger_num, TOUCH_MAX_POINT_NUMBER);

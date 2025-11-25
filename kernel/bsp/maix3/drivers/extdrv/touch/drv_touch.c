@@ -819,7 +819,6 @@ static struct drv_touch_dev* drv_touch_mgmt_find_by_index(int index)
             dev = node;
             break;
         }
-        node = NULL;
     }
 
     rt_mutex_release(&drv_touch_mgmt.mutex);
